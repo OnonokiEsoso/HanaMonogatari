@@ -14,8 +14,11 @@ public class SupplierSystem : MonoBehaviour
     {
         public FlowerData flower;
         public int purchaseLimit;
+        public int purchasedQuantity;
         public bool fromRareChanceSlot;
         public int discountPercent;
+
+        public int RemainingQuantity => Mathf.Max(0, purchaseLimit - purchasedQuantity);
 
         public int UnitPurchasePrice
         {
@@ -104,6 +107,7 @@ public class SupplierSystem : MonoBehaviour
                 {
                     flower = selected,
                     purchaseLimit = GetPurchaseLimit(supplierLevel, selected.arrivalDifficulty),
+                    purchasedQuantity = 0,
                     fromRareChanceSlot = slot.rareChanceSlot,
                     discountPercent = RollSaleDiscount()
                 });
