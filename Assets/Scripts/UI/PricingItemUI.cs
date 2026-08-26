@@ -13,7 +13,6 @@ public class PricingItemUI : MonoBehaviour
     [SerializeField] private TMP_Text colorText;
     [SerializeField] private TMP_Text stockText;
     [SerializeField] private TMP_Text purchasePriceText;
-    [SerializeField] private TMP_Text recommendedPriceText;
 
     [Header("入力")]
     [SerializeField] private TMP_InputField salePriceInput;
@@ -75,18 +74,26 @@ public class PricingItemUI : MonoBehaviour
             colorText.text = flower.color;
 
         if (stockText != null)
-            stockText.text = $"在庫 ×{totalStock}";
+            stockText.text = $"×{totalStock}";
 
         if (purchasePriceText != null)
-            purchasePriceText.text = $"仕入 {flower.purchasePrice:N0}円";
-
-        if (recommendedPriceText != null)
-            recommendedPriceText.text = $"おすすめ {recommendedPrice:N0}円";
+            purchasePriceText.text = $"仕入:{flower.purchasePrice:N0}円";
 
         if (salePriceInput != null)
         {
             salePriceInput.contentType = TMP_InputField.ContentType.IntegerNumber;
-            salePriceInput.text = currentPrice.ToString();
+
+            // おすすめ価格はInputField内の薄いPlaceholderとして表示する。
+            if (salePriceInput.placeholder is TMP_Text placeholderText)
+            {
+                placeholderText.text = $"おすすめ {recommendedPrice:N0}円";
+            }
+
+            // まだ価格を設定していない場合は空欄にして、Placeholderを見せる。
+            // 既に設定済みなら現在価格を表示する。
+            salePriceInput.text = pricingSystem.HasCustomPrice(flower)
+                ? currentPrice.ToString()
+                : string.Empty;
         }
     }
 
@@ -97,9 +104,6 @@ public class PricingItemUI : MonoBehaviour
         if (!int.TryParse(salePriceInput.text, out int price) || price <= 0)
         {
             Debug.LogWarning("販売価格には1円以上の整数を入力してください。");
-            salePriceInput.text = pricingSystem != null
-                ? pricingSystem.GetSalePrice(flower).ToString()
-                : "1";
             return;
         }
 
