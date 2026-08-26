@@ -2,18 +2,27 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 仕入れ画面と在庫画面のタブ切り替えを管理します。
+/// 仕入れ・在庫・値付け画面のタブ切り替えを管理します。
 /// ボタンを押すと対応するPanelだけを表示し、選択中タブの色も切り替えます。
 /// </summary>
 public class ShopTabUI : MonoBehaviour
 {
+    private enum ShopTab
+    {
+        Supplier,
+        Inventory,
+        Pricing
+    }
+
     [Header("画面")]
     [SerializeField] private GameObject supplierPanel;
     [SerializeField] private GameObject inventoryPanel;
+    [SerializeField] private GameObject pricingPanel;
 
     [Header("タブボタン")]
     [SerializeField] private Button supplierTabButton;
     [SerializeField] private Button inventoryTabButton;
+    [SerializeField] private Button pricingTabButton;
 
     [Header("タブ色")]
     [Tooltip("現在選択されているタブの背景色")]
@@ -32,6 +41,9 @@ public class ShopTabUI : MonoBehaviour
 
         if (inventoryTabButton != null)
             inventoryTabButton.onClick.AddListener(ShowInventoryTab);
+
+        if (pricingTabButton != null)
+            pricingTabButton.onClick.AddListener(ShowPricingTab);
     }
 
     private void Start()
@@ -49,36 +61,56 @@ public class ShopTabUI : MonoBehaviour
 
         if (inventoryTabButton != null)
             inventoryTabButton.onClick.RemoveListener(ShowInventoryTab);
+
+        if (pricingTabButton != null)
+            pricingTabButton.onClick.RemoveListener(ShowPricingTab);
     }
 
     public void ShowSupplierTab()
     {
-        SetPanels(supplier: true);
+        SetTab(ShopTab.Supplier);
     }
 
     public void ShowInventoryTab()
     {
-        SetPanels(supplier: false);
+        SetTab(ShopTab.Inventory);
     }
 
-    private void SetPanels(bool supplier)
+    public void ShowPricingTab()
+    {
+        SetTab(ShopTab.Pricing);
+    }
+
+    private void SetTab(ShopTab selectedTab)
     {
         if (supplierPanel != null)
-            supplierPanel.SetActive(supplier);
+            supplierPanel.SetActive(selectedTab == ShopTab.Supplier);
 
         if (inventoryPanel != null)
-            inventoryPanel.SetActive(!supplier);
+            inventoryPanel.SetActive(selectedTab == ShopTab.Inventory);
 
-        UpdateTabColors(supplier);
+        if (pricingPanel != null)
+            pricingPanel.SetActive(selectedTab == ShopTab.Pricing);
+
+        UpdateTabColors(selectedTab);
     }
 
     /// <summary>
     /// 選択中タブと未選択タブの背景色を更新します。
     /// </summary>
-    private void UpdateTabColors(bool supplierSelected)
+    private void UpdateTabColors(ShopTab selectedTab)
     {
-        SetButtonColor(supplierTabButton, supplierSelected ? selectedTabColor : unselectedTabColor);
-        SetButtonColor(inventoryTabButton, supplierSelected ? unselectedTabColor : selectedTabColor);
+        SetButtonColor(
+            supplierTabButton,
+            selectedTab == ShopTab.Supplier ? selectedTabColor : unselectedTabColor);
+
+        SetButtonColor(
+            inventoryTabButton,
+            selectedTab == ShopTab.Inventory ? selectedTabColor : unselectedTabColor);
+
+        SetButtonColor(
+            pricingTabButton,
+            selectedTab == ShopTab.Pricing ? selectedTabColor : unselectedTabColor);
     }
 
     private static void SetButtonColor(Button button, Color color)
