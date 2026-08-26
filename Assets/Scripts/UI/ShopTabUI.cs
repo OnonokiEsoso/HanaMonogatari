@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 仕入れ・在庫・値付け画面のタブ切り替えを管理します。
-/// ボタンを押すと対応するPanelだけを表示し、選択中タブの色も切り替えます。
+/// 各タブごとに「選択中の色」「未選択時の色」を個別設定できます。
 /// </summary>
 public class ShopTabUI : MonoBehaviour
 {
@@ -24,12 +24,26 @@ public class ShopTabUI : MonoBehaviour
     [SerializeField] private Button inventoryTabButton;
     [SerializeField] private Button pricingTabButton;
 
-    [Header("タブ色")]
-    [Tooltip("現在選択されているタブの背景色")]
-    [SerializeField] private Color selectedTabColor = new Color(0.78f, 0.90f, 0.72f, 1f);
+    [Header("仕入れボタンの色")]
+    [Tooltip("仕入れタブが選択されているときの背景色")]
+    [SerializeField] private Color supplierSelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
 
-    [Tooltip("選択されていないタブの背景色")]
-    [SerializeField] private Color unselectedTabColor = new Color(0.88f, 0.88f, 0.88f, 1f);
+    [Tooltip("仕入れタブが選択されていないときの背景色")]
+    [SerializeField] private Color supplierUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
+
+    [Header("在庫ボタンの色")]
+    [Tooltip("在庫タブが選択されているときの背景色")]
+    [SerializeField] private Color inventorySelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
+
+    [Tooltip("在庫タブが選択されていないときの背景色")]
+    [SerializeField] private Color inventoryUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
+
+    [Header("値付けボタンの色")]
+    [Tooltip("値付けタブが選択されているときの背景色")]
+    [SerializeField] private Color pricingSelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
+
+    [Tooltip("値付けタブが選択されていないときの背景色")]
+    [SerializeField] private Color pricingUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
 
     [Header("開始時")]
     [SerializeField] private bool startWithSupplierTab = true;
@@ -96,21 +110,23 @@ public class ShopTabUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 選択中タブと未選択タブの背景色を更新します。
+    /// UpdateTabColors（アップデート・タブ・カラーズ）
+    /// Update＝更新する、Tab Colors＝タブの色。
+    /// 現在選択中のタブに応じて、各ボタン固有の色を反映します。
     /// </summary>
     private void UpdateTabColors(ShopTab selectedTab)
     {
         SetButtonColor(
             supplierTabButton,
-            selectedTab == ShopTab.Supplier ? selectedTabColor : unselectedTabColor);
+            selectedTab == ShopTab.Supplier ? supplierSelectedColor : supplierUnselectedColor);
 
         SetButtonColor(
             inventoryTabButton,
-            selectedTab == ShopTab.Inventory ? selectedTabColor : unselectedTabColor);
+            selectedTab == ShopTab.Inventory ? inventorySelectedColor : inventoryUnselectedColor);
 
         SetButtonColor(
             pricingTabButton,
-            selectedTab == ShopTab.Pricing ? selectedTabColor : unselectedTabColor);
+            selectedTab == ShopTab.Pricing ? pricingSelectedColor : pricingUnselectedColor);
     }
 
     private static void SetButtonColor(Button button, Color color)
