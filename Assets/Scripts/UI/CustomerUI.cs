@@ -11,6 +11,7 @@ public class CustomerUI : MonoBehaviour
     [Header("参照")]
     [SerializeField] private CustomerSystem customerSystem;
     [SerializeField] private CustomerPurchaseSystem purchaseSystem;
+    [SerializeField] private ShopTabUI shopTabUI;
 
     [Header("ボタン")]
     [SerializeField] private Button openShopButton;
@@ -24,6 +25,9 @@ public class CustomerUI : MonoBehaviour
     private readonly Queue<CustomerSystem.VisitingCustomer> waitingCustomers = new();
     private int totalVisitors;
     private int processedVisitors;
+    private bool isShopOpen;
+
+    public bool IsShopOpen => isShopOpen;
 
     private void Awake()
     {
@@ -45,15 +49,18 @@ public class CustomerUI : MonoBehaviour
 
     private void Start()
     {
+        SetShopOpen(false);
         RefreshState();
     }
 
     /// <summary>
     /// OpenShop（オープン・ショップ）＝開店する。
     /// 今日の来客を生成して、先客順の待ち行列へ入れます。
+    /// 営業中はもう一度開店できません。
     /// </summary>
     public void OpenShop()
     {
+        if (isShopOpen) return;
         if (customerSystem == null) return;
 
         customerSystem.GenerateTodayCustomers();
@@ -65,8 +72,14 @@ public class CustomerUI : MonoBehaviour
         totalVisitors = waitingCustomers.Count;
         processedVisitors = 0;
 
+        SetShopOpen(true);
+
         if (resultText != null)
             resultText.text = "開店しました！";
+
+        // 来客0人だった場合はその場で営業終了扱いにする。
+        if (waitingCustomers.Count == 0)
+            FinishBusinessDay();
 
         RefreshState();
     }
@@ -78,10 +91,17 @@ public class CustomerUI : MonoBehaviour
     /// </summary>
     public void ProcessNextCustomer()
     {
-        if (waitingCustomers.Count == 0)
+        if (!isShopOpen)
         {
             if (resultText != null)
-                resultText.text = totalVisitors > 0 ? "本日の営業が終了しました" : "まだ開店していません";
+                resultText.text = "まだ開店していません";
+            RefreshState();
+            return;
+        }
+
+        if (waitingCustomers.Count == 0)
+        {
+            FinishBusinessDay();
             RefreshState();
             return;
         }
@@ -96,7 +116,35 @@ public class CustomerUI : MonoBehaviour
                 resultText.text = result != null ? result.message : "購入処理に失敗しました";
         }
 
+        // 最後のお客を処理したら、その日の営業を終了する。
+        if (waitingCustomers.Count == 0)
+            FinishBusinessDay();
+
         RefreshState();
+    }
+
+    /// <summary>
+    /// FinishBusinessDay（フィニッシュ・ビジネス・デイ）
+    /// Finish＝終える、Business Day＝営業日。
+    /// その日の来客処理が終わったときの終了処理です。
+    /// </summary>
+    private void FinishBusinessDay()
+    {
+        SetShopOpen(false);
+
+        if (resultText != null)
+            resultText.text = "本日の営業が終了しました";
+    }
+
+    private void SetShopOpen(bool open)
+    {
+        isShopOpen = open;
+
+        if (openShopButton != null)
+            openShopButton.interactable = !isShopOpen;
+
+        if (shopTabUI != null)
+            shopTabUI.SetBusinessOpen(isShopOpen);
     }
 
     private void RefreshState()
@@ -120,6 +168,9 @@ public class CustomerUI : MonoBehaviour
         }
 
         if (nextCustomerButton != null)
-            nextCustomerButton.interactable = waitingCustomers.Count > 0;
+            nextCustomerButton.interactable = isShopOpen && waitingCustomers.Count > 0;
+
+        if (openShopButton != null)
+            openShopButton.interactable = !isShopOpen;
     }
 }
