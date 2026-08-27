@@ -2,9 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 仕入れ・在庫・値付け・営業画面のタブ切り替えを管理します。
-/// 各タブごとに「選択中の色」「未選択時の色」を個別設定できます。
-/// 営業中は仕入れ・値付けタブを使用できません。
+/// 仕入れ・在庫・値付け・花束・営業画面のタブ切り替えを管理します。
+/// 営業中は仕入れ・値付け・花束タブを使用できません。
 /// </summary>
 public class ShopTabUI : MonoBehaviour
 {
@@ -13,6 +12,7 @@ public class ShopTabUI : MonoBehaviour
         Supplier,
         Inventory,
         Pricing,
+        Bouquet,
         Customer
     }
 
@@ -20,12 +20,14 @@ public class ShopTabUI : MonoBehaviour
     [SerializeField] private GameObject supplierPanel;
     [SerializeField] private GameObject inventoryPanel;
     [SerializeField] private GameObject pricingPanel;
+    [SerializeField] private GameObject bouquetPanel;
     [SerializeField] private GameObject customerPanel;
 
     [Header("タブボタン")]
     [SerializeField] private Button supplierTabButton;
     [SerializeField] private Button inventoryTabButton;
     [SerializeField] private Button pricingTabButton;
+    [SerializeField] private Button bouquetTabButton;
     [SerializeField] private Button customerTabButton;
 
     [Header("仕入れボタンの色")]
@@ -39,6 +41,10 @@ public class ShopTabUI : MonoBehaviour
     [Header("値付けボタンの色")]
     [SerializeField] private Color pricingSelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
     [SerializeField] private Color pricingUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
+
+    [Header("花束ボタンの色")]
+    [SerializeField] private Color bouquetSelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
+    [SerializeField] private Color bouquetUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
 
     [Header("営業ボタンの色")]
     [SerializeField] private Color customerSelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
@@ -62,6 +68,9 @@ public class ShopTabUI : MonoBehaviour
 
         if (pricingTabButton != null)
             pricingTabButton.onClick.AddListener(ShowPricingTab);
+
+        if (bouquetTabButton != null)
+            bouquetTabButton.onClick.AddListener(ShowBouquetTab);
 
         if (customerTabButton != null)
             customerTabButton.onClick.AddListener(ShowCustomerTab);
@@ -88,6 +97,9 @@ public class ShopTabUI : MonoBehaviour
         if (pricingTabButton != null)
             pricingTabButton.onClick.RemoveListener(ShowPricingTab);
 
+        if (bouquetTabButton != null)
+            bouquetTabButton.onClick.RemoveListener(ShowBouquetTab);
+
         if (customerTabButton != null)
             customerTabButton.onClick.RemoveListener(ShowCustomerTab);
     }
@@ -109,6 +121,12 @@ public class ShopTabUI : MonoBehaviour
         SetTab(ShopTab.Pricing);
     }
 
+    public void ShowBouquetTab()
+    {
+        if (isBusinessOpen) return;
+        SetTab(ShopTab.Bouquet);
+    }
+
     public void ShowCustomerTab()
     {
         SetTab(ShopTab.Customer);
@@ -117,15 +135,18 @@ public class ShopTabUI : MonoBehaviour
     /// <summary>
     /// SetBusinessOpen（セット・ビジネス・オープン）
     /// Set＝設定する、Business Open＝営業中。
-    /// 開店中は仕入れ・値付けタブを無効化します。
+    /// 開店中は仕入れ・値付け・花束タブを無効化します。
     /// </summary>
     public void SetBusinessOpen(bool open)
     {
         isBusinessOpen = open;
 
-        // 開店時に仕入れ・値付け画面にいた場合は営業画面へ移動する。
-        if (isBusinessOpen && (currentTab == ShopTab.Supplier || currentTab == ShopTab.Pricing))
+        // 開店時に編集系画面にいた場合は営業画面へ移動する。
+        if (isBusinessOpen &&
+            (currentTab == ShopTab.Supplier || currentTab == ShopTab.Pricing || currentTab == ShopTab.Bouquet))
+        {
             SetTab(ShopTab.Customer);
+        }
 
         RefreshTabInteractable();
     }
@@ -143,6 +164,9 @@ public class ShopTabUI : MonoBehaviour
         if (pricingPanel != null)
             pricingPanel.SetActive(selectedTab == ShopTab.Pricing);
 
+        if (bouquetPanel != null)
+            bouquetPanel.SetActive(selectedTab == ShopTab.Bouquet);
+
         if (customerPanel != null)
             customerPanel.SetActive(selectedTab == ShopTab.Customer);
 
@@ -157,6 +181,9 @@ public class ShopTabUI : MonoBehaviour
         if (pricingTabButton != null)
             pricingTabButton.interactable = !isBusinessOpen;
 
+        if (bouquetTabButton != null)
+            bouquetTabButton.interactable = !isBusinessOpen;
+
         if (inventoryTabButton != null)
             inventoryTabButton.interactable = true;
 
@@ -166,20 +193,19 @@ public class ShopTabUI : MonoBehaviour
 
     private void UpdateTabColors(ShopTab selectedTab)
     {
-        SetButtonColor(
-            supplierTabButton,
+        SetButtonColor(supplierTabButton,
             selectedTab == ShopTab.Supplier ? supplierSelectedColor : supplierUnselectedColor);
 
-        SetButtonColor(
-            inventoryTabButton,
+        SetButtonColor(inventoryTabButton,
             selectedTab == ShopTab.Inventory ? inventorySelectedColor : inventoryUnselectedColor);
 
-        SetButtonColor(
-            pricingTabButton,
+        SetButtonColor(pricingTabButton,
             selectedTab == ShopTab.Pricing ? pricingSelectedColor : pricingUnselectedColor);
 
-        SetButtonColor(
-            customerTabButton,
+        SetButtonColor(bouquetTabButton,
+            selectedTab == ShopTab.Bouquet ? bouquetSelectedColor : bouquetUnselectedColor);
+
+        SetButtonColor(customerTabButton,
             selectedTab == ShopTab.Customer ? customerSelectedColor : customerUnselectedColor);
     }
 
