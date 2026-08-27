@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -25,9 +26,24 @@ public class CustomerUI : MonoBehaviour
     private readonly Queue<CustomerSystem.VisitingCustomer> waitingCustomers = new();
     private int totalVisitors;
     private int processedVisitors;
+    private int purchaseCount;
+    private int totalSales;
     private bool isShopOpen;
+    private bool hasFinishedToday;
 
     public bool IsShopOpen => isShopOpen;
+    public bool HasFinishedToday => hasFinishedToday;
+    public int TotalVisitors => totalVisitors;
+    public int ProcessedVisitors => processedVisitors;
+    public int PurchaseCount => purchaseCount;
+    public int TotalSales => totalSales;
+
+    /// <summary>
+    /// OnBusinessFinished（オン・ビジネス・フィニッシュド）
+    /// Business Finished＝営業が終了した。
+    /// その日の最後のお客を処理した瞬間に通知します。
+    /// </summary>
+    public event Action OnBusinessFinished;
 
     private void Awake()
     {
@@ -56,11 +72,11 @@ public class CustomerUI : MonoBehaviour
     /// <summary>
     /// OpenShop（オープン・ショップ）＝開店する。
     /// 今日の来客を生成して、先客順の待ち行列へ入れます。
-    /// 営業中はもう一度開店できません。
+    /// 一度営業を終えた日は翌日へ進むまで再開店できません。
     /// </summary>
     public void OpenShop()
     {
-        if (isShopOpen) return;
+        if (isShopOpen || hasFinishedToday) return;
         if (customerSystem == null) return;
 
         customerSystem.GenerateTodayCustomers();
@@ -71,6 +87,8 @@ public class CustomerUI : MonoBehaviour
 
         totalVisitors = waitingCustomers.Count;
         processedVisitors = 0;
+        purchaseCount = 0;
+        totalSales = 0;
 
         SetShopOpen(true);
 
@@ -94,7 +112,7 @@ public class CustomerUI : MonoBehaviour
         if (!isShopOpen)
         {
             if (resultText != null)
-                resultText.text = "まだ開店していません";
+                resultText.text = hasFinishedToday ? "本日の営業は終了しています" : "まだ開店していません";
             RefreshState();
             return;
         }
@@ -112,6 +130,12 @@ public class CustomerUI : MonoBehaviour
         if (purchaseSystem != null)
         {
             CustomerPurchaseSystem.PurchaseResult result = purchaseSystem.TryPurchase(customer);
+            if (result != null && result.purchased)
+            {
+                purchaseCount++;
+                totalSales += result.salePrice;
+            }
+
             if (resultText != null)
                 resultText.text = result != null ? result.message : "購入処理に失敗しました";
         }
@@ -130,18 +154,42 @@ public class CustomerUI : MonoBehaviour
     /// </summary>
     private void FinishBusinessDay()
     {
+        if (hasFinishedToday) return;
+
         SetShopOpen(false);
+        hasFinishedToday = true;
 
         if (resultText != null)
             resultText.text = "本日の営業が終了しました";
+
+        RefreshState();
+        OnBusinessFinished?.Invoke();
+    }
+
+    /// <summary>
+    /// PrepareNextDay（プリペア・ネクスト・デイ）
+    /// Prepare＝準備する、Next Day＝翌日。
+    /// 翌日に進んだあと、再び開店できる状態へ戻します。
+    /// </summary>
+    public void PrepareNextDay()
+    {
+        waitingCustomers.Clear();
+        totalVisitors = 0;
+        processedVisitors = 0;
+        purchaseCount = 0;
+        totalSales = 0;
+        hasFinishedToday = false;
+        SetShopOpen(false);
+
+        if (resultText != null)
+            resultText.text = "開店前です";
+
+        RefreshState();
     }
 
     private void SetShopOpen(bool open)
     {
         isShopOpen = open;
-
-        if (openShopButton != null)
-            openShopButton.interactable = !isShopOpen;
 
         if (shopTabUI != null)
             shopTabUI.SetBusinessOpen(isShopOpen);
@@ -171,6 +219,6 @@ public class CustomerUI : MonoBehaviour
             nextCustomerButton.interactable = isShopOpen && waitingCustomers.Count > 0;
 
         if (openShopButton != null)
-            openShopButton.interactable = !isShopOpen;
+            openShopButton.interactable = !isShopOpen && !hasFinishedToday;
     }
 }
