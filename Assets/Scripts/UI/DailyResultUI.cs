@@ -20,10 +20,7 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private TMP_Text visitorsText;
     [SerializeField] private TMP_Text buyersText;
     [SerializeField] private TMP_Text salesText;
-    [SerializeField] private TMP_Text discardedText;
     [SerializeField] private Button nextDayButton;
-
-    private int lastDiscardedCount;
 
     private void Awake()
     {
@@ -75,9 +72,6 @@ public class DailyResultUI : MonoBehaviour
         if (salesText != null)
             salesText.text = $"売上：{customerUI.TotalSales:N0}円";
 
-        if (discardedText != null)
-            discardedText.text = "廃棄：翌日へ進むと確定します";
-
         if (resultPanel != null)
             resultPanel.SetActive(true);
     }
@@ -91,12 +85,8 @@ public class DailyResultUI : MonoBehaviour
         if (shopManager == null || customerUI == null) return;
         if (!customerUI.HasFinishedToday) return;
 
-        lastDiscardedCount = inventorySystem != null
-            ? inventorySystem.AdvanceFreshnessOneDay()
-            : 0;
-
-        if (discardedText != null)
-            discardedText.text = $"廃棄：{lastDiscardedCount}個";
+        if (inventorySystem != null)
+            inventorySystem.AdvanceFreshnessOneDay();
 
         shopManager.AdvanceDay();
 
