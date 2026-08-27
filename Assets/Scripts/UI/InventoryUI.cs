@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 在庫画面全体を管理します。
@@ -25,8 +26,13 @@ public class InventoryUI : MonoBehaviour
     {
         if (inventorySystem != null)
         {
+            inventorySystem.OnInventoryChanged -= RefreshAll;
             inventorySystem.OnInventoryChanged += RefreshAll;
         }
+
+        // タブが非表示中に仕入れが行われても、
+        // 在庫タブを開いた瞬間に最新状態を必ず表示する。
+        RefreshAll();
     }
 
     private void OnDisable()
@@ -35,11 +41,6 @@ public class InventoryUI : MonoBehaviour
         {
             inventorySystem.OnInventoryChanged -= RefreshAll;
         }
-    }
-
-    private void Start()
-    {
-        RefreshAll();
     }
 
     /// <summary>
@@ -104,5 +105,20 @@ public class InventoryUI : MonoBehaviour
             item.Bind(batch);
             spawnedItems.Add(item);
         }
+
+        ForceRebuildLayout();
+    }
+
+    /// <summary>
+    /// ForceRebuildLayout（フォース・リビルド・レイアウト）
+    /// Force＝強制、Rebuild＝作り直す、Layout＝配置。
+    /// 商品カード追加後にVertical Layout Groupへ再計算を命令します。
+    /// </summary>
+    private void ForceRebuildLayout()
+    {
+        if (itemContainer is not RectTransform rectTransform) return;
+
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rectTransform);
     }
 }
