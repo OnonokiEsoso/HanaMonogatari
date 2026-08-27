@@ -5,9 +5,17 @@ using UnityEngine;
 
 /// <summary>
 /// 客が在庫から商品を選び、購入する処理を担当します。
+/// 購入後は満足度を計算し、店評価へ加算します。
 /// </summary>
 public class CustomerPurchaseSystem : MonoBehaviour
 {
+    public enum SatisfactionLevel
+    {
+        Okay,
+        Good,
+        Best
+    }
+
     [Serializable]
     public class PurchaseResult
     {
@@ -15,6 +23,9 @@ public class CustomerPurchaseSystem : MonoBehaviour
         public CustomerSystem.VisitingCustomer customer;
         public FlowerData flower;
         public int salePrice;
+        public int satisfactionScore;
+        public SatisfactionLevel satisfactionLevel;
+        public int shopRatingGain;
         public string message;
     }
 
@@ -30,9 +41,17 @@ public class CustomerPurchaseSystem : MonoBehaviour
     [SerializeField] private InventorySystem inventorySystem;
     [SerializeField] private PricingSystem pricingSystem;
 
+    [Header("満足度による店評価")]
+    [Tooltip("満足度『まあまあ』のときに増える店評価")]
+    [Min(0)] [SerializeField] private int okayRatingGain = 1;
+    [Tooltip("満足度『良い』のときに増える店評価")]
+    [Min(0)] [SerializeField] private int goodRatingGain = 3;
+    [Tooltip("満足度『最高』のときに増える店評価")]
+    [Min(0)] [SerializeField] private int bestRatingGain = 5;
+
     /// <summary>
     /// TryPurchase（トライ・パーチェス）＝購入を試みる。
-    /// 条件に合う商品があれば1個購入します。
+    /// 条件に合う商品があれば1個購入し、満足度と店評価も処理します。
     /// </summary>
     public PurchaseResult TryPurchase(CustomerSystem.VisitingCustomer customer)
     {
@@ -71,10 +90,20 @@ public class CustomerPurchaseSystem : MonoBehaviour
 
         shopManager.AddMoney(selected.price);
 
+        int satisfactionScore = CalculateSatisfactionScore(customer, selected.flower, selected.price);
+        SatisfactionLevel satisfactionLevel = GetSatisfactionLevel(satisfactionScore);
+        int ratingGain = GetRatingGain(satisfactionLevel);
+
+        if (ratingGain > 0)
+            shopManager.AddShopRating(ratingGain);
+
         result.purchased = true;
         result.flower = selected.flower;
         result.salePrice = selected.price;
-        result.message = $"{customer.data.displayName}が{selected.flower.flowerName}（{selected.flower.color}）を{selected.price:N0}円で購入しました";
+        result.satisfactionScore = satisfactionScore;
+        result.satisfactionLevel = satisfactionLevel;
+        result.shopRatingGain = ratingGain;
+        result.message = $"{customer.data.displayName}が{selected.flower.flowerName}（{selected.flower.color}）を{selected.price:N0}円で購入しました　満足度：{GetSatisfactionLabel(satisfactionLevel)}　店評価+{ratingGain}";
 
         Debug.Log(result.message);
         return result;
@@ -118,6 +147,63 @@ public class CustomerPurchaseSystem : MonoBehaviour
         }
 
         return candidates;
+    }
+
+    /// <summary>
+    /// CalculateSatisfactionScore（カルキュレート・サティスファクション・スコア）
+    /// Calculate＝計算する、Satisfaction Score＝満足度点。
+    /// 減点は使わず、条件を満たすほど点を加算します。
+    /// </summary>
+    private int CalculateSatisfactionScore(CustomerSystem.VisitingCustomer customer, FlowerData flower, int price)
+    {
+        int score = 0;
+
+        if (flower.color == customer.favoriteColor)
+            score += 2;
+
+        int popularityCenter = Mathf.RoundToInt((customer.data.minPopularity + customer.data.maxPopularity) / 2f);
+        int popularityDistance = Mathf.Abs(flower.basePopularity - popularityCenter);
+        score += popularityDistance <= 1 ? 2 : 1;
+
+        int rarity = flower.GetRarity(shopManager.CurrentSeason);
+        int rarityCenter = Mathf.RoundToInt((customer.data.minRarity + customer.data.maxRarity) / 2f);
+        int rarityDistance = Mathf.Abs(rarity - rarityCenter);
+        score += rarityDistance <= 1 ? 2 : 1;
+
+        float budgetRatio = price / (float)Mathf.Max(1, customer.data.budget);
+        if (budgetRatio <= 0.5f)
+            score += 2;
+        else if (budgetRatio <= 0.75f)
+            score += 1;
+
+        return score;
+    }
+
+    private static SatisfactionLevel GetSatisfactionLevel(int score)
+    {
+        if (score >= 6) return SatisfactionLevel.Best;
+        if (score >= 3) return SatisfactionLevel.Good;
+        return SatisfactionLevel.Okay;
+    }
+
+    private int GetRatingGain(SatisfactionLevel level)
+    {
+        return level switch
+        {
+            SatisfactionLevel.Best => bestRatingGain,
+            SatisfactionLevel.Good => goodRatingGain,
+            _ => okayRatingGain
+        };
+    }
+
+    private static string GetSatisfactionLabel(SatisfactionLevel level)
+    {
+        return level switch
+        {
+            SatisfactionLevel.Best => "最高！",
+            SatisfactionLevel.Good => "良い",
+            _ => "まあまあ"
+        };
     }
 
     private static Candidate PickWeighted(List<Candidate> candidates)
