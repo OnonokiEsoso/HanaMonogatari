@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 在庫にある商品を種類ごとにまとめて、販売価格を設定する画面です。
@@ -24,11 +25,18 @@ public class PricingUI : MonoBehaviour
     private void OnEnable()
     {
         if (inventorySystem != null)
+        {
+            inventorySystem.OnInventoryChanged -= RefreshAll;
             inventorySystem.OnInventoryChanged += RefreshAll;
+        }
 
         if (pricingSystem != null)
+        {
+            pricingSystem.OnPricingChanged -= RefreshAll;
             pricingSystem.OnPricingChanged += RefreshAll;
+        }
 
+        // 非表示中に仕入れた商品も、値付けタブを開いた瞬間に反映する。
         RefreshAll();
     }
 
@@ -92,11 +100,25 @@ public class PricingUI : MonoBehaviour
             item.Bind(stock.flower, stock.quantity, pricingSystem, ApplyPrice);
             spawnedItems.Add(item);
         }
+
+        ForceRebuildLayout();
     }
 
     private void ApplyPrice(FlowerData flower, int price)
     {
         if (pricingSystem == null) return;
         pricingSystem.SetSalePrice(flower, price);
+    }
+
+    /// <summary>
+    /// ForceRebuildLayout（フォース・リビルド・レイアウト）
+    /// 商品カード追加後にVertical Layout Groupの配置を即座に再計算します。
+    /// </summary>
+    private void ForceRebuildLayout()
+    {
+        if (itemContainer is not RectTransform rectTransform) return;
+
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rectTransform);
     }
 }
