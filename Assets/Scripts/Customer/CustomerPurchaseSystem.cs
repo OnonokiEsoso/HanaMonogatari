@@ -5,7 +5,7 @@ using UnityEngine;
 
 /// <summary>
 /// 客が在庫から商品を選び、購入する処理を担当します。
-/// 購入後は満足度を計算し、店評価へ加算します。
+/// 購入後は満足度・店評価・常連ポイントを処理します。
 /// </summary>
 public class CustomerPurchaseSystem : MonoBehaviour
 {
@@ -26,6 +26,10 @@ public class CustomerPurchaseSystem : MonoBehaviour
         public int satisfactionScore;
         public SatisfactionLevel satisfactionLevel;
         public int shopRatingGain;
+        public int regularPoints;
+        public int regularRequiredPoints;
+        public int regularCount;
+        public bool becameRegular;
         public string message;
     }
 
@@ -40,6 +44,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private InventorySystem inventorySystem;
     [SerializeField] private PricingSystem pricingSystem;
+    [SerializeField] private CustomerSystem customerSystem;
 
     [Header("満足度による店評価")]
     [Tooltip("満足度『まあまあ』のときに増える店評価")]
@@ -51,7 +56,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
 
     /// <summary>
     /// TryPurchase（トライ・パーチェス）＝購入を試みる。
-    /// 条件に合う商品があれば1個購入し、満足度と店評価も処理します。
+    /// 条件に合う商品があれば1個購入し、満足度・店評価・常連ポイントも処理します。
     /// </summary>
     public PurchaseResult TryPurchase(CustomerSystem.VisitingCustomer customer)
     {
@@ -97,13 +102,30 @@ public class CustomerPurchaseSystem : MonoBehaviour
         if (ratingGain > 0)
             shopManager.AddShopRating(ratingGain);
 
+        CustomerSystem.RegularPointResult regularResult = default;
+        if (customerSystem != null)
+            regularResult = customerSystem.AddRegularPoint(customer.data.customerType);
+
         result.purchased = true;
         result.flower = selected.flower;
         result.salePrice = selected.price;
         result.satisfactionScore = satisfactionScore;
         result.satisfactionLevel = satisfactionLevel;
         result.shopRatingGain = ratingGain;
-        result.message = $"{customer.data.displayName}が{selected.flower.flowerName}（{selected.flower.color}）を{selected.price:N0}円で購入しました　満足度：{GetSatisfactionLabel(satisfactionLevel)}　店評価+{ratingGain}";
+        result.regularPoints = regularResult.currentPoints;
+        result.regularRequiredPoints = regularResult.requiredPoints;
+        result.regularCount = regularResult.regularCount;
+        result.becameRegular = regularResult.becameRegular;
+
+        string regularText = string.Empty;
+        if (customerSystem != null)
+        {
+            regularText = regularResult.becameRegular
+                ? $"　★常連になりました！ 常連{regularResult.regularCount}人"
+                : $"　常連P {regularResult.currentPoints}/{regularResult.requiredPoints}";
+        }
+
+        result.message = $"{customer.data.displayName}が{selected.flower.flowerName}（{selected.flower.color}）を{selected.price:N0}円で購入しました　満足度：{GetSatisfactionLabel(satisfactionLevel)}　店評価+{ratingGain}{regularText}";
 
         Debug.Log(result.message);
         return result;
