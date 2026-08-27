@@ -4,6 +4,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 仕入れ・在庫・値付け・営業画面のタブ切り替えを管理します。
 /// 各タブごとに「選択中の色」「未選択時の色」を個別設定できます。
+/// 営業中は仕入れ・値付けタブを使用できません。
 /// </summary>
 public class ShopTabUI : MonoBehaviour
 {
@@ -28,31 +29,28 @@ public class ShopTabUI : MonoBehaviour
     [SerializeField] private Button customerTabButton;
 
     [Header("仕入れボタンの色")]
-    [Tooltip("仕入れタブが選択されているときの背景色")]
     [SerializeField] private Color supplierSelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
-    [Tooltip("仕入れタブが選択されていないときの背景色")]
     [SerializeField] private Color supplierUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
 
     [Header("在庫ボタンの色")]
-    [Tooltip("在庫タブが選択されているときの背景色")]
     [SerializeField] private Color inventorySelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
-    [Tooltip("在庫タブが選択されていないときの背景色")]
     [SerializeField] private Color inventoryUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
 
     [Header("値付けボタンの色")]
-    [Tooltip("値付けタブが選択されているときの背景色")]
     [SerializeField] private Color pricingSelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
-    [Tooltip("値付けタブが選択されていないときの背景色")]
     [SerializeField] private Color pricingUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
 
     [Header("営業ボタンの色")]
-    [Tooltip("営業タブが選択されているときの背景色")]
     [SerializeField] private Color customerSelectedColor = new Color(0.78f, 0.90f, 0.72f, 1f);
-    [Tooltip("営業タブが選択されていないときの背景色")]
     [SerializeField] private Color customerUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
 
     [Header("開始時")]
     [SerializeField] private bool startWithSupplierTab = true;
+
+    private bool isBusinessOpen;
+    private ShopTab currentTab;
+
+    public bool IsBusinessOpen => isBusinessOpen;
 
     private void Awake()
     {
@@ -75,6 +73,8 @@ public class ShopTabUI : MonoBehaviour
             ShowSupplierTab();
         else
             ShowInventoryTab();
+
+        RefreshTabInteractable();
     }
 
     private void OnDestroy()
@@ -94,6 +94,7 @@ public class ShopTabUI : MonoBehaviour
 
     public void ShowSupplierTab()
     {
+        if (isBusinessOpen) return;
         SetTab(ShopTab.Supplier);
     }
 
@@ -104,6 +105,7 @@ public class ShopTabUI : MonoBehaviour
 
     public void ShowPricingTab()
     {
+        if (isBusinessOpen) return;
         SetTab(ShopTab.Pricing);
     }
 
@@ -112,8 +114,26 @@ public class ShopTabUI : MonoBehaviour
         SetTab(ShopTab.Customer);
     }
 
+    /// <summary>
+    /// SetBusinessOpen（セット・ビジネス・オープン）
+    /// Set＝設定する、Business Open＝営業中。
+    /// 開店中は仕入れ・値付けタブを無効化します。
+    /// </summary>
+    public void SetBusinessOpen(bool open)
+    {
+        isBusinessOpen = open;
+
+        // 開店時に仕入れ・値付け画面にいた場合は営業画面へ移動する。
+        if (isBusinessOpen && (currentTab == ShopTab.Supplier || currentTab == ShopTab.Pricing))
+            SetTab(ShopTab.Customer);
+
+        RefreshTabInteractable();
+    }
+
     private void SetTab(ShopTab selectedTab)
     {
+        currentTab = selectedTab;
+
         if (supplierPanel != null)
             supplierPanel.SetActive(selectedTab == ShopTab.Supplier);
 
@@ -129,11 +149,21 @@ public class ShopTabUI : MonoBehaviour
         UpdateTabColors(selectedTab);
     }
 
-    /// <summary>
-    /// UpdateTabColors（アップデート・タブ・カラーズ）
-    /// Update＝更新する、Tab Colors＝タブの色。
-    /// 現在選択中のタブに応じて、各ボタン固有の色を反映します。
-    /// </summary>
+    private void RefreshTabInteractable()
+    {
+        if (supplierTabButton != null)
+            supplierTabButton.interactable = !isBusinessOpen;
+
+        if (pricingTabButton != null)
+            pricingTabButton.interactable = !isBusinessOpen;
+
+        if (inventoryTabButton != null)
+            inventoryTabButton.interactable = true;
+
+        if (customerTabButton != null)
+            customerTabButton.interactable = true;
+    }
+
     private void UpdateTabColors(ShopTab selectedTab)
     {
         SetButtonColor(
