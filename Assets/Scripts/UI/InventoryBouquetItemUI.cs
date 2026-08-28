@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 在庫画面で花束1つを表示します。
-/// 閉じているときは花束ヘッダーの下に材料カードを重ねて表示し、
+/// 閉じているときは花束ヘッダーの背面に材料カードを重ねて表示し、
 /// クリックするとヘッダー分の空間を残したまま材料一覧を下へ展開します。
 /// </summary>
 public class InventoryBouquetItemUI : MonoBehaviour
@@ -140,6 +140,18 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (expandedContainer != null)
             expandedContainer.gameObject.SetActive(isExpanded);
 
+        // Unity UIは後ろのSiblingほど手前に描画されます。
+        // 閉じている時の材料カードは花束ヘッダーの「背面」にしたいので、
+        // プレビューを最背面、ヘッダーを最前面へ並べ替えます。
+        if (!isExpanded)
+        {
+            if (collapsedPreviewContainer != null)
+                collapsedPreviewContainer.SetAsFirstSibling();
+
+            if (toggleButton != null)
+                toggleButton.transform.SetAsLastSibling();
+        }
+
         UpdatePreferredHeight();
     }
 
@@ -168,7 +180,7 @@ public class InventoryBouquetItemUI : MonoBehaviour
                 rect.anchoredPosition = previewOffset * i;
             }
 
-            // 後から作ったカードほど奥になるようにし、花束ヘッダー直下の重なりを分かりやすくする。
+            // 後から作ったカードほど奥になるようにする。
             item.transform.SetSiblingIndex(0);
             previewItems.Add(item);
         }
