@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 在庫画面で花束1つを表示します。
-/// 閉じているときは花束ヘッダーの背面に材料カードを重ねて表示し、
+/// 閉じているときは材料カードを花束ヘッダーの背面に重ねて1枠で表示し、
 /// クリックするとヘッダー分の空間を残したまま材料一覧を下へ展開します。
 /// </summary>
 public class InventoryBouquetItemUI : MonoBehaviour
@@ -90,7 +90,7 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (compositionText != null)
             compositionText.text = $"{bouquet.DistinctFlowerCount}種類 / {bouquet.TotalQuantity}本";
 
-        PositionContainersBelowHeader();
+        PositionContainers();
         BuildPreviewItems();
         BuildExpandedItems();
         ApplyExpandedState();
@@ -109,16 +109,19 @@ public class InventoryBouquetItemUI : MonoBehaviour
     }
 
     /// <summary>
-    /// PositionContainersBelowHeader（ポジション・コンテナーズ・ビロウ・ヘッダー）
-    /// 花束ヘッダーの高さ分だけ下へずらして、材料表示がヘッダーに被らないようにします。
+    /// PositionContainers（ポジション・コンテナーズ）＝材料表示の位置を決める。
+    /// 閉じたプレビューはヘッダーと同じ位置に置いて背面へ重ね、
+    /// 展開一覧だけをヘッダーの下へ配置します。
     /// </summary>
-    private void PositionContainersBelowHeader()
+    private void PositionContainers()
     {
         float headerHeight = GetHeaderHeight();
-        float y = -(headerHeight + headerToItemsSpacing);
 
-        PositionContainer(collapsedPreviewContainer, y);
-        PositionContainer(expandedContainer, y);
+        // 閉じているときは花束ヘッダーと同じ枠内に重ねる。
+        PositionContainer(collapsedPreviewContainer, 0f);
+
+        // 展開時だけ、ヘッダーの高さ＋余白ぶん下へ送る。
+        PositionContainer(expandedContainer, -(headerHeight + headerToItemsSpacing));
     }
 
     private static void PositionContainer(Transform container, float y)
@@ -141,8 +144,7 @@ public class InventoryBouquetItemUI : MonoBehaviour
             expandedContainer.gameObject.SetActive(isExpanded);
 
         // Unity UIは後ろのSiblingほど手前に描画されます。
-        // 閉じている時の材料カードは花束ヘッダーの「背面」にしたいので、
-        // プレビューを最背面、ヘッダーを最前面へ並べ替えます。
+        // 閉じている時は材料カードを花束ヘッダーの背面に置きます。
         if (!isExpanded)
         {
             if (collapsedPreviewContainer != null)
@@ -209,27 +211,25 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (rootLayoutElement == null) return;
 
         float headerHeight = GetHeaderHeight();
+
+        // 閉じているときは材料プレビューをレイアウト上の高さに数えない。
+        // これで花束全体が通常商品と同じ「1枠」に収まる。
+        if (!isExpanded)
+        {
+            rootLayoutElement.preferredHeight = headerHeight;
+            return;
+        }
+
         float itemHeight = GetFlowerItemHeight();
-        float contentHeight;
+        int count = expandedItems.Count;
+        float spacing = 0f;
 
-        if (isExpanded)
-        {
-            int count = expandedItems.Count;
-            float spacing = 0f;
-            if (expandedContainer != null && expandedContainer.TryGetComponent(out VerticalLayoutGroup group))
-                spacing = group.spacing;
+        if (expandedContainer != null && expandedContainer.TryGetComponent(out VerticalLayoutGroup group))
+            spacing = group.spacing;
 
-            contentHeight = count > 0
-                ? itemHeight * count + spacing * Mathf.Max(0, count - 1)
-                : 0f;
-        }
-        else
-        {
-            int count = previewItems.Count;
-            contentHeight = count > 0
-                ? itemHeight + Mathf.Abs(previewOffset.y) * Mathf.Max(0, count - 1)
-                : 0f;
-        }
+        float contentHeight = count > 0
+            ? itemHeight * count + spacing * Mathf.Max(0, count - 1)
+            : 0f;
 
         rootLayoutElement.preferredHeight = headerHeight + headerToItemsSpacing + contentHeight;
     }
