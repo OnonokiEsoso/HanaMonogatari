@@ -30,10 +30,6 @@ public class InventorySystem : MonoBehaviour
 
     public event Action OnInventoryChanged;
 
-    /// <summary>
-    /// 仕入れた商品を在庫へ追加します。
-    /// 同じ商品かつ同じ残り鮮度のロットがあればまとめます。
-    /// </summary>
     public void AddFlower(FlowerData flower, int quantity)
     {
         if (flower == null || quantity <= 0) return;
@@ -43,7 +39,6 @@ public class InventorySystem : MonoBehaviour
     /// <summary>
     /// AddFlowerWithFreshness（アド・フラワー・ウィズ・フレッシュネス）
     /// 指定した残り鮮度のまま商品を在庫へ戻します。
-    /// 花束解体時など、鮮度をリセットしたくない処理で使用します。
     /// </summary>
     public void AddFlowerWithFreshness(FlowerData flower, int quantity, int remainingFreshnessDays)
     {
@@ -61,19 +56,12 @@ public class InventorySystem : MonoBehaviour
         OnInventoryChanged?.Invoke();
     }
 
-    /// <summary>
-    /// 指定商品の現在庫数を、全ロット合計で返します。
-    /// </summary>
     public int GetTotalQuantity(FlowerData flower)
     {
         if (flower == null) return 0;
         return batches.Where(b => b.flower == flower).Sum(b => b.quantity);
     }
 
-    /// <summary>
-    /// 指定商品の在庫のうち、最も鮮度が低いロットの残り日数を返します。
-    /// 在庫が無い場合は0です。
-    /// </summary>
     public int GetOldestFreshnessDays(FlowerData flower)
     {
         if (flower == null) return 0;
@@ -86,14 +74,16 @@ public class InventorySystem : MonoBehaviour
     }
 
     /// <summary>
-    /// 指定商品の在庫を減らします。
-    /// 鮮度の低いロットから先に使用します。
-    /// 在庫不足の場合は何も変更せずfalseを返します。
+    /// TakeFlowerLots（テイク・フラワー・ロッツ）
+    /// Take＝取り出す、Lots＝鮮度別ロット。
+    /// 鮮度の古い順に必要数を取り出し、「何日残りを何個使ったか」を返します。
+    /// 在庫不足なら何も変更せず空リストを返します。
     /// </summary>
-    public bool TryRemoveFlower(FlowerData flower, int quantity)
+    public List<InventoryBatch> TakeFlowerLots(FlowerData flower, int quantity)
     {
-        if (flower == null || quantity <= 0) return false;
-        if (GetTotalQuantity(flower) < quantity) return false;
+        List<InventoryBatch> taken = new();
+        if (flower == null || quantity <= 0) return taken;
+        if (GetTotalQuantity(flower) < quantity) return taken;
 
         int remaining = quantity;
         List<InventoryBatch> targets = batches
@@ -104,6 +94,9 @@ public class InventorySystem : MonoBehaviour
         foreach (InventoryBatch batch in targets)
         {
             int take = Mathf.Min(batch.quantity, remaining);
+            if (take <= 0) continue;
+
+            taken.Add(new InventoryBatch(batch.flower, take, batch.remainingFreshnessDays));
             batch.quantity -= take;
             remaining -= take;
 
@@ -112,13 +105,23 @@ public class InventorySystem : MonoBehaviour
 
         batches.RemoveAll(b => b.quantity <= 0);
         OnInventoryChanged?.Invoke();
-        return true;
+        return taken;
     }
 
     /// <summary>
-    /// 1日終了時に全在庫の鮮度を1日減らします。
-    /// 0日になった商品は自動的に廃棄します。
-    /// 戻り値は廃棄された合計個数です。
+    /// 指定商品の在庫を減らします。鮮度の低いロットから先に使用します。
+    /// </summary>
+    public bool TryRemoveFlower(FlowerData flower, int quantity)
+    {
+        if (flower == null || quantity <= 0) return false;
+        if (GetTotalQuantity(flower) < quantity) return false;
+
+        List<InventoryBatch> taken = TakeFlowerLots(flower, quantity);
+        return taken.Sum(x => x.quantity) == quantity;
+    }
+
+    /// <summary>
+    /// 1日終了時に全在庫の鮮度を1日減らし、0日になった商品を廃棄します。
     /// </summary>
     public int AdvanceFreshnessOneDay()
     {
