@@ -29,6 +29,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
     private bool isExpanded;
     private LayoutElement rootLayoutElement;
     private RectTransform rootRectTransform;
+    private float headerHeight = 100f;
     private readonly List<InventoryItemUI> spawnedLotItems = new();
 
     private void Awake()
@@ -38,6 +39,12 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         rootLayoutElement = GetComponent<LayoutElement>();
         if (rootLayoutElement == null)
             rootLayoutElement = gameObject.AddComponent<LayoutElement>();
+
+        // 展開で親の高さが変わってもヘッダー自身の高さは変えない。
+        if (toggleButton != null && toggleButton.transform is RectTransform headerRect && headerRect.rect.height > 0f)
+            headerHeight = headerRect.rect.height;
+
+        PositionHeaderAtTop();
 
         if (toggleButton != null)
             toggleButton.onClick.AddListener(ToggleExpanded);
@@ -92,6 +99,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         if (purchasePriceText != null)
             purchasePriceText.text = $"仕入 {flower.purchasePrice:N0}円";
 
+        PositionHeaderAtTop();
         PositionExpandedContainerBelowHeader();
         BuildLotItems();
         ApplyExpandedState();
@@ -109,14 +117,28 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
     }
 
     /// <summary>
+    /// PositionHeaderAtTop（ポジション・ヘッダー・アット・トップ）
+    /// 展開で親オブジェクトが縦に伸びても、元の花プレハブを一番上に固定します。
+    /// </summary>
+    private void PositionHeaderAtTop()
+    {
+        if (toggleButton == null || toggleButton.transform is not RectTransform rect) return;
+
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, headerHeight);
+        rect.localScale = Vector3.one;
+    }
+
+    /// <summary>
     /// PositionExpandedContainerBelowHeader（ポジション・エクスパンデッド・コンテナ・ビロウ・ヘッダー）
     /// 展開一覧を元の花カードの1個下へ配置します。
     /// </summary>
     private void PositionExpandedContainerBelowHeader()
     {
         if (expandedContainer is not RectTransform rect) return;
-
-        float headerHeight = GetHeaderHeight();
 
         rect.anchorMin = new Vector2(0f, 1f);
         rect.anchorMax = new Vector2(1f, 1f);
@@ -158,13 +180,14 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
             expandedContainer.gameObject.SetActive(isExpanded);
 
         UpdatePreferredHeight();
+        PositionHeaderAtTop();
+        PositionExpandedContainerBelowHeader();
     }
 
     private void UpdatePreferredHeight()
     {
         if (rootLayoutElement == null) return;
 
-        float headerHeight = GetHeaderHeight();
         float targetHeight = headerHeight;
 
         if (isExpanded)
@@ -182,22 +205,12 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
             targetHeight = headerHeight + headerToItemsSpacing + contentHeight;
         }
 
-        // VerticalLayoutGroup が確実にこの高さを採用するよう、Preferred/Minの両方を設定する。
         rootLayoutElement.preferredHeight = targetHeight;
         rootLayoutElement.minHeight = targetHeight;
         rootLayoutElement.flexibleHeight = 0f;
 
-        // レイアウト計算のタイミング差で次の商品が重なるのを防ぐため、
-        // RectTransform本体の高さも同時に更新する。
         if (rootRectTransform != null)
             rootRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, targetHeight);
-    }
-
-    private float GetHeaderHeight()
-    {
-        if (toggleButton != null && toggleButton.transform is RectTransform rect && rect.rect.height > 0f)
-            return rect.rect.height;
-        return 100f;
     }
 
     private float GetLotItemHeight()
@@ -221,11 +234,12 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         {
             LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect);
 
-            // Content Size Fitterなど、さらに上位のレイアウトにも即時反映させる。
             if (parentRect.parent is RectTransform grandParentRect)
                 LayoutRebuilder.ForceRebuildLayoutImmediate(grandParentRect);
         }
 
+        PositionHeaderAtTop();
+        PositionExpandedContainerBelowHeader();
         Canvas.ForceUpdateCanvases();
     }
 }
