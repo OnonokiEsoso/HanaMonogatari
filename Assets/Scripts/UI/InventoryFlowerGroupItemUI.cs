@@ -28,10 +28,13 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
     private List<InventorySystem.InventoryBatch> batches = new();
     private bool isExpanded;
     private LayoutElement rootLayoutElement;
+    private RectTransform rootRectTransform;
     private readonly List<InventoryItemUI> spawnedLotItems = new();
 
     private void Awake()
     {
+        rootRectTransform = transform as RectTransform;
+
         rootLayoutElement = GetComponent<LayoutElement>();
         if (rootLayoutElement == null)
             rootLayoutElement = gameObject.AddComponent<LayoutElement>();
@@ -141,6 +144,12 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
             item.BindLotDetail(batch);
             spawnedLotItems.Add(item);
         }
+
+        if (expandedContainer is RectTransform expandedRect)
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(expandedRect);
+        }
     }
 
     private void ApplyExpandedState()
@@ -156,25 +165,32 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         if (rootLayoutElement == null) return;
 
         float headerHeight = GetHeaderHeight();
-        if (!isExpanded)
+        float targetHeight = headerHeight;
+
+        if (isExpanded)
         {
-            rootLayoutElement.preferredHeight = headerHeight;
-            return;
+            float itemHeight = GetLotItemHeight();
+            float spacing = 0f;
+            if (expandedContainer != null && expandedContainer.TryGetComponent(out VerticalLayoutGroup group))
+                spacing = group.spacing;
+
+            int count = spawnedLotItems.Count;
+            float contentHeight = count > 0
+                ? itemHeight * count + spacing * Mathf.Max(0, count - 1)
+                : 0f;
+
+            targetHeight = headerHeight + headerToItemsSpacing + contentHeight;
         }
 
-        float itemHeight = GetLotItemHeight();
-        float spacing = 0f;
-        if (expandedContainer != null && expandedContainer.TryGetComponent(out VerticalLayoutGroup group))
-            spacing = group.spacing;
+        // VerticalLayoutGroup が確実にこの高さを採用するよう、Preferred/Minの両方を設定する。
+        rootLayoutElement.preferredHeight = targetHeight;
+        rootLayoutElement.minHeight = targetHeight;
+        rootLayoutElement.flexibleHeight = 0f;
 
-        int count = spawnedLotItems.Count;
-        float contentHeight = count > 0
-            ? itemHeight * count + spacing * Mathf.Max(0, count - 1)
-            : 0f;
-
-        // ヘッダー + 余白 + 展開された全ロット分を1アイテムの高さとして確保する。
-        // これにより、次の別種類の商品が下へ押し下げられて重ならなくなる。
-        rootLayoutElement.preferredHeight = headerHeight + headerToItemsSpacing + contentHeight;
+        // レイアウト計算のタイミング差で次の商品が重なるのを防ぐため、
+        // RectTransform本体の高さも同時に更新する。
+        if (rootRectTransform != null)
+            rootRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, targetHeight);
     }
 
     private float GetHeaderHeight()
@@ -195,10 +211,21 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
     {
         Canvas.ForceUpdateCanvases();
 
-        if (transform is RectTransform selfRect)
-            LayoutRebuilder.ForceRebuildLayoutImmediate(selfRect);
+        if (expandedContainer is RectTransform expandedRect && expandedContainer.gameObject.activeInHierarchy)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(expandedRect);
+
+        if (rootRectTransform != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rootRectTransform);
 
         if (transform.parent is RectTransform parentRect)
+        {
             LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect);
+
+            // Content Size Fitterなど、さらに上位のレイアウトにも即時反映させる。
+            if (parentRect.parent is RectTransform grandParentRect)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(grandParentRect);
+        }
+
+        Canvas.ForceUpdateCanvases();
     }
 }
