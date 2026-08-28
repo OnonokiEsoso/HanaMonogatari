@@ -37,19 +37,26 @@ public class InventorySystem : MonoBehaviour
     public void AddFlower(FlowerData flower, int quantity)
     {
         if (flower == null || quantity <= 0) return;
+        AddFlowerWithFreshness(flower, quantity, Mathf.Max(1, flower.freshnessDays));
+    }
 
-        int freshness = Mathf.Max(1, flower.freshnessDays);
+    /// <summary>
+    /// AddFlowerWithFreshness（アド・フラワー・ウィズ・フレッシュネス）
+    /// 指定した残り鮮度のまま商品を在庫へ戻します。
+    /// 花束解体時など、鮮度をリセットしたくない処理で使用します。
+    /// </summary>
+    public void AddFlowerWithFreshness(FlowerData flower, int quantity, int remainingFreshnessDays)
+    {
+        if (flower == null || quantity <= 0) return;
+
+        int freshness = Mathf.Max(1, remainingFreshnessDays);
         InventoryBatch existing = batches.FirstOrDefault(b =>
             b.flower == flower && b.remainingFreshnessDays == freshness);
 
         if (existing != null)
-        {
             existing.quantity += quantity;
-        }
         else
-        {
             batches.Add(new InventoryBatch(flower, quantity, freshness));
-        }
 
         OnInventoryChanged?.Invoke();
     }
@@ -61,6 +68,21 @@ public class InventorySystem : MonoBehaviour
     {
         if (flower == null) return 0;
         return batches.Where(b => b.flower == flower).Sum(b => b.quantity);
+    }
+
+    /// <summary>
+    /// 指定商品の在庫のうち、最も鮮度が低いロットの残り日数を返します。
+    /// 在庫が無い場合は0です。
+    /// </summary>
+    public int GetOldestFreshnessDays(FlowerData flower)
+    {
+        if (flower == null) return 0;
+
+        return batches
+            .Where(b => b.flower == flower && b.quantity > 0)
+            .Select(b => b.remainingFreshnessDays)
+            .DefaultIfEmpty(0)
+            .Min();
     }
 
     /// <summary>
@@ -107,18 +129,14 @@ public class InventorySystem : MonoBehaviour
             batch.remainingFreshnessDays--;
 
             if (batch.remainingFreshnessDays <= 0)
-            {
                 discarded += batch.quantity;
-            }
         }
 
         batches.RemoveAll(b => b.remainingFreshnessDays <= 0 || b.quantity <= 0);
         OnInventoryChanged?.Invoke();
 
         if (discarded > 0)
-        {
             Debug.Log($"鮮度切れにより{discarded}個の商品を廃棄しました。");
-        }
 
         return discarded;
     }
