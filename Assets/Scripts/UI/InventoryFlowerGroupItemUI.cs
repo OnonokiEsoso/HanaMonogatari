@@ -89,6 +89,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         if (purchasePriceText != null)
             purchasePriceText.text = $"仕入 {flower.purchasePrice:N0}円";
 
+        PositionExpandedContainerBelowHeader();
         BuildLotItems();
         ApplyExpandedState();
     }
@@ -102,6 +103,23 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         isExpanded = !isExpanded;
         ApplyExpandedState();
         ForceRebuildParentLayout();
+    }
+
+    /// <summary>
+    /// PositionExpandedContainerBelowHeader（ポジション・エクスパンデッド・コンテナ・ビロウ・ヘッダー）
+    /// 展開一覧を元の花カードの1個下へ配置します。
+    /// </summary>
+    private void PositionExpandedContainerBelowHeader()
+    {
+        if (expandedContainer is not RectTransform rect) return;
+
+        float headerHeight = GetHeaderHeight();
+
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = new Vector2(0f, -(headerHeight + headerToItemsSpacing));
+        rect.localScale = Vector3.one;
     }
 
     private void BuildLotItems()
@@ -154,6 +172,8 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
             ? itemHeight * count + spacing * Mathf.Max(0, count - 1)
             : 0f;
 
+        // ヘッダー + 余白 + 展開された全ロット分を1アイテムの高さとして確保する。
+        // これにより、次の別種類の商品が下へ押し下げられて重ならなくなる。
         rootLayoutElement.preferredHeight = headerHeight + headerToItemsSpacing + contentHeight;
     }
 
