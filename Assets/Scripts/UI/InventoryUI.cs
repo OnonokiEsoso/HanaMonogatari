@@ -122,7 +122,8 @@ public class InventoryUI : MonoBehaviour
             var groups = inventorySystem.Batches
                 .Where(b => b != null && b.flower != null && b.quantity > 0)
                 .GroupBy(b => b.flower)
-                .OrderBy(g => g.Key.flowerName)
+                .OrderBy(g => g.Key.sortOrder)
+                .ThenBy(g => g.Key.flowerName)
                 .ThenBy(g => g.Key.color)
                 .ToList();
 
@@ -136,8 +137,7 @@ public class InventoryUI : MonoBehaviour
                 }
                 else if (itemPrefab != null)
                 {
-                    // 新しいグループPrefab未設定時は、従来通りロット別表示へフォールバックします。
-                    foreach (InventorySystem.InventoryBatch batch in group)
+                    foreach (InventorySystem.InventoryBatch batch in group.OrderBy(b => b.remainingFreshnessDays))
                     {
                         InventoryItemUI item = Instantiate(itemPrefab, itemContainer);
                         item.Bind(batch);
