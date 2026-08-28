@@ -10,11 +10,23 @@ using UnityEngine;
 public class BouquetSystem : MonoBehaviour
 {
     [Serializable]
+    public class BouquetFreshnessLot
+    {
+        [Min(1)] public int quantity = 1;
+        [Min(1)] public int remainingFreshnessDays = 1;
+    }
+
+    [Serializable]
     public class BouquetComponent
     {
         public FlowerData flower;
         [Min(1)] public int quantity = 1;
         [Min(1)] public int remainingFreshnessDays = 1;
+        public List<BouquetFreshnessLot> freshnessLots = new();
+
+        public int OldestRemainingFreshnessDays => freshnessLots != null && freshnessLots.Count > 0
+            ? freshnessLots.Min(l => l.remainingFreshnessDays)
+            : remainingFreshnessDays;
     }
 
     [Serializable]
@@ -26,6 +38,9 @@ public class BouquetSystem : MonoBehaviour
 
         public int TotalQuantity => components?.Sum(c => c != null ? Mathf.Max(0, c.quantity) : 0) ?? 0;
         public int DistinctFlowerCount => components?.Count(c => c?.flower != null && c.quantity > 0) ?? 0;
+        public int OldestRemainingFreshnessDays => components != null && components.Count > 0
+            ? components.Where(c => c != null).Select(c => c.OldestRemainingFreshnessDays).DefaultIfEmpty(0).Min()
+            : 0;
 
         public int MaterialCost => components?.Sum(c =>
             c?.flower != null ? c.flower.purchasePrice * Mathf.Max(0, c.quantity) : 0) ?? 0;
@@ -40,11 +55,6 @@ public class BouquetSystem : MonoBehaviour
     public IReadOnlyList<BouquetData> Bouquets => bouquets;
     public event Action OnBouquetsChanged;
 
-    /// <summary>
-    /// TryCreateBouquet（トライ・クリエイト・ブーケ）
-    /// Try＝試す、Create Bouquet＝花束を作る。
-    /// 条件と在庫を確認し、成功した場合だけ材料を在庫から減らして花束を登録します。
-    /// </summary>
     public bool TryCreateBouquet(string bouquetName, int salePrice, List<BouquetComponent> requestedComponents, out string message)
     {
         message = string.Empty;
@@ -84,24 +94,30 @@ public class BouquetSystem : MonoBehaviour
                 return false;
             }
 
-            int stock = inventorySystem.GetTotalQuantity(component.flower);
-            if (stock < component.quantity)
+            if (inventorySystem.GetTotalQuantity(component.flower) < component.quantity)
             {
                 message = $"{component.flower.flowerName}（{component.flower.color}）の在庫が足りません";
                 return false;
             }
-
-            // 解体時に鮮度が新品へ戻るのを防ぐため、作成時点の最も古い鮮度を保持します。
-            component.remainingFreshnessDays = Mathf.Max(1, inventorySystem.GetOldestFreshnessDays(component.flower));
         }
 
         foreach (BouquetComponent component in components)
         {
-            if (!inventorySystem.TryRemoveFlower(component.flower, component.quantity))
+            List<InventorySystem.InventoryBatch> taken = inventorySystem.TakeFlowerLots(component.flower, component.quantity);
+            if (taken.Sum(x => x.quantity) != component.quantity)
             {
                 message = "花束材料の在庫処理に失敗しました";
                 return false;
             }
+
+            component.freshnessLots = taken
+                .Select(x => new BouquetFreshnessLot
+                {
+                    quantity = x.quantity,
+                    remainingFreshnessDays = x.remainingFreshnessDays
+                })
+                .ToList();
+            component.remainingFreshnessDays = component.OldestRemainingFreshnessDays;
         }
 
         BouquetData bouquet = new BouquetData
@@ -122,7 +138,6 @@ public class BouquetSystem : MonoBehaviour
     public bool SetSalePrice(BouquetData bouquet, int price)
     {
         if (bouquet == null || price <= 0 || !bouquets.Contains(bouquet)) return false;
-
         bouquet.salePrice = price;
         OnBouquetsChanged?.Invoke();
         return true;
@@ -135,10 +150,51 @@ public class BouquetSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// TryDisassembleBouquet（トライ・ディスアセンブル・ブーケ）
-    /// Disassemble＝解体する。
-    /// 花束を解体して、材料を保持していた鮮度のまま在庫へ戻します。
+    /// AdvanceFreshnessOneDay（アドバンス・フレッシュネス・ワン・デイ）
+    /// 花束内部の全ロットの鮮度を1日減らします。
+    /// 1つでも鮮度0の材料が出た花束は自動解体し、生きている材料だけ在庫へ戻します。
     /// </summary>
+    public int AdvanceFreshnessOneDay()
+    {
+        if (inventorySystem == null) return 0;
+
+        int autoDisassembled = 0;
+        List<BouquetData> expiredBouquets = new();
+
+        foreach (BouquetData bouquet in bouquets)
+        {
+            bool hasExpiredLot = false;
+
+            foreach (BouquetComponent component in bouquet.components)
+            {
+                EnsureFreshnessLots(component);
+
+                foreach (BouquetFreshnessLot lot in component.freshnessLots)
+                {
+                    lot.remainingFreshnessDays--;
+                    if (lot.remainingFreshnessDays <= 0)
+                        hasExpiredLot = true;
+                }
+
+                component.remainingFreshnessDays = component.OldestRemainingFreshnessDays;
+            }
+
+            if (hasExpiredLot)
+                expiredBouquets.Add(bouquet);
+        }
+
+        foreach (BouquetData bouquet in expiredBouquets)
+        {
+            ReturnAliveMaterials(bouquet);
+            bouquets.Remove(bouquet);
+            autoDisassembled++;
+            Debug.Log($"{bouquet.bouquetName}は材料の鮮度切れにより自動解体されました。");
+        }
+
+        OnBouquetsChanged?.Invoke();
+        return autoDisassembled;
+    }
+
     public bool TryDisassembleBouquet(BouquetData bouquet, out string message)
     {
         message = string.Empty;
@@ -155,15 +211,7 @@ public class BouquetSystem : MonoBehaviour
             return false;
         }
 
-        foreach (BouquetComponent component in bouquet.components)
-        {
-            if (component?.flower == null || component.quantity <= 0) continue;
-
-            inventorySystem.AddFlowerWithFreshness(
-                component.flower,
-                component.quantity,
-                Mathf.Max(1, component.remainingFreshnessDays));
-        }
+        ReturnAliveMaterials(bouquet);
 
         string name = bouquet.bouquetName;
         bouquets.Remove(bouquet);
@@ -174,15 +222,44 @@ public class BouquetSystem : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 販売済み花束などを一覧から取り除きます。材料は戻しません。
-    /// </summary>
     public bool RemoveBouquet(BouquetData bouquet)
     {
         if (bouquet == null) return false;
         bool removed = bouquets.Remove(bouquet);
         if (removed) OnBouquetsChanged?.Invoke();
         return removed;
+    }
+
+    private void ReturnAliveMaterials(BouquetData bouquet)
+    {
+        if (bouquet?.components == null || inventorySystem == null) return;
+
+        foreach (BouquetComponent component in bouquet.components)
+        {
+            if (component?.flower == null) continue;
+            EnsureFreshnessLots(component);
+
+            foreach (BouquetFreshnessLot lot in component.freshnessLots)
+            {
+                if (lot.quantity <= 0 || lot.remainingFreshnessDays <= 0) continue;
+                inventorySystem.AddFlowerWithFreshness(component.flower, lot.quantity, lot.remainingFreshnessDays);
+            }
+        }
+    }
+
+    private static void EnsureFreshnessLots(BouquetComponent component)
+    {
+        if (component == null) return;
+        component.freshnessLots ??= new List<BouquetFreshnessLot>();
+
+        if (component.freshnessLots.Count == 0 && component.quantity > 0)
+        {
+            component.freshnessLots.Add(new BouquetFreshnessLot
+            {
+                quantity = component.quantity,
+                remainingFreshnessDays = Mathf.Max(1, component.remainingFreshnessDays)
+            });
+        }
     }
 
     private static List<BouquetComponent> NormalizeComponents(List<BouquetComponent> requestedComponents)
@@ -197,7 +274,8 @@ public class BouquetSystem : MonoBehaviour
             {
                 flower = g.Key,
                 quantity = g.Sum(x => Mathf.Max(0, x.quantity)),
-                remainingFreshnessDays = 1
+                remainingFreshnessDays = 1,
+                freshnessLots = new List<BouquetFreshnessLot>()
             })
             .Where(c => c.quantity > 0)
             .ToList();
