@@ -6,7 +6,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 花束作成画面全体を管理します。
-/// 在庫から花束に使える商品を一覧表示し、作成済み花束の確認・解体も行います。
+/// 在庫から花束に使える商品を一覧表示し、使用本数・名前・販売価格を指定して花束を作成します。
+/// 作成済み花束の確認・削除は在庫画面で行います。
 /// </summary>
 public class BouquetUI : MonoBehaviour
 {
@@ -17,11 +18,6 @@ public class BouquetUI : MonoBehaviour
     [Header("材料一覧")]
     [SerializeField] private Transform itemContainer;
     [SerializeField] private BouquetIngredientItemUI itemPrefab;
-
-    [Header("作成済み花束一覧")]
-    [SerializeField] private Transform createdBouquetContainer;
-    [SerializeField] private BouquetCreatedItemUI createdBouquetPrefab;
-    [SerializeField] private TMP_Text noBouquetText;
 
     [Header("入力")]
     [SerializeField] private TMP_InputField bouquetNameInput;
@@ -37,7 +33,6 @@ public class BouquetUI : MonoBehaviour
     [SerializeField] private Button resetButton;
 
     private readonly List<BouquetIngredientItemUI> spawnedItems = new();
-    private readonly List<BouquetCreatedItemUI> spawnedBouquetItems = new();
 
     private void Awake()
     {
@@ -53,9 +48,6 @@ public class BouquetUI : MonoBehaviour
         if (inventorySystem != null)
             inventorySystem.OnInventoryChanged += RefreshAll;
 
-        if (bouquetSystem != null)
-            bouquetSystem.OnBouquetsChanged += RefreshAll;
-
         RefreshAll();
     }
 
@@ -63,9 +55,6 @@ public class BouquetUI : MonoBehaviour
     {
         if (inventorySystem != null)
             inventorySystem.OnInventoryChanged -= RefreshAll;
-
-        if (bouquetSystem != null)
-            bouquetSystem.OnBouquetsChanged -= RefreshAll;
     }
 
     private void OnDestroy()
@@ -81,7 +70,6 @@ public class BouquetUI : MonoBehaviour
     public void RefreshAll()
     {
         RebuildIngredientList();
-        RebuildCreatedBouquetList();
         RefreshSummary();
     }
 
@@ -118,36 +106,6 @@ public class BouquetUI : MonoBehaviour
 
         if (spawnedItems.Count == 0 && resultText != null)
             resultText.text = "花束に使える在庫がありません";
-    }
-
-    private void RebuildCreatedBouquetList()
-    {
-        foreach (BouquetCreatedItemUI item in spawnedBouquetItems)
-        {
-            if (item != null)
-                Destroy(item.gameObject);
-        }
-        spawnedBouquetItems.Clear();
-
-        if (bouquetSystem == null || createdBouquetContainer == null || createdBouquetPrefab == null)
-            return;
-
-        foreach (BouquetSystem.BouquetData bouquet in bouquetSystem.Bouquets)
-        {
-            if (bouquet == null) continue;
-
-            BouquetCreatedItemUI item = Instantiate(createdBouquetPrefab, createdBouquetContainer);
-            item.Bind(bouquet, DisassembleBouquet);
-            spawnedBouquetItems.Add(item);
-        }
-
-        if (noBouquetText != null)
-        {
-            bool isEmpty = bouquetSystem.Bouquets.Count == 0;
-            noBouquetText.gameObject.SetActive(isEmpty);
-            if (isEmpty)
-                noBouquetText.text = "作成済みの花束はありません";
-        }
     }
 
     private void OnIngredientChanged(BouquetIngredientItemUI item)
@@ -216,22 +174,6 @@ public class BouquetUI : MonoBehaviour
 
             RefreshAll();
         }
-    }
-
-    /// <summary>
-    /// DisassembleBouquet（ディスアセンブル・ブーケ）＝花束を解体する。
-    /// </summary>
-    private void DisassembleBouquet(BouquetSystem.BouquetData bouquet)
-    {
-        if (bouquetSystem == null) return;
-
-        bool success = bouquetSystem.TryDisassembleBouquet(bouquet, out string message);
-
-        if (resultText != null)
-            resultText.text = message;
-
-        if (success)
-            RefreshAll();
     }
 
     public void ResetSelection()
