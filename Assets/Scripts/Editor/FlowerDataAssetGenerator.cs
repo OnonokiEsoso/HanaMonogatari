@@ -56,12 +56,15 @@ public static class FlowerDataAssetGenerator
 
         var rows = GetMasterRows();
         var createdAssets = new List<FlowerData>();
+        int sortOrder = 1;
 
+        // Excelの「ソート時の振り分け番号」は、下のマスタ行と各colorsの並び順で1～83を振っています。
         foreach (FlowerMasterRow row in rows)
         {
             foreach (string color in row.colors)
             {
-                createdAssets.Add(CreateOrUpdateFlower(row, color));
+                createdAssets.Add(CreateOrUpdateFlower(row, color, sortOrder));
+                sortOrder++;
             }
         }
 
@@ -78,7 +81,7 @@ public static class FlowerDataAssetGenerator
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
-        Debug.Log($"FlowerDataを一括生成・更新しました。商品数: {createdAssets.Count}件 / 元商品: {rows.Count}種類");
+        Debug.Log($"FlowerDataを一括生成・更新しました。商品数: {createdAssets.Count}件 / 元商品: {rows.Count}種類 / ソート番号: 1～{createdAssets.Count}");
         Selection.activeObject = database;
     }
 
@@ -128,7 +131,7 @@ public static class FlowerDataAssetGenerator
 
     private static string[] C(params string[] colors) => colors;
 
-    private static FlowerData CreateOrUpdateFlower(FlowerMasterRow row, string color)
+    private static FlowerData CreateOrUpdateFlower(FlowerMasterRow row, string color, int sortOrder)
     {
         string assetName = $"{row.assetKey}_{ColorKey(color)}";
         string assetPath = $"{FlowerFolder}/{assetName}.asset";
@@ -152,6 +155,7 @@ public static class FlowerDataAssetGenerator
         data.productCategory = row.category;
         data.canUseInBouquet = row.bouquet;
         data.arrivalDifficulty = row.difficulty;
+        data.sortOrder = sortOrder;
         EditorUtility.SetDirty(data);
         return data;
     }
