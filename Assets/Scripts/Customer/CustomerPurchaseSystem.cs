@@ -31,6 +31,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
         public int regularRequiredPoints;
         public int regularCount;
         public bool becameRegular;
+        public int bouquetQualityScore;
         public string message;
     }
 
@@ -40,7 +41,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
         public BouquetSystem.BouquetData bouquet;
         public int price;
         public float weight;
-
+        public int bouquetQualityScore;
         public bool IsBouquet => bouquet != null;
     }
 
@@ -52,11 +53,8 @@ public class CustomerPurchaseSystem : MonoBehaviour
     [SerializeField] private BouquetSystem bouquetSystem;
 
     [Header("満足度による店評価")]
-    [Tooltip("満足度『まあまあ』のときに増える店評価")]
     [Min(0)] [SerializeField] private int okayRatingGain = 1;
-    [Tooltip("満足度『良い』のときに増える店評価")]
     [Min(0)] [SerializeField] private int goodRatingGain = 3;
-    [Tooltip("満足度『最高』のときに増える店評価")]
     [Min(0)] [SerializeField] private int bestRatingGain = 5;
 
     /// <summary>
@@ -94,6 +92,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
 
         int satisfactionScore;
         string purchasedItemText;
+        string bouquetQualityText = string.Empty;
 
         if (selected.IsBouquet)
         {
@@ -103,9 +102,11 @@ public class CustomerPurchaseSystem : MonoBehaviour
                 return result;
             }
 
-            satisfactionScore = CalculateBouquetSatisfactionScore(customer, selected.bouquet, selected.price);
+            satisfactionScore = CalculateBouquetSatisfactionScore(customer, selected.bouquet, selected.price, selected.bouquetQualityScore);
             purchasedItemText = selected.bouquet.bouquetName;
+            bouquetQualityText = $"　花束評価：{selected.bouquetQualityScore}/10";
             result.bouquet = selected.bouquet;
+            result.bouquetQualityScore = selected.bouquetQualityScore;
         }
         else
         {
@@ -124,7 +125,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
 
         SatisfactionLevel satisfactionLevel = GetSatisfactionLevel(satisfactionScore);
         int ratingGain = GetRatingGain(satisfactionLevel);
-
         if (ratingGain > 0)
             shopManager.AddShopRating(ratingGain);
 
@@ -150,8 +150,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
                 : $"　常連P {regularResult.currentPoints}/{regularResult.requiredPoints}";
         }
 
-        result.message = $"{customer.data.displayName}が{purchasedItemText}を{selected.price:N0}円で購入しました　満足度：{GetSatisfactionLabel(satisfactionLevel)}　店評価+{ratingGain}{regularText}";
-
+        result.message = $"{customer.data.displayName}が{purchasedItemText}を{selected.price:N0}円で購入しました　満足度：{GetSatisfactionLabel(satisfactionLevel)}　店評価+{ratingGain}{bouquetQualityText}{regularText}";
         Debug.Log(result.message);
         return result;
     }
@@ -159,10 +158,8 @@ public class CustomerPurchaseSystem : MonoBehaviour
     private List<Candidate> BuildCandidates(CustomerSystem.VisitingCustomer customer)
     {
         List<Candidate> candidates = new();
-
         AddFlowerCandidates(customer, candidates);
         AddBouquetCandidates(customer, candidates);
-
         return candidates;
     }
 
@@ -178,12 +175,9 @@ public class CustomerPurchaseSystem : MonoBehaviour
         {
             int rarity = flower.GetRarity(shopManager.CurrentSeason);
             int price = pricingSystem.GetSalePrice(flower);
+            if (!MatchesCustomerRange(customer, flower.basePopularity, rarity, price)) continue;
 
-            if (!MatchesCustomerRange(customer, flower.basePopularity, rarity, price))
-                continue;
-
-            float favoriteColorWeight = flower.color == customer.favoriteColor ? 1.5f : 1f;
-
+            float favoriteColorWeight = ColorsEqual(flower.color, customer.favoriteColor) ? 1.5f : 1f;
             candidates.Add(new Candidate
             {
                 flower = flower,
@@ -195,8 +189,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
 
     /// <summary>
     /// AddBouquetCandidates（アド・ブーケ・キャンディデーツ）
-    /// Add＝加える、Bouquet Candidates＝花束の購入候補。
-    /// 作成済み花束を単品商品と同じ購入候補一覧へ加えます。
+    /// 花束評価を購入確率へ反映し、良い花束ほど選ばれやすくします。
     /// </summary>
     private void AddBouquetCandidates(CustomerSystem.VisitingCustomer customer, List<Candidate> candidates)
     {
@@ -204,38 +197,35 @@ public class CustomerPurchaseSystem : MonoBehaviour
 
         foreach (BouquetSystem.BouquetData bouquet in bouquetSystem.Bouquets)
         {
-            if (bouquet == null || bouquet.components == null || bouquet.components.Count == 0)
-                continue;
+            if (bouquet?.components == null || bouquet.components.Count == 0) continue;
 
             int price = bouquet.salePrice;
             int popularity = GetBouquetAveragePopularity(bouquet);
             int rarity = GetBouquetAverageRarity(bouquet);
+            if (!MatchesCustomerRange(customer, popularity, rarity, price)) continue;
 
-            if (!MatchesCustomerRange(customer, popularity, rarity, price))
-                continue;
+            BouquetEvaluator.Evaluation evaluation = BouquetEvaluator.Evaluate(bouquet, shopManager.CurrentSeason);
+            float favoriteColorWeight = IsFavoriteColorMain(customer, evaluation.mainColors) ? 1.5f : 1f;
 
-            float favoriteColorWeight = IsFavoriteColorMain(customer, bouquet) ? 1.5f : 1f;
+            // 0点=0.75倍、5点=1.125倍、10点=1.5倍。
+            // 悪い花束も完全に売れなくはせず、良い花束ほど明確に選ばれやすくする。
+            float qualityWeight = 0.75f + evaluation.totalScore * 0.075f;
 
             candidates.Add(new Candidate
             {
                 bouquet = bouquet,
                 price = price,
-                weight = CalculatePurchaseWeight(customer, rarity, price, favoriteColorWeight)
+                bouquetQualityScore = evaluation.totalScore,
+                weight = CalculatePurchaseWeight(customer, rarity, price, favoriteColorWeight) * qualityWeight
             });
         }
     }
 
     private static bool MatchesCustomerRange(CustomerSystem.VisitingCustomer customer, int popularity, int rarity, int price)
     {
-        if (popularity < customer.data.minPopularity || popularity > customer.data.maxPopularity)
-            return false;
-
-        if (rarity < customer.data.minRarity || rarity > customer.data.maxRarity)
-            return false;
-
-        if (price <= 0 || price > customer.data.budget)
-            return false;
-
+        if (popularity < customer.data.minPopularity || popularity > customer.data.maxPopularity) return false;
+        if (rarity < customer.data.minRarity || rarity > customer.data.maxRarity) return false;
+        if (price <= 0 || price > customer.data.budget) return false;
         return true;
     }
 
@@ -247,55 +237,46 @@ public class CustomerPurchaseSystem : MonoBehaviour
         return rarityWeight * priceWeight * favoriteColorWeight;
     }
 
-    /// <summary>
-    /// CalculateSatisfactionScore（カルキュレート・サティスファクション・スコア）
-    /// Calculate＝計算する、Satisfaction Score＝満足度点。
-    /// </summary>
     private int CalculateSatisfactionScore(CustomerSystem.VisitingCustomer customer, FlowerData flower, int price)
     {
         int rarity = flower.GetRarity(shopManager.CurrentSeason);
-        return CalculateCommonSatisfactionScore(
-            customer,
-            flower.basePopularity,
-            rarity,
-            price,
-            flower.color == customer.favoriteColor);
+        return CalculateCommonSatisfactionScore(customer, flower.basePopularity, rarity, price, ColorsEqual(flower.color, customer.favoriteColor));
     }
 
     /// <summary>
     /// CalculateBouquetSatisfactionScore（カルキュレート・ブーケ・サティスファクション・スコア）
-    /// 花束全体の平均人気度・平均珍しさと、好きな色がメイン色かどうかで満足度を計算します。
+    /// 共通満足度に花束評価を加点します。5点以上で+1、8点以上で+2です。
     /// </summary>
-    private int CalculateBouquetSatisfactionScore(CustomerSystem.VisitingCustomer customer, BouquetSystem.BouquetData bouquet, int price)
+    private int CalculateBouquetSatisfactionScore(CustomerSystem.VisitingCustomer customer, BouquetSystem.BouquetData bouquet, int price, int qualityScore)
     {
-        return CalculateCommonSatisfactionScore(
+        BouquetEvaluator.Evaluation evaluation = BouquetEvaluator.Evaluate(bouquet, shopManager.CurrentSeason);
+        int score = CalculateCommonSatisfactionScore(
             customer,
             GetBouquetAveragePopularity(bouquet),
             GetBouquetAverageRarity(bouquet),
             price,
-            IsFavoriteColorMain(customer, bouquet));
+            IsFavoriteColorMain(customer, evaluation.mainColors));
+
+        if (qualityScore >= 8) score += 2;
+        else if (qualityScore >= 5) score += 1;
+
+        return score;
     }
 
     private static int CalculateCommonSatisfactionScore(CustomerSystem.VisitingCustomer customer, int popularity, int rarity, int price, bool favoriteColorMatches)
     {
         int score = 0;
-
-        if (favoriteColorMatches)
-            score += 2;
+        if (favoriteColorMatches) score += 2;
 
         int popularityCenter = Mathf.RoundToInt((customer.data.minPopularity + customer.data.maxPopularity) / 2f);
-        int popularityDistance = Mathf.Abs(popularity - popularityCenter);
-        score += popularityDistance <= 1 ? 2 : 1;
+        score += Mathf.Abs(popularity - popularityCenter) <= 1 ? 2 : 1;
 
         int rarityCenter = Mathf.RoundToInt((customer.data.minRarity + customer.data.maxRarity) / 2f);
-        int rarityDistance = Mathf.Abs(rarity - rarityCenter);
-        score += rarityDistance <= 1 ? 2 : 1;
+        score += Mathf.Abs(rarity - rarityCenter) <= 1 ? 2 : 1;
 
         float budgetRatio = price / (float)Mathf.Max(1, customer.data.budget);
-        if (budgetRatio <= 0.5f)
-            score += 2;
-        else if (budgetRatio <= 0.75f)
-            score += 1;
+        if (budgetRatio <= 0.5f) score += 2;
+        else if (budgetRatio <= 0.75f) score += 1;
 
         return score;
     }
@@ -304,10 +285,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
     {
         int totalQuantity = bouquet.components.Sum(c => c?.flower != null ? Mathf.Max(0, c.quantity) : 0);
         if (totalQuantity <= 0) return 1;
-
-        int weightedTotal = bouquet.components.Sum(c =>
-            c?.flower != null ? c.flower.basePopularity * Mathf.Max(0, c.quantity) : 0);
-
+        int weightedTotal = bouquet.components.Sum(c => c?.flower != null ? c.flower.basePopularity * Mathf.Max(0, c.quantity) : 0);
         return Mathf.Clamp(Mathf.RoundToInt(weightedTotal / (float)totalQuantity), 1, 10);
     }
 
@@ -315,32 +293,36 @@ public class CustomerPurchaseSystem : MonoBehaviour
     {
         int totalQuantity = bouquet.components.Sum(c => c?.flower != null ? Mathf.Max(0, c.quantity) : 0);
         if (totalQuantity <= 0) return 1;
-
-        int weightedTotal = bouquet.components.Sum(c =>
-            c?.flower != null
-                ? c.flower.GetRarity(shopManager.CurrentSeason) * Mathf.Max(0, c.quantity)
-                : 0);
-
+        int weightedTotal = bouquet.components.Sum(c => c?.flower != null ? c.flower.GetRarity(shopManager.CurrentSeason) * Mathf.Max(0, c.quantity) : 0);
         return Mathf.Clamp(Mathf.RoundToInt(weightedTotal / (float)totalQuantity), 1, 10);
     }
 
-    /// <summary>
-    /// IsFavoriteColorMain（イズ・フェイバリット・カラー・メイン）
-    /// 好きな色が花束全体の3分の1以上ならメイン色として扱います。
-    /// </summary>
-    private static bool IsFavoriteColorMain(CustomerSystem.VisitingCustomer customer, BouquetSystem.BouquetData bouquet)
+    private static bool IsFavoriteColorMain(CustomerSystem.VisitingCustomer customer, IReadOnlyList<string> mainColors)
     {
-        if (string.IsNullOrWhiteSpace(customer.favoriteColor)) return false;
+        if (customer == null || string.IsNullOrWhiteSpace(customer.favoriteColor) || mainColors == null) return false;
+        return mainColors.Any(color => ColorsEqual(color, customer.favoriteColor));
+    }
 
-        int totalQuantity = bouquet.components.Sum(c => c?.flower != null ? Mathf.Max(0, c.quantity) : 0);
-        if (totalQuantity <= 0) return false;
+    private static bool ColorsEqual(string a, string b)
+    {
+        return NormalizeColor(a) == NormalizeColor(b);
+    }
 
-        int favoriteColorQuantity = bouquet.components.Sum(c =>
-            c?.flower != null && c.flower.color == customer.favoriteColor
-                ? Mathf.Max(0, c.quantity)
-                : 0);
-
-        return favoriteColorQuantity / (float)totalQuantity >= 1f / 3f;
+    private static string NormalizeColor(string color)
+    {
+        if (string.IsNullOrWhiteSpace(color)) return string.Empty;
+        return color.Trim() switch
+        {
+            "桃" or "桃色" => "ピンク",
+            "橙" or "橙色" => "オレンジ",
+            "黄色" => "黄",
+            "赤色" => "赤",
+            "青色" => "青",
+            "紫色" => "紫",
+            "白色" => "白",
+            "緑色" => "緑",
+            _ => color.Trim()
+        };
     }
 
     private static SatisfactionLevel GetSatisfactionLevel(int score)
