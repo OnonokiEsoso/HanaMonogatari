@@ -14,6 +14,7 @@ public class BouquetSystem : MonoBehaviour
     {
         public FlowerData flower;
         [Min(1)] public int quantity = 1;
+        [Min(1)] public int remainingFreshnessDays = 1;
     }
 
     [Serializable]
@@ -26,9 +27,6 @@ public class BouquetSystem : MonoBehaviour
         public int TotalQuantity => components?.Sum(c => c != null ? Mathf.Max(0, c.quantity) : 0) ?? 0;
         public int DistinctFlowerCount => components?.Count(c => c?.flower != null && c.quantity > 0) ?? 0;
 
-        /// <summary>
-        /// 花束に使った材料の基準仕入れ価格合計です。
-        /// </summary>
         public int MaterialCost => components?.Sum(c =>
             c?.flower != null ? c.flower.purchasePrice * Mathf.Max(0, c.quantity) : 0) ?? 0;
     }
@@ -92,6 +90,9 @@ public class BouquetSystem : MonoBehaviour
                 message = $"{component.flower.flowerName}（{component.flower.color}）の在庫が足りません";
                 return false;
             }
+
+            // 解体時に鮮度が新品へ戻るのを防ぐため、作成時点の最も古い鮮度を保持します。
+            component.remainingFreshnessDays = Mathf.Max(1, inventorySystem.GetOldestFreshnessDays(component.flower));
         }
 
         foreach (BouquetComponent component in components)
@@ -118,10 +119,6 @@ public class BouquetSystem : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// SetSalePrice（セット・セール・プライス）＝販売価格を設定する。
-    /// 値付け画面から作成済み花束の価格を変更します。
-    /// </summary>
     public bool SetSalePrice(BouquetData bouquet, int price)
     {
         if (bouquet == null || price <= 0 || !bouquets.Contains(bouquet)) return false;
@@ -138,9 +135,47 @@ public class BouquetSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// RemoveBouquet（リムーブ・ブーケ）＝花束を一覧から取り除く。
-    /// 現段階では材料を在庫へ戻さず、販売処理用の削除として使用します。
-    /// 花束の解体処理は別途追加します。
+    /// TryDisassembleBouquet（トライ・ディスアセンブル・ブーケ）
+    /// Disassemble＝解体する。
+    /// 花束を解体して、材料を保持していた鮮度のまま在庫へ戻します。
+    /// </summary>
+    public bool TryDisassembleBouquet(BouquetData bouquet, out string message)
+    {
+        message = string.Empty;
+
+        if (bouquet == null || !bouquets.Contains(bouquet))
+        {
+            message = "解体する花束が見つかりません";
+            return false;
+        }
+
+        if (inventorySystem == null)
+        {
+            message = "InventorySystemが設定されていません";
+            return false;
+        }
+
+        foreach (BouquetComponent component in bouquet.components)
+        {
+            if (component?.flower == null || component.quantity <= 0) continue;
+
+            inventorySystem.AddFlowerWithFreshness(
+                component.flower,
+                component.quantity,
+                Mathf.Max(1, component.remainingFreshnessDays));
+        }
+
+        string name = bouquet.bouquetName;
+        bouquets.Remove(bouquet);
+        OnBouquetsChanged?.Invoke();
+
+        message = $"{name}を解体し、材料を在庫へ戻しました";
+        Debug.Log(message);
+        return true;
+    }
+
+    /// <summary>
+    /// 販売済み花束などを一覧から取り除きます。材料は戻しません。
     /// </summary>
     public bool RemoveBouquet(BouquetData bouquet)
     {
@@ -161,7 +196,8 @@ public class BouquetSystem : MonoBehaviour
             .Select(g => new BouquetComponent
             {
                 flower = g.Key,
-                quantity = g.Sum(x => Mathf.Max(0, x.quantity))
+                quantity = g.Sum(x => Mathf.Max(0, x.quantity)),
+                remainingFreshnessDays = 1
             })
             .Where(c => c.quantity > 0)
             .ToList();
