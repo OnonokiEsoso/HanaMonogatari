@@ -11,6 +11,7 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private CustomerUI customerUI;
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private InventorySystem inventorySystem;
+    [SerializeField] private BouquetSystem bouquetSystem;
     [SerializeField] private SupplierUI supplierUI;
     [SerializeField] private ShopTabUI shopTabUI;
 
@@ -52,10 +53,6 @@ public class DailyResultUI : MonoBehaviour
             resultPanel.SetActive(false);
     }
 
-    /// <summary>
-    /// ShowResult（ショー・リザルト）＝結果を表示する。
-    /// 営業終了時点の来客数・購入者数・売上を表示します。
-    /// </summary>
     public void ShowResult()
     {
         if (customerUI == null || shopManager == null) return;
@@ -78,7 +75,7 @@ public class DailyResultUI : MonoBehaviour
 
     /// <summary>
     /// GoToNextDay（ゴー・トゥ・ネクスト・デイ）＝翌日へ進む。
-    /// 鮮度低下と廃棄 → 日付更新 → 翌日の入荷生成 の順に処理します。
+    /// 通常在庫と花束の鮮度低下 → 日付更新 → 翌日の入荷生成 の順に処理します。
     /// </summary>
     public void GoToNextDay()
     {
@@ -87,6 +84,9 @@ public class DailyResultUI : MonoBehaviour
 
         if (inventorySystem != null)
             inventorySystem.AdvanceFreshnessOneDay();
+
+        if (bouquetSystem != null)
+            bouquetSystem.AdvanceFreshnessOneDay();
 
         shopManager.AdvanceDay();
 
