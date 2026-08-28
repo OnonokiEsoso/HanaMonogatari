@@ -7,7 +7,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 在庫画面で花束1つを表示します。
 /// 閉じているときは材料カードを花束ヘッダーの背面に重ねて1枠で表示し、
-/// クリックするとヘッダー分の空間を残したまま材料一覧を下へ展開します。
+/// クリックするとInventoryFlowerGroupItemプレハブで材料一覧を下へ展開します。
 /// </summary>
 public class InventoryBouquetItemUI : MonoBehaviour
 {
@@ -21,7 +21,8 @@ public class InventoryBouquetItemUI : MonoBehaviour
     [Header("材料表示")]
     [SerializeField] private Transform collapsedPreviewContainer;
     [SerializeField] private Transform expandedContainer;
-    [SerializeField] private InventoryItemUI flowerItemPrefab;
+    [SerializeField] private InventoryItemUI previewFlowerItemPrefab;
+    [SerializeField] private InventoryFlowerGroupItemUI expandedFlowerGroupItemPrefab;
 
     [Header("重なりプレビュー")]
     [Min(1)] [SerializeField] private int maxPreviewItems = 3;
@@ -35,7 +36,7 @@ public class InventoryBouquetItemUI : MonoBehaviour
     private LayoutElement rootLayoutElement;
 
     private readonly List<InventoryItemUI> previewItems = new();
-    private readonly List<InventoryItemUI> expandedItems = new();
+    private readonly List<InventoryFlowerGroupItemUI> expandedItems = new();
 
     private void Awake()
     {
@@ -93,11 +94,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
         ApplyExpandedState();
     }
 
-    /// <summary>
-    /// ToggleExpanded（トグル・エクスパンデッド）
-    /// Toggle＝切り替える、Expanded＝展開状態。
-    /// 花束をクリックするたび、材料一覧の開閉を切り替えます。
-    /// </summary>
     private void ToggleExpanded()
     {
         isExpanded = !isExpanded;
@@ -131,8 +127,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (expandedContainer != null)
             expandedContainer.gameObject.SetActive(isExpanded);
 
-        // 描画順は「材料プレビュー < 花束全体トグル < 削除ボタン」に固定する。
-        // これで花束全体を覆うToggleButtonがDeleteButtonのクリックを奪わない。
         if (collapsedPreviewContainer != null)
             collapsedPreviewContainer.SetAsFirstSibling();
 
@@ -147,9 +141,9 @@ public class InventoryBouquetItemUI : MonoBehaviour
 
     private void BuildPreviewItems()
     {
-        ClearItems(previewItems);
+        ClearPreviewItems();
 
-        if (bouquet?.components == null || collapsedPreviewContainer == null || flowerItemPrefab == null)
+        if (bouquet?.components == null || collapsedPreviewContainer == null || previewFlowerItemPrefab == null)
             return;
 
         int count = Mathf.Min(maxPreviewItems, bouquet.components.Count);
@@ -158,11 +152,8 @@ public class InventoryBouquetItemUI : MonoBehaviour
             BouquetSystem.BouquetComponent component = bouquet.components[i];
             if (component?.flower == null || component.quantity <= 0) continue;
 
-            InventoryItemUI item = Instantiate(flowerItemPrefab, collapsedPreviewContainer);
+            InventoryItemUI item = Instantiate(previewFlowerItemPrefab, collapsedPreviewContainer);
             item.transform.localScale = Vector3.one;
-
-            // 閉じた状態では「カードが束になっている見た目」だけ欲しいので、
-            // 花名・色・数量・鮮度などの文字はすべて非表示にする。
             item.Bind(component, false, false);
 
             if (item.transform is RectTransform rect)
@@ -180,19 +171,25 @@ public class InventoryBouquetItemUI : MonoBehaviour
 
     private void BuildExpandedItems()
     {
-        ClearItems(expandedItems);
+        ClearExpandedItems();
 
-        if (bouquet?.components == null || expandedContainer == null || flowerItemPrefab == null)
+        if (bouquet?.components == null || expandedContainer == null || expandedFlowerGroupItemPrefab == null)
             return;
 
         foreach (BouquetSystem.BouquetComponent component in bouquet.components)
         {
             if (component?.flower == null || component.quantity <= 0) continue;
 
-            InventoryItemUI item = Instantiate(flowerItemPrefab, expandedContainer);
+            InventoryFlowerGroupItemUI item = Instantiate(expandedFlowerGroupItemPrefab, expandedContainer);
             item.transform.localScale = Vector3.one;
-            item.Bind(component, false, true);
+            item.BindBouquetComponent(component);
             expandedItems.Add(item);
+        }
+
+        if (expandedContainer is RectTransform expandedRect)
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(expandedRect);
         }
     }
 
@@ -205,10 +202,11 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (!isExpanded)
         {
             rootLayoutElement.preferredHeight = headerHeight;
+            rootLayoutElement.minHeight = headerHeight;
             return;
         }
 
-        float itemHeight = GetFlowerItemHeight();
+        float itemHeight = GetExpandedItemHeight();
         int count = expandedItems.Count;
         float spacing = 0f;
 
@@ -219,7 +217,9 @@ public class InventoryBouquetItemUI : MonoBehaviour
             ? itemHeight * count + spacing * Mathf.Max(0, count - 1)
             : 0f;
 
-        rootLayoutElement.preferredHeight = headerHeight + headerToItemsSpacing + contentHeight;
+        float targetHeight = headerHeight + headerToItemsSpacing + contentHeight;
+        rootLayoutElement.preferredHeight = targetHeight;
+        rootLayoutElement.minHeight = targetHeight;
     }
 
     private float GetHeaderHeight()
@@ -230,10 +230,17 @@ public class InventoryBouquetItemUI : MonoBehaviour
         return 100f;
     }
 
-    private float GetFlowerItemHeight()
+    private float GetExpandedItemHeight()
     {
-        if (flowerItemPrefab != null && flowerItemPrefab.transform is RectTransform rect && rect.rect.height > 0f)
-            return rect.rect.height;
+        if (expandedFlowerGroupItemPrefab != null)
+        {
+            LayoutElement layout = expandedFlowerGroupItemPrefab.GetComponent<LayoutElement>();
+            if (layout != null && layout.preferredHeight > 0f)
+                return layout.preferredHeight;
+
+            if (expandedFlowerGroupItemPrefab.transform is RectTransform rect && rect.rect.height > 0f)
+                return rect.rect.height;
+        }
 
         return 100f;
     }
@@ -242,11 +249,24 @@ public class InventoryBouquetItemUI : MonoBehaviour
     {
         Canvas.ForceUpdateCanvases();
 
+        if (expandedContainer is RectTransform expandedRect && expandedContainer.gameObject.activeInHierarchy)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(expandedRect);
+
         if (transform is RectTransform selfRect)
             LayoutRebuilder.ForceRebuildLayoutImmediate(selfRect);
 
-        if (transform.parent is RectTransform parentRect)
-            LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect);
+        if (transform.parent is RectTransform contentRect)
+        {
+            LayoutRebuilder.MarkLayoutForRebuild(contentRect);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
+            Canvas.ForceUpdateCanvases();
+
+            float preferredHeight = LayoutUtility.GetPreferredHeight(contentRect);
+            if (preferredHeight > 0f)
+                contentRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
+        }
     }
 
     private void DeleteBouquet()
@@ -260,13 +280,23 @@ public class InventoryBouquetItemUI : MonoBehaviour
         }
     }
 
-    private static void ClearItems(List<InventoryItemUI> items)
+    private void ClearPreviewItems()
     {
-        foreach (InventoryItemUI item in items)
+        foreach (InventoryItemUI item in previewItems)
         {
             if (item != null)
                 Destroy(item.gameObject);
         }
-        items.Clear();
+        previewItems.Clear();
+    }
+
+    private void ClearExpandedItems()
+    {
+        foreach (InventoryFlowerGroupItemUI item in expandedItems)
+        {
+            if (item != null)
+                Destroy(item.gameObject);
+        }
+        expandedItems.Clear();
     }
 }
