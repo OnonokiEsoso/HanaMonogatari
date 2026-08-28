@@ -18,6 +18,7 @@ public class InventoryItemUI : MonoBehaviour
     private BouquetSystem.BouquetComponent bouquetComponent;
     private bool showPurchasePrice = true;
     private bool showTexts = true;
+    private bool lotDetailMode;
 
     public void Bind(InventorySystem.InventoryBatch inventoryBatch)
     {
@@ -25,28 +26,36 @@ public class InventoryItemUI : MonoBehaviour
         bouquetComponent = null;
         showPurchasePrice = true;
         showTexts = true;
+        lotDetailMode = false;
         Refresh();
     }
 
     /// <summary>
-    /// 花束の展開表示用。
-    /// 花束材料を通常の花カードと同じ見た目で表示します。
+    /// BindLotDetail（バインド・ロット・ディテール）
+    /// 鮮度別の内訳行として「残り○日 ×○」だけを強調表示します。
     /// </summary>
+    public void BindLotDetail(InventorySystem.InventoryBatch inventoryBatch)
+    {
+        batch = inventoryBatch;
+        bouquetComponent = null;
+        showPurchasePrice = false;
+        showTexts = true;
+        lotDetailMode = true;
+        Refresh();
+    }
+
     public void Bind(BouquetSystem.BouquetComponent component, bool showPrice)
     {
         Bind(component, showPrice, true);
     }
 
-    /// <summary>
-    /// 花束材料カードの表示方法を指定して結び付けます。
-    /// showTexts=falseなら、閉じた花束プレビュー用に背景だけ表示します。
-    /// </summary>
     public void Bind(BouquetSystem.BouquetComponent component, bool showPrice, bool showTexts)
     {
         bouquetComponent = component;
         batch = null;
         showPurchasePrice = showPrice;
         this.showTexts = showTexts;
+        lotDetailMode = false;
         Refresh();
     }
 
@@ -71,7 +80,7 @@ public class InventoryItemUI : MonoBehaviour
                 quantityText.text = $"×{bouquetComponent.quantity}";
 
             if (freshnessText != null)
-                freshnessText.text = $"鮮度 残り{bouquetComponent.remainingFreshnessDays}日";
+                freshnessText.text = $"鮮度 残り{bouquetComponent.OldestRemainingFreshnessDays}日";
 
             if (purchasePriceText != null)
             {
@@ -91,7 +100,23 @@ public class InventoryItemUI : MonoBehaviour
         }
 
         gameObject.SetActive(true);
-        showTexts = true;
+
+        if (lotDetailMode)
+        {
+            SetTextObjectActive(nameText, false);
+            SetTextObjectActive(colorText, false);
+            SetTextObjectActive(quantityText, true);
+            SetTextObjectActive(freshnessText, true);
+            SetTextObjectActive(purchasePriceText, false);
+
+            if (freshnessText != null)
+                freshnessText.text = $"残り{batch.remainingFreshnessDays}日";
+
+            if (quantityText != null)
+                quantityText.text = $"×{batch.quantity}";
+
+            return;
+        }
 
         SetTextObjectActive(nameText, true);
         SetTextObjectActive(colorText, true);
