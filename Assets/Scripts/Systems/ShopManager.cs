@@ -21,6 +21,7 @@ public class ShopManager : MonoBehaviour
 
     [Header("仕入先")]
     [Range(1, 10)] [SerializeField] private int supplierLevel = 1;
+    [Range(1, 10)] [SerializeField] private int pendingSupplierLevel = 1;
 
     [Header("クリア状態")]
     [SerializeField] private bool hasCleared = false;
@@ -29,6 +30,8 @@ public class ShopManager : MonoBehaviour
     public int ShopRating => shopRating;
     public int CumulativePurchaseAmount => cumulativePurchaseAmount;
     public int SupplierLevel => supplierLevel;
+    public int PendingSupplierLevel => pendingSupplierLevel;
+    public bool IsSupplierLevelUpPending => pendingSupplierLevel > supplierLevel;
     public int GameYear => gameYear;
     public int DayOfYear => dayOfYear;
     public bool HasCleared => hasCleared;
@@ -41,7 +44,7 @@ public class ShopManager : MonoBehaviour
 
     private void Awake()
     {
-        RecalculateSupplierLevel();
+        pendingSupplierLevel = Mathf.Max(supplierLevel, CalculateEligibleSupplierLevel());
         SyncSupplierSystem();
     }
 
@@ -80,6 +83,7 @@ public class ShopManager : MonoBehaviour
     /// <summary>
     /// 仕入先から商品を購入したときに呼びます。
     /// 支払いと累計仕入額の加算を同時に行います。
+    /// 仕入先Lvの条件を満たしても、その日のうちはLvを上げず翌日まで待機します。
     /// </summary>
     public bool TryPurchaseFromSupplier(int totalPrice)
     {
@@ -89,8 +93,7 @@ public class ShopManager : MonoBehaviour
         money -= totalPrice;
         cumulativePurchaseAmount += totalPrice;
 
-        RecalculateSupplierLevel();
-        SyncSupplierSystem();
+        RefreshPendingSupplierLevel();
         NotifyStateChanged();
 
         return true;
@@ -112,8 +115,7 @@ public class ShopManager : MonoBehaviour
             Debug.Log("ゲームクリア！ 街で一番人気のお花屋さんになりました！");
         }
 
-        RecalculateSupplierLevel();
-        SyncSupplierSystem();
+        RefreshPendingSupplierLevel();
         NotifyStateChanged();
     }
 
@@ -126,13 +128,13 @@ public class ShopManager : MonoBehaviour
         if (amount <= 0) return;
         shopRating = Mathf.Clamp(shopRating - amount, 0, 10000);
 
-        RecalculateSupplierLevel();
-        SyncSupplierSystem();
+        RefreshPendingSupplierLevel();
         NotifyStateChanged();
     }
 
     /// <summary>
     /// 1日進めます。365日を超えると翌年1月1日になります。
+    /// 日付が変わるこのタイミングで、待機中の仕入先Lvアップを適用します。
     /// </summary>
     [ContextMenu("翌日へ進む")]
     public void AdvanceDay()
@@ -145,6 +147,7 @@ public class ShopManager : MonoBehaviour
             gameYear++;
         }
 
+        ApplyPendingSupplierLevel();
         SyncSupplierSystem();
         NotifyStateChanged();
 
@@ -152,9 +155,19 @@ public class ShopManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 累計仕入額と店評価から仕入先Lvを再計算します。
+    /// RecalculateSupplierLevel（リカルキュレート・サプライヤー・レベル）
+    /// 現在の条件から「翌日に到達できる仕入先Lv」を再計算します。
+    /// 実際のsupplierLevelはここでは変更しません。
     /// </summary>
     public void RecalculateSupplierLevel()
+    {
+        RefreshPendingSupplierLevel();
+    }
+
+    /// <summary>
+    /// 現在の累計仕入額と店評価から、条件上到達できるLvを返します。
+    /// </summary>
+    private int CalculateEligibleSupplierLevel()
     {
         int newLevel = 1;
 
@@ -169,15 +182,50 @@ public class ShopManager : MonoBehaviour
         if (cumulativePurchaseAmount >= 40000 && shopRating >= 6500) newLevel = 9;
         if (cumulativePurchaseAmount >= 50000 && shopRating >= 8500) newLevel = 10;
 
-        if (newLevel != supplierLevel)
+        return newLevel;
+    }
+
+    /// <summary>
+    /// 条件達成状況を確認して、翌日適用予定のLvだけを更新します。
+    /// </summary>
+    private void RefreshPendingSupplierLevel()
+    {
+        int eligibleLevel = CalculateEligibleSupplierLevel();
+        int newPendingLevel = Mathf.Max(supplierLevel, eligibleLevel);
+
+        if (newPendingLevel != pendingSupplierLevel)
         {
-            supplierLevel = newLevel;
-            Debug.Log($"仕入先Lvが{supplierLevel}になりました！");
+            pendingSupplierLevel = newPendingLevel;
+
+            if (pendingSupplierLevel > supplierLevel)
+            {
+                Debug.Log($"仕入先Lv.{pendingSupplierLevel}の条件を達成しました。翌日にレベルアップします。");
+            }
         }
     }
 
     /// <summary>
+    /// ApplyPendingSupplierLevel（アプライ・ペンディング・サプライヤー・レベル）
+    /// Apply＝適用する、Pending＝待機中。
+    /// 翌日になった瞬間に、条件を満たしているLvまで実際の仕入先Lvを上げます。
+    /// </summary>
+    private void ApplyPendingSupplierLevel()
+    {
+        // 日付変更時点の条件をもう一度確認してから適用します。
+        pendingSupplierLevel = Mathf.Max(supplierLevel, CalculateEligibleSupplierLevel());
+
+        if (pendingSupplierLevel > supplierLevel)
+        {
+            supplierLevel = pendingSupplierLevel;
+            Debug.Log($"仕入先Lvが{supplierLevel}になりました！");
+        }
+
+        pendingSupplierLevel = supplierLevel;
+    }
+
+    /// <summary>
     /// ShopManagerの現在状態をSupplierSystemへ反映します。
+    /// 待機中Lvではなく、実際に適用済みのsupplierLevelだけを反映します。
     /// </summary>
     public void SyncSupplierSystem()
     {
