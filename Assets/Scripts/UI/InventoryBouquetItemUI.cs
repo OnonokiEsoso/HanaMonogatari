@@ -8,6 +8,7 @@ using UnityEngine.UI;
 /// 在庫画面で花束1つを表示します。
 /// 閉じているときは材料カードを花束ヘッダーの背面に重ねて1枠で表示し、
 /// クリックするとInventoryFlowerGroupItemプレハブで材料一覧を下へ展開します。
+/// 展開時の高さ計算・ScrollView Content更新は通常花グループと同じ方式を使います。
 /// </summary>
 public class InventoryBouquetItemUI : MonoBehaviour
 {
@@ -34,15 +35,25 @@ public class InventoryBouquetItemUI : MonoBehaviour
     private Action onChanged;
     private bool isExpanded;
     private LayoutElement rootLayoutElement;
+    private RectTransform rootRectTransform;
+    private float headerHeight = 100f;
 
     private readonly List<InventoryItemUI> previewItems = new();
     private readonly List<InventoryFlowerGroupItemUI> expandedItems = new();
 
     private void Awake()
     {
+        rootRectTransform = transform as RectTransform;
+
         rootLayoutElement = GetComponent<LayoutElement>();
         if (rootLayoutElement == null)
             rootLayoutElement = gameObject.AddComponent<LayoutElement>();
+
+        // 通常花グループと同じく、展開で親が伸びてもヘッダー自身の高さは固定する。
+        if (toggleButton != null && toggleButton.transform is RectTransform headerRect && headerRect.rect.height > 0f)
+            headerHeight = headerRect.rect.height;
+
+        PositionHeaderAtTop();
 
         if (toggleButton != null)
             toggleButton.onClick.AddListener(ToggleExpanded);
@@ -88,12 +99,17 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (compositionText != null)
             compositionText.text = $"{bouquet.DistinctFlowerCount}種類 / {bouquet.TotalQuantity}本";
 
+        PositionHeaderAtTop();
         PositionContainers();
         BuildPreviewItems();
         BuildExpandedItems();
         ApplyExpandedState();
     }
 
+    /// <summary>
+    /// ToggleExpanded（トグル・エクスパンデッド）
+    /// 通常花グループと同じ流れで、開閉 → 高さ更新 → ScrollView Content再計算を行います。
+    /// </summary>
     private void ToggleExpanded()
     {
         isExpanded = !isExpanded;
@@ -101,9 +117,24 @@ public class InventoryBouquetItemUI : MonoBehaviour
         ForceRebuildParentLayout();
     }
 
+    /// <summary>
+    /// PositionHeaderAtTop（ポジション・ヘッダー・アット・トップ）
+    /// 親の高さが展開分だけ伸びても、花束ヘッダーを先頭1行に固定します。
+    /// </summary>
+    private void PositionHeaderAtTop()
+    {
+        if (toggleButton == null || toggleButton.transform is not RectTransform rect) return;
+
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, headerHeight);
+        rect.localScale = Vector3.one;
+    }
+
     private void PositionContainers()
     {
-        float headerHeight = GetHeaderHeight();
         PositionContainer(collapsedPreviewContainer, 0f);
         PositionContainer(expandedContainer, -(headerHeight + headerToItemsSpacing));
     }
@@ -127,6 +158,7 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (expandedContainer != null)
             expandedContainer.gameObject.SetActive(isExpanded);
 
+        // 描画・クリック順を維持する。
         if (collapsedPreviewContainer != null)
             collapsedPreviewContainer.SetAsFirstSibling();
 
@@ -137,6 +169,8 @@ public class InventoryBouquetItemUI : MonoBehaviour
             deleteButton.transform.SetAsLastSibling();
 
         UpdatePreferredHeight();
+        PositionHeaderAtTop();
+        PositionContainers();
     }
 
     private void BuildPreviewItems()
@@ -193,41 +227,40 @@ public class InventoryBouquetItemUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// UpdatePreferredHeight（アップデート・プリファード・ハイト）
+    /// 通常花グループと同じく、LayoutElementとRectTransform本体の両方へ展開後の高さを反映します。
+    /// </summary>
     private void UpdatePreferredHeight()
     {
         if (rootLayoutElement == null) return;
 
-        float headerHeight = GetHeaderHeight();
+        float targetHeight = headerHeight;
 
-        if (!isExpanded)
+        if (isExpanded)
         {
-            rootLayoutElement.preferredHeight = headerHeight;
-            rootLayoutElement.minHeight = headerHeight;
-            return;
+            float itemHeight = GetExpandedItemHeight();
+            float spacing = 0f;
+
+            if (expandedContainer != null && expandedContainer.TryGetComponent(out VerticalLayoutGroup group))
+                spacing = group.spacing;
+
+            int count = expandedItems.Count;
+            float contentHeight = count > 0
+                ? itemHeight * count + spacing * Mathf.Max(0, count - 1)
+                : 0f;
+
+            targetHeight = headerHeight + headerToItemsSpacing + contentHeight;
         }
 
-        float itemHeight = GetExpandedItemHeight();
-        int count = expandedItems.Count;
-        float spacing = 0f;
-
-        if (expandedContainer != null && expandedContainer.TryGetComponent(out VerticalLayoutGroup group))
-            spacing = group.spacing;
-
-        float contentHeight = count > 0
-            ? itemHeight * count + spacing * Mathf.Max(0, count - 1)
-            : 0f;
-
-        float targetHeight = headerHeight + headerToItemsSpacing + contentHeight;
         rootLayoutElement.preferredHeight = targetHeight;
         rootLayoutElement.minHeight = targetHeight;
-    }
+        rootLayoutElement.flexibleHeight = 0f;
 
-    private float GetHeaderHeight()
-    {
-        if (toggleButton != null && toggleButton.transform is RectTransform rect && rect.rect.height > 0f)
-            return rect.rect.height;
-
-        return 100f;
+        // ここが通常花と揃える重要部分。
+        // LayoutElementだけでなく実RectTransformも伸ばし、ScrollRectが下端を認識できるようにする。
+        if (rootRectTransform != null)
+            rootRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, targetHeight);
     }
 
     private float GetExpandedItemHeight()
@@ -242,9 +275,13 @@ public class InventoryBouquetItemUI : MonoBehaviour
                 return rect.rect.height;
         }
 
-        return 100f;
+        return headerHeight;
     }
 
+    /// <summary>
+    /// ForceRebuildParentLayout（フォース・リビルド・ペアレント・レイアウト）
+    /// 通常花グループと同じ方法で、展開後の高さをScrollViewのContentまで伝えます。
+    /// </summary>
     private void ForceRebuildParentLayout()
     {
         Canvas.ForceUpdateCanvases();
@@ -252,8 +289,8 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (expandedContainer is RectTransform expandedRect && expandedContainer.gameObject.activeInHierarchy)
             LayoutRebuilder.ForceRebuildLayoutImmediate(expandedRect);
 
-        if (transform is RectTransform selfRect)
-            LayoutRebuilder.ForceRebuildLayoutImmediate(selfRect);
+        if (rootRectTransform != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rootRectTransform);
 
         if (transform.parent is RectTransform contentRect)
         {
@@ -266,7 +303,14 @@ public class InventoryBouquetItemUI : MonoBehaviour
                 contentRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
 
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
+
+            if (contentRect.parent is RectTransform viewportRect)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(viewportRect);
         }
+
+        PositionHeaderAtTop();
+        PositionContainers();
+        Canvas.ForceUpdateCanvases();
     }
 
     private void DeleteBouquet()
