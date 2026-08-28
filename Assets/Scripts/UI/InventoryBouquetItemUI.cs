@@ -6,7 +6,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 在庫画面で花束1つを表示します。
-/// 閉じているときは材料カードを重ねて表示し、クリックで下へ展開します。
+/// 閉じているときは花束ヘッダーの下に材料カードを重ねて表示し、
+/// クリックするとヘッダー分の空間を残したまま材料一覧を下へ展開します。
 /// </summary>
 public class InventoryBouquetItemUI : MonoBehaviour
 {
@@ -25,17 +26,23 @@ public class InventoryBouquetItemUI : MonoBehaviour
     [Header("重なりプレビュー")]
     [Min(1)] [SerializeField] private int maxPreviewItems = 3;
     [SerializeField] private Vector2 previewOffset = new Vector2(12f, -8f);
+    [Min(0f)] [SerializeField] private float headerToItemsSpacing = 8f;
 
     private BouquetSystem.BouquetData bouquet;
     private BouquetSystem bouquetSystem;
     private Action onChanged;
     private bool isExpanded;
+    private LayoutElement rootLayoutElement;
 
     private readonly List<InventoryItemUI> previewItems = new();
     private readonly List<InventoryItemUI> expandedItems = new();
 
     private void Awake()
     {
+        rootLayoutElement = GetComponent<LayoutElement>();
+        if (rootLayoutElement == null)
+            rootLayoutElement = gameObject.AddComponent<LayoutElement>();
+
         if (toggleButton != null)
             toggleButton.onClick.AddListener(ToggleExpanded);
 
@@ -83,6 +90,7 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (compositionText != null)
             compositionText.text = $"{bouquet.DistinctFlowerCount}種類 / {bouquet.TotalQuantity}本";
 
+        PositionContainersBelowHeader();
         BuildPreviewItems();
         BuildExpandedItems();
         ApplyExpandedState();
@@ -97,7 +105,31 @@ public class InventoryBouquetItemUI : MonoBehaviour
     {
         isExpanded = !isExpanded;
         ApplyExpandedState();
-        LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
+        ForceRebuildParentLayout();
+    }
+
+    /// <summary>
+    /// PositionContainersBelowHeader（ポジション・コンテナーズ・ビロウ・ヘッダー）
+    /// 花束ヘッダーの高さ分だけ下へずらして、材料表示がヘッダーに被らないようにします。
+    /// </summary>
+    private void PositionContainersBelowHeader()
+    {
+        float headerHeight = GetHeaderHeight();
+        float y = -(headerHeight + headerToItemsSpacing);
+
+        PositionContainer(collapsedPreviewContainer, y);
+        PositionContainer(expandedContainer, y);
+    }
+
+    private static void PositionContainer(Transform container, float y)
+    {
+        if (container is not RectTransform rect) return;
+
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = new Vector2(0f, y);
+        rect.localScale = Vector3.one;
     }
 
     private void ApplyExpandedState()
@@ -107,6 +139,8 @@ public class InventoryBouquetItemUI : MonoBehaviour
 
         if (expandedContainer != null)
             expandedContainer.gameObject.SetActive(isExpanded);
+
+        UpdatePreferredHeight();
     }
 
     private void BuildPreviewItems()
@@ -123,16 +157,19 @@ public class InventoryBouquetItemUI : MonoBehaviour
             if (component?.flower == null || component.quantity <= 0) continue;
 
             InventoryItemUI item = Instantiate(flowerItemPrefab, collapsedPreviewContainer);
+            item.transform.localScale = Vector3.one;
             item.Bind(component, false);
 
             if (item.transform is RectTransform rect)
             {
                 rect.anchorMin = new Vector2(0f, 1f);
-                rect.anchorMax = new Vector2(0f, 1f);
-                rect.pivot = new Vector2(0f, 1f);
+                rect.anchorMax = new Vector2(1f, 1f);
+                rect.pivot = new Vector2(0.5f, 1f);
                 rect.anchoredPosition = previewOffset * i;
             }
 
+            // 後から作ったカードほど奥になるようにし、花束ヘッダー直下の重なりを分かりやすくする。
+            item.transform.SetSiblingIndex(0);
             previewItems.Add(item);
         }
     }
@@ -149,9 +186,67 @@ public class InventoryBouquetItemUI : MonoBehaviour
             if (component?.flower == null || component.quantity <= 0) continue;
 
             InventoryItemUI item = Instantiate(flowerItemPrefab, expandedContainer);
+            item.transform.localScale = Vector3.one;
             item.Bind(component, false);
             expandedItems.Add(item);
         }
+    }
+
+    private void UpdatePreferredHeight()
+    {
+        if (rootLayoutElement == null) return;
+
+        float headerHeight = GetHeaderHeight();
+        float itemHeight = GetFlowerItemHeight();
+        float contentHeight;
+
+        if (isExpanded)
+        {
+            int count = expandedItems.Count;
+            float spacing = 0f;
+            if (expandedContainer != null && expandedContainer.TryGetComponent(out VerticalLayoutGroup group))
+                spacing = group.spacing;
+
+            contentHeight = count > 0
+                ? itemHeight * count + spacing * Mathf.Max(0, count - 1)
+                : 0f;
+        }
+        else
+        {
+            int count = previewItems.Count;
+            contentHeight = count > 0
+                ? itemHeight + Mathf.Abs(previewOffset.y) * Mathf.Max(0, count - 1)
+                : 0f;
+        }
+
+        rootLayoutElement.preferredHeight = headerHeight + headerToItemsSpacing + contentHeight;
+    }
+
+    private float GetHeaderHeight()
+    {
+        if (toggleButton != null && toggleButton.transform is RectTransform rect && rect.rect.height > 0f)
+            return rect.rect.height;
+
+        return 100f;
+    }
+
+    private float GetFlowerItemHeight()
+    {
+        if (flowerItemPrefab != null && flowerItemPrefab.transform is RectTransform rect && rect.rect.height > 0f)
+            return rect.rect.height;
+
+        return 100f;
+    }
+
+    private void ForceRebuildParentLayout()
+    {
+        Canvas.ForceUpdateCanvases();
+
+        if (transform is RectTransform selfRect)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(selfRect);
+
+        if (transform.parent is RectTransform parentRect)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect);
     }
 
     private void DeleteBouquet()
