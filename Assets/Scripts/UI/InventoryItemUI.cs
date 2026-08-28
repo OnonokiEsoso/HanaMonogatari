@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 在庫一覧の1行分を表示します。
-/// 通常商品と作成済み花束の両方を表示できます。
+/// 通常在庫ロットと、花束の中身表示用の材料カードに使います。
 /// </summary>
 public class InventoryItemUI : MonoBehaviour
 {
@@ -15,42 +15,53 @@ public class InventoryItemUI : MonoBehaviour
     [SerializeField] private TMP_Text purchasePriceText;
 
     private InventorySystem.InventoryBatch batch;
-    private BouquetSystem.BouquetData bouquet;
+    private BouquetSystem.BouquetComponent bouquetComponent;
+    private bool showPurchasePrice = true;
 
     public void Bind(InventorySystem.InventoryBatch inventoryBatch)
     {
         batch = inventoryBatch;
-        bouquet = null;
+        bouquetComponent = null;
+        showPurchasePrice = true;
         Refresh();
     }
 
-    public void Bind(BouquetSystem.BouquetData bouquetData)
+    /// <summary>
+    /// 花束の展開表示用。
+    /// 花束材料を通常の花カードと同じ見た目で表示します。
+    /// </summary>
+    public void Bind(BouquetSystem.BouquetComponent component, bool showPrice)
     {
-        bouquet = bouquetData;
+        bouquetComponent = component;
         batch = null;
+        showPurchasePrice = showPrice;
         Refresh();
     }
 
     public void Refresh()
     {
-        if (bouquet != null)
+        if (bouquetComponent != null && bouquetComponent.flower != null)
         {
             gameObject.SetActive(true);
 
             if (nameText != null)
-                nameText.text = bouquet.bouquetName;
+                nameText.text = bouquetComponent.flower.flowerName;
 
             if (colorText != null)
-                colorText.text = "花束";
+                colorText.text = bouquetComponent.flower.color;
 
             if (quantityText != null)
-                quantityText.text = "×1";
+                quantityText.text = $"×{bouquetComponent.quantity}";
 
             if (freshnessText != null)
-                freshnessText.text = $"構成 {bouquet.DistinctFlowerCount}種類 / {bouquet.TotalQuantity}本";
+                freshnessText.text = $"鮮度 残り{bouquetComponent.remainingFreshnessDays}日";
 
             if (purchasePriceText != null)
-                purchasePriceText.text = $"原価 {bouquet.MaterialCost:N0}円";
+            {
+                purchasePriceText.gameObject.SetActive(showPurchasePrice);
+                if (showPurchasePrice)
+                    purchasePriceText.text = $"仕入 {bouquetComponent.flower.purchasePrice:N0}円";
+            }
 
             return;
         }
@@ -76,6 +87,9 @@ public class InventoryItemUI : MonoBehaviour
             freshnessText.text = $"鮮度 残り{batch.remainingFreshnessDays}日";
 
         if (purchasePriceText != null)
+        {
+            purchasePriceText.gameObject.SetActive(true);
             purchasePriceText.text = $"仕入 {batch.flower.purchasePrice:N0}円";
+        }
     }
 }
