@@ -246,7 +246,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
         }
 
         int totalSpent = purchases.Sum(p => p.TotalPrice);
-        int averageSatisfaction = Mathf.RoundToInt(purchases.Average(p => p.satisfactionScore));
+        int averageSatisfaction = Mathf.RoundToInt((float)purchases.Average(p => p.satisfactionScore));
 
         var grouped = purchases
             .GroupBy(p => p.flower)
