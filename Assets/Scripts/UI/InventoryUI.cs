@@ -1,11 +1,12 @@
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
 /// 在庫画面全体を管理します。
-/// 通常商品はInventoryItem、花束は専用の展開式InventoryBouquetItemで表示します。
+/// 通常商品は同一FlowerDataごとにまとめ、花束は専用の展開式InventoryBouquetItemで表示します。
 /// </summary>
 public class InventoryUI : MonoBehaviour
 {
@@ -16,6 +17,7 @@ public class InventoryUI : MonoBehaviour
     [Header("一覧表示")]
     [SerializeField] private Transform itemContainer;
     [SerializeField] private InventoryItemUI itemPrefab;
+    [SerializeField] private InventoryFlowerGroupItemUI flowerGroupItemPrefab;
     [SerializeField] private InventoryBouquetItemUI bouquetItemPrefab;
 
     [Header("ヘッダー表示")]
@@ -23,6 +25,7 @@ public class InventoryUI : MonoBehaviour
     [SerializeField] private TMP_Text emptyMessageText;
 
     private readonly List<InventoryItemUI> spawnedItems = new();
+    private readonly List<InventoryFlowerGroupItemUI> spawnedFlowerGroups = new();
     private readonly List<InventoryBouquetItemUI> spawnedBouquetItems = new();
 
     private void OnEnable()
@@ -94,6 +97,13 @@ public class InventoryUI : MonoBehaviour
         }
         spawnedItems.Clear();
 
+        foreach (InventoryFlowerGroupItemUI item in spawnedFlowerGroups)
+        {
+            if (item != null)
+                Destroy(item.gameObject);
+        }
+        spawnedFlowerGroups.Clear();
+
         foreach (InventoryBouquetItemUI item in spawnedBouquetItems)
         {
             if (item != null)
@@ -107,16 +117,33 @@ public class InventoryUI : MonoBehaviour
             return;
         }
 
-        if (inventorySystem != null && itemPrefab != null)
+        if (inventorySystem != null)
         {
-            foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
-            {
-                if (batch == null || batch.flower == null || batch.quantity <= 0)
-                    continue;
+            var groups = inventorySystem.Batches
+                .Where(b => b != null && b.flower != null && b.quantity > 0)
+                .GroupBy(b => b.flower)
+                .OrderBy(g => g.Key.flowerName)
+                .ThenBy(g => g.Key.color)
+                .ToList();
 
-                InventoryItemUI item = Instantiate(itemPrefab, itemContainer);
-                item.Bind(batch);
-                spawnedItems.Add(item);
+            foreach (var group in groups)
+            {
+                if (flowerGroupItemPrefab != null)
+                {
+                    InventoryFlowerGroupItemUI groupItem = Instantiate(flowerGroupItemPrefab, itemContainer);
+                    groupItem.Bind(group.Key, group);
+                    spawnedFlowerGroups.Add(groupItem);
+                }
+                else if (itemPrefab != null)
+                {
+                    // 新しいグループPrefab未設定時は、従来通りロット別表示へフォールバックします。
+                    foreach (InventorySystem.InventoryBatch batch in group)
+                    {
+                        InventoryItemUI item = Instantiate(itemPrefab, itemContainer);
+                        item.Bind(batch);
+                        spawnedItems.Add(item);
+                    }
+                }
             }
         }
 
