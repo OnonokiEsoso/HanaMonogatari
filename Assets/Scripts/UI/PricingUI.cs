@@ -5,13 +5,14 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 在庫にある商品を種類ごとにまとめて、販売価格を設定する画面です。
+/// 在庫にある通常商品と作成済み花束の販売価格を設定する画面です。
 /// </summary>
 public class PricingUI : MonoBehaviour
 {
     [Header("参照")]
     [SerializeField] private InventorySystem inventorySystem;
     [SerializeField] private PricingSystem pricingSystem;
+    [SerializeField] private BouquetSystem bouquetSystem;
 
     [Header("一覧表示")]
     [SerializeField] private Transform itemContainer;
@@ -36,7 +37,12 @@ public class PricingUI : MonoBehaviour
             pricingSystem.OnPricingChanged += RefreshAll;
         }
 
-        // 非表示中に仕入れた商品も、値付けタブを開いた瞬間に反映する。
+        if (bouquetSystem != null)
+        {
+            bouquetSystem.OnBouquetsChanged -= RefreshAll;
+            bouquetSystem.OnBouquetsChanged += RefreshAll;
+        }
+
         RefreshAll();
     }
 
@@ -47,12 +53,11 @@ public class PricingUI : MonoBehaviour
 
         if (pricingSystem != null)
             pricingSystem.OnPricingChanged -= RefreshAll;
+
+        if (bouquetSystem != null)
+            bouquetSystem.OnBouquetsChanged -= RefreshAll;
     }
 
-    /// <summary>
-    /// RefreshAll（リフレッシュ・オール）＝全部更新する。
-    /// 現在庫と現在の販売価格に合わせて一覧を作り直します。
-    /// </summary>
     [ContextMenu("値付け画面を更新")]
     public void RefreshAll()
     {
@@ -68,25 +73,49 @@ public class PricingUI : MonoBehaviour
         }
         spawnedItems.Clear();
 
-        if (inventorySystem == null || pricingSystem == null || itemContainer == null || itemPrefab == null)
+        if (itemContainer == null || itemPrefab == null)
         {
-            Debug.LogWarning("PricingUI: InventorySystem / PricingSystem / ItemContainer / ItemPrefab のどれかが未設定です。");
+            Debug.LogWarning("PricingUI: ItemContainer / ItemPrefab のどちらかが未設定です。");
             return;
         }
 
-        var stocks = inventorySystem.Batches
-            .Where(b => b != null && b.flower != null && b.quantity > 0)
-            .GroupBy(b => b.flower)
-            .Select(g => new
-            {
-                flower = g.Key,
-                quantity = g.Sum(b => b.quantity)
-            })
-            .OrderBy(x => x.flower.flowerName)
-            .ThenBy(x => x.flower.color)
-            .ToList();
+        var stocks = inventorySystem != null
+            ? inventorySystem.Batches
+                .Where(b => b != null && b.flower != null && b.quantity > 0)
+                .GroupBy(b => b.flower)
+                .Select(g => new
+                {
+                    flower = g.Key,
+                    quantity = g.Sum(b => b.quantity)
+                })
+                .OrderBy(x => x.flower.flowerName)
+                .ThenBy(x => x.flower.color)
+                .ToList()
+            : null;
 
-        bool isEmpty = stocks.Count == 0;
+        if (stocks != null && pricingSystem != null)
+        {
+            foreach (var stock in stocks)
+            {
+                PricingItemUI item = Instantiate(itemPrefab, itemContainer);
+                item.Bind(stock.flower, stock.quantity, pricingSystem, ApplyFlowerPrice);
+                spawnedItems.Add(item);
+            }
+        }
+
+        if (bouquetSystem != null)
+        {
+            foreach (BouquetSystem.BouquetData bouquet in bouquetSystem.Bouquets)
+            {
+                if (bouquet == null) continue;
+
+                PricingItemUI item = Instantiate(itemPrefab, itemContainer);
+                item.Bind(bouquet, bouquetSystem, ApplyBouquetPrice);
+                spawnedItems.Add(item);
+            }
+        }
+
+        bool isEmpty = spawnedItems.Count == 0;
         if (emptyMessageText != null)
         {
             emptyMessageText.gameObject.SetActive(isEmpty);
@@ -94,26 +123,21 @@ public class PricingUI : MonoBehaviour
                 emptyMessageText.text = "値付けできる在庫がありません";
         }
 
-        foreach (var stock in stocks)
-        {
-            PricingItemUI item = Instantiate(itemPrefab, itemContainer);
-            item.Bind(stock.flower, stock.quantity, pricingSystem, ApplyPrice);
-            spawnedItems.Add(item);
-        }
-
         ForceRebuildLayout();
     }
 
-    private void ApplyPrice(FlowerData flower, int price)
+    private void ApplyFlowerPrice(FlowerData flower, int price)
     {
         if (pricingSystem == null) return;
         pricingSystem.SetSalePrice(flower, price);
     }
 
-    /// <summary>
-    /// ForceRebuildLayout（フォース・リビルド・レイアウト）
-    /// 商品カード追加後にVertical Layout Groupの配置を即座に再計算します。
-    /// </summary>
+    private void ApplyBouquetPrice(BouquetSystem.BouquetData bouquet, int price)
+    {
+        if (bouquetSystem == null) return;
+        bouquetSystem.SetSalePrice(bouquet, price);
+    }
+
     private void ForceRebuildLayout()
     {
         if (itemContainer is not RectTransform rectTransform) return;
