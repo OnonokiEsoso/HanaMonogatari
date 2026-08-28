@@ -32,7 +32,7 @@ public class InventoryItemUI : MonoBehaviour
 
     /// <summary>
     /// BindLotDetail（バインド・ロット・ディテール）
-    /// 鮮度別の内訳行として「残り○日 ×○」だけを強調表示します。
+    /// 鮮度別の内訳行として「あと○日 ×○」だけを強調表示します。
     /// </summary>
     public void BindLotDetail(InventorySystem.InventoryBatch inventoryBatch)
     {
@@ -80,14 +80,14 @@ public class InventoryItemUI : MonoBehaviour
                 quantityText.text = $"×{bouquetComponent.quantity}";
 
             if (freshnessText != null)
-                freshnessText.text = $"鮮度 残り{bouquetComponent.OldestRemainingFreshnessDays}日";
+                freshnessText.text = $"あと{bouquetComponent.OldestRemainingFreshnessDays}日";
 
             if (purchasePriceText != null)
             {
                 bool shouldShowPrice = showTexts && showPurchasePrice;
                 purchasePriceText.gameObject.SetActive(shouldShowPrice);
                 if (shouldShowPrice)
-                    purchasePriceText.text = $"仕入 {bouquetComponent.flower.purchasePrice:N0}円";
+                    purchasePriceText.text = $"{bouquetComponent.flower.purchasePrice:N0}円";
             }
 
             return;
@@ -110,7 +110,7 @@ public class InventoryItemUI : MonoBehaviour
             SetTextObjectActive(purchasePriceText, false);
 
             if (freshnessText != null)
-                freshnessText.text = $"残り{batch.remainingFreshnessDays}日";
+                freshnessText.text = $"あと{batch.remainingFreshnessDays}日";
 
             if (quantityText != null)
                 quantityText.text = $"×{batch.quantity}";
@@ -133,12 +133,12 @@ public class InventoryItemUI : MonoBehaviour
             quantityText.text = $"×{batch.quantity}";
 
         if (freshnessText != null)
-            freshnessText.text = $"鮮度 残り{batch.remainingFreshnessDays}日";
+            freshnessText.text = $"あと{batch.remainingFreshnessDays}日";
 
         if (purchasePriceText != null)
         {
             purchasePriceText.gameObject.SetActive(true);
-            purchasePriceText.text = $"仕入 {batch.flower.purchasePrice:N0}円";
+            purchasePriceText.text = $"{batch.flower.purchasePrice:N0}円";
         }
     }
 
