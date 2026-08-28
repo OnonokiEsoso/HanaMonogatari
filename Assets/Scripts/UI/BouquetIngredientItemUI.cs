@@ -94,7 +94,7 @@ public class BouquetIngredientItemUI : MonoBehaviour
             colorText.text = flower != null ? flower.color : "-";
 
         if (stockText != null)
-            stockText.text = $"在庫 {stock}";
+            stockText.text = $"×{stock}";
 
         if (quantityText != null)
             quantityText.text = selectedQuantity.ToString();
