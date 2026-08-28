@@ -93,7 +93,8 @@ public class BouquetUI : MonoBehaviour
                 flower = g.Key,
                 quantity = g.Sum(b => b.quantity)
             })
-            .OrderBy(x => x.flower.flowerName)
+            .OrderBy(x => x.flower.sortOrder)
+            .ThenBy(x => x.flower.flowerName)
             .ThenBy(x => x.flower.color)
             .ToList();
 
@@ -146,6 +147,7 @@ public class BouquetUI : MonoBehaviour
 
         List<BouquetSystem.BouquetComponent> components = spawnedItems
             .Where(i => i != null && i.Flower != null && i.SelectedQuantity > 0)
+            .OrderBy(i => i.Flower.sortOrder)
             .Select(i => new BouquetSystem.BouquetComponent
             {
                 flower = i.Flower,
