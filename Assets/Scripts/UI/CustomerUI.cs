@@ -38,11 +38,6 @@ public class CustomerUI : MonoBehaviour
     public int PurchaseCount => purchaseCount;
     public int TotalSales => totalSales;
 
-    /// <summary>
-    /// OnBusinessFinished（オン・ビジネス・フィニッシュド）
-    /// Business Finished＝営業が終了した。
-    /// その日の最後のお客を処理した瞬間に通知します。
-    /// </summary>
     public event Action OnBusinessFinished;
 
     private void Awake()
@@ -69,11 +64,6 @@ public class CustomerUI : MonoBehaviour
         RefreshState();
     }
 
-    /// <summary>
-    /// OpenShop（オープン・ショップ）＝開店する。
-    /// 今日の来客を生成して、先客順の待ち行列へ入れます。
-    /// 一度営業を終えた日は翌日へ進むまで再開店できません。
-    /// </summary>
     public void OpenShop()
     {
         if (isShopOpen || hasFinishedToday) return;
@@ -95,18 +85,12 @@ public class CustomerUI : MonoBehaviour
         if (resultText != null)
             resultText.text = "開店しました！";
 
-        // 来客0人だった場合はその場で営業終了扱いにする。
         if (waitingCustomers.Count == 0)
             FinishBusinessDay();
 
         RefreshState();
     }
 
-    /// <summary>
-    /// ProcessNextCustomer（プロセス・ネクスト・カスタマー）
-    /// Process＝処理する、Next Customer＝次の客。
-    /// 待っている客を1人だけ処理します。
-    /// </summary>
     public void ProcessNextCustomer()
     {
         if (!isShopOpen)
@@ -140,18 +124,12 @@ public class CustomerUI : MonoBehaviour
                 resultText.text = result != null ? result.message : "購入処理に失敗しました";
         }
 
-        // 最後のお客を処理したら、その日の営業を終了する。
         if (waitingCustomers.Count == 0)
             FinishBusinessDay();
 
         RefreshState();
     }
 
-    /// <summary>
-    /// FinishBusinessDay（フィニッシュ・ビジネス・デイ）
-    /// Finish＝終える、Business Day＝営業日。
-    /// その日の来客処理が終わったときの終了処理です。
-    /// </summary>
     private void FinishBusinessDay()
     {
         if (hasFinishedToday) return;
@@ -166,11 +144,6 @@ public class CustomerUI : MonoBehaviour
         OnBusinessFinished?.Invoke();
     }
 
-    /// <summary>
-    /// PrepareNextDay（プリペア・ネクスト・デイ）
-    /// Prepare＝準備する、Next Day＝翌日。
-    /// 翌日に進んだあと、再び開店できる状態へ戻します。
-    /// </summary>
     public void PrepareNextDay()
     {
         waitingCustomers.Clear();
@@ -206,7 +179,7 @@ public class CustomerUI : MonoBehaviour
             {
                 CustomerSystem.VisitingCustomer next = waitingCustomers.Peek();
                 currentCustomerText.text = next?.data != null
-                    ? $"次のお客：{next.data.displayName}　予算 {next.data.budget:N0}円"
+                    ? $"次のお客：{next.data.displayName}　目的 {CustomerSystem.GetPurposeLabel(next.purpose)}　予算 {next.data.budget:N0}円"
                     : "次のお客：不明";
             }
             else
