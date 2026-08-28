@@ -49,9 +49,16 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (rootLayoutElement == null)
             rootLayoutElement = gameObject.AddComponent<LayoutElement>();
 
-        // 通常花グループと同じく、展開で親が伸びてもヘッダー自身の高さは固定する。
         if (toggleButton != null && toggleButton.transform is RectTransform headerRect && headerRect.rect.height > 0f)
             headerHeight = headerRect.rect.height;
+
+        // 花束Prefabでは文字・削除ボタンがToggleButtonの子ではなく兄弟になっている場合がある。
+        // 親の高さを展開分だけ伸ばしたときに兄弟UIが中央へずれないよう、
+        // 初期位置を保ったまま上端基準のアンカーへ変換しておく。
+        PinDirectChildToTop(nameText != null ? nameText.rectTransform : null);
+        PinDirectChildToTop(quantityText != null ? quantityText.rectTransform : null);
+        PinDirectChildToTop(compositionText != null ? compositionText.rectTransform : null);
+        PinDirectChildToTop(deleteButton != null ? deleteButton.transform as RectTransform : null);
 
         PositionHeaderAtTop();
 
@@ -118,6 +125,26 @@ public class InventoryBouquetItemUI : MonoBehaviour
     }
 
     /// <summary>
+    /// PinDirectChildToTop（ピン・ダイレクト・チャイルド・トゥ・トップ）
+    /// Pin＝固定、Direct Child＝直下の子、Top＝上端。
+    /// 現在の見た目の位置を変えずに、親の上端基準へアンカーを変更します。
+    /// </summary>
+    private void PinDirectChildToTop(RectTransform rect)
+    {
+        if (rect == null || rootRectTransform == null || rect.parent != rootRectTransform)
+            return;
+
+        Vector3 worldPosition = rect.position;
+        Vector2 anchorMin = rect.anchorMin;
+        Vector2 anchorMax = rect.anchorMax;
+        anchorMin.y = 1f;
+        anchorMax.y = 1f;
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.position = worldPosition;
+    }
+
+    /// <summary>
     /// PositionHeaderAtTop（ポジション・ヘッダー・アット・トップ）
     /// 親の高さが展開分だけ伸びても、花束ヘッダーを先頭1行に固定します。
     /// </summary>
@@ -158,7 +185,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (expandedContainer != null)
             expandedContainer.gameObject.SetActive(isExpanded);
 
-        // 描画・クリック順を維持する。
         if (collapsedPreviewContainer != null)
             collapsedPreviewContainer.SetAsFirstSibling();
 
@@ -227,10 +253,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// UpdatePreferredHeight（アップデート・プリファード・ハイト）
-    /// 通常花グループと同じく、LayoutElementとRectTransform本体の両方へ展開後の高さを反映します。
-    /// </summary>
     private void UpdatePreferredHeight()
     {
         if (rootLayoutElement == null) return;
@@ -257,8 +279,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
         rootLayoutElement.minHeight = targetHeight;
         rootLayoutElement.flexibleHeight = 0f;
 
-        // ここが通常花と揃える重要部分。
-        // LayoutElementだけでなく実RectTransformも伸ばし、ScrollRectが下端を認識できるようにする。
         if (rootRectTransform != null)
             rootRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, targetHeight);
     }
@@ -278,10 +298,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
         return headerHeight;
     }
 
-    /// <summary>
-    /// ForceRebuildParentLayout（フォース・リビルド・ペアレント・レイアウト）
-    /// 通常花グループと同じ方法で、展開後の高さをScrollViewのContentまで伝えます。
-    /// </summary>
     private void ForceRebuildParentLayout()
     {
         Canvas.ForceUpdateCanvases();
