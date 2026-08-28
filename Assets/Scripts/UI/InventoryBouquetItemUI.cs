@@ -59,9 +59,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
             deleteButton.onClick.RemoveListener(DeleteBouquet);
     }
 
-    /// <summary>
-    /// Bind（バインド）＝花束データをこの表示へ結び付ける。
-    /// </summary>
     public void Bind(BouquetSystem.BouquetData bouquetData, BouquetSystem system, Action onChanged)
     {
         bouquet = bouquetData;
@@ -108,19 +105,10 @@ public class InventoryBouquetItemUI : MonoBehaviour
         ForceRebuildParentLayout();
     }
 
-    /// <summary>
-    /// PositionContainers（ポジション・コンテナーズ）＝材料表示の位置を決める。
-    /// 閉じたプレビューはヘッダーと同じ位置に置いて背面へ重ね、
-    /// 展開一覧だけをヘッダーの下へ配置します。
-    /// </summary>
     private void PositionContainers()
     {
         float headerHeight = GetHeaderHeight();
-
-        // 閉じているときは花束ヘッダーと同じ枠内に重ねる。
         PositionContainer(collapsedPreviewContainer, 0f);
-
-        // 展開時だけ、ヘッダーの高さ＋余白ぶん下へ送る。
         PositionContainer(expandedContainer, -(headerHeight + headerToItemsSpacing));
     }
 
@@ -143,8 +131,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (expandedContainer != null)
             expandedContainer.gameObject.SetActive(isExpanded);
 
-        // Unity UIは後ろのSiblingほど手前に描画されます。
-        // 閉じている時は材料カードを花束ヘッダーの背面に置きます。
         if (!isExpanded)
         {
             if (collapsedPreviewContainer != null)
@@ -172,7 +158,10 @@ public class InventoryBouquetItemUI : MonoBehaviour
 
             InventoryItemUI item = Instantiate(flowerItemPrefab, collapsedPreviewContainer);
             item.transform.localScale = Vector3.one;
-            item.Bind(component, false);
+
+            // 閉じた状態では「カードが束になっている見た目」だけ欲しいので、
+            // 花名・色・数量・鮮度などの文字はすべて非表示にする。
+            item.Bind(component, false, false);
 
             if (item.transform is RectTransform rect)
             {
@@ -182,7 +171,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
                 rect.anchoredPosition = previewOffset * i;
             }
 
-            // 後から作ったカードほど奥になるようにする。
             item.transform.SetSiblingIndex(0);
             previewItems.Add(item);
         }
@@ -201,7 +189,7 @@ public class InventoryBouquetItemUI : MonoBehaviour
 
             InventoryItemUI item = Instantiate(flowerItemPrefab, expandedContainer);
             item.transform.localScale = Vector3.one;
-            item.Bind(component, false);
+            item.Bind(component, false, true);
             expandedItems.Add(item);
         }
     }
@@ -212,8 +200,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
 
         float headerHeight = GetHeaderHeight();
 
-        // 閉じているときは材料プレビューをレイアウト上の高さに数えない。
-        // これで花束全体が通常商品と同じ「1枠」に収まる。
         if (!isExpanded)
         {
             rootLayoutElement.preferredHeight = headerHeight;
@@ -265,7 +251,6 @@ public class InventoryBouquetItemUI : MonoBehaviour
     {
         if (bouquetSystem == null || bouquet == null) return;
 
-        // 「削除」は材料を失わないよう、花束を解体して在庫へ戻す処理にします。
         if (bouquetSystem.TryDisassembleBouquet(bouquet, out string message))
         {
             Debug.Log(message);
