@@ -5,10 +5,14 @@ using UnityEngine;
 
 /// <summary>
 /// プレイヤーが作成した花束を管理します。
-/// 花束は3種類以上、合計100本以内で作成します。
+/// 通常の花束は3種類以上、合計3～25本で作成します。
+/// 26本以上は将来の花束予約イベント専用とし、通常作成では扱いません。
 /// </summary>
 public class BouquetSystem : MonoBehaviour
 {
+    public const int MinimumBouquetQuantity = 3;
+    public const int MaximumBouquetQuantity = 25;
+
     [Serializable]
     public class BouquetFreshnessLot
     {
@@ -80,9 +84,9 @@ public class BouquetSystem : MonoBehaviour
         }
 
         int totalQuantity = components.Sum(c => c.quantity);
-        if (totalQuantity > 100)
+        if (totalQuantity < MinimumBouquetQuantity || totalQuantity > MaximumBouquetQuantity)
         {
-            message = "花束は合計100本以内で作成してください";
+            message = $"通常の花束は合計{MinimumBouquetQuantity}～{MaximumBouquetQuantity}本で作成してください";
             return false;
         }
 
@@ -143,10 +147,36 @@ public class BouquetSystem : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// GetRecommendedPrice（ゲット・レコメンデッド・プライス）
+    /// 花束の材料原価と合計本数から現在の適正価格を返します。
+    /// </summary>
     public int GetRecommendedPrice(BouquetData bouquet)
     {
         if (bouquet == null) return 0;
-        return Mathf.Max(1, bouquet.MaterialCost * 2);
+        return CalculateRecommendedPrice(bouquet.MaterialCost, bouquet.TotalQuantity);
+    }
+
+    /// <summary>
+    /// CalculateRecommendedPrice（カルキュレート・レコメンデッド・プライス）
+    /// 3～5本=原価×4.5、6～10本=×4.0、11～20本=×3.5、21～25本=×3.25。
+    /// 最後に50円単位へ四捨五入します。
+    /// </summary>
+    public static int CalculateRecommendedPrice(int materialCost, int totalQuantity)
+    {
+        if (materialCost <= 0 || totalQuantity <= 0) return 0;
+
+        float multiplier = totalQuantity switch
+        {
+            <= 5 => 4.5f,
+            <= 10 => 4.0f,
+            <= 20 => 3.5f,
+            _ => 3.25f
+        };
+
+        float rawPrice = materialCost * multiplier;
+        int roundedTo50 = Mathf.FloorToInt((rawPrice + 25f) / 50f) * 50;
+        return Mathf.Max(50, roundedTo50);
     }
 
     /// <summary>
