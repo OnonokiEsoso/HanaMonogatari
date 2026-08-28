@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 
@@ -98,7 +99,11 @@ public class SupplierUI : MonoBehaviour
             return;
         }
 
-        foreach (SupplierSystem.ArrivalItem arrival in supplierSystem.TodayArrivals)
+        foreach (SupplierSystem.ArrivalItem arrival in supplierSystem.TodayArrivals
+                     .Where(a => a != null && a.flower != null)
+                     .OrderBy(a => a.flower.sortOrder)
+                     .ThenBy(a => a.flower.flowerName)
+                     .ThenBy(a => a.flower.color))
         {
             SupplierItemUI item = Instantiate(itemPrefab, itemContainer);
             item.Bind(arrival, TryBuyOne, TryBuyMultiple);
@@ -106,9 +111,6 @@ public class SupplierUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 商品を1個購入します。
-    /// </summary>
     private void TryBuyOne(SupplierSystem.ArrivalItem arrival)
     {
         TryBuyMultiple(arrival, 1);
@@ -132,8 +134,6 @@ public class SupplierUI : MonoBehaviour
 
         int totalPrice = arrival.UnitPurchasePrice * quantity;
 
-        // まとめ買いは表示されている本数を一括購入する仕様。
-        // 所持金が合計額に足りない場合は、一部だけ買わず購入自体を行いません。
         if (!shopManager.TryPurchaseFromSupplier(totalPrice))
         {
             Debug.Log($"所持金が足りないため、{arrival.flower.flowerName}を{quantity}個まとめて購入できませんでした。必要額：{totalPrice:N0}円");
