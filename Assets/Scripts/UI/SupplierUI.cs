@@ -31,50 +31,34 @@ public class SupplierUI : MonoBehaviour
     private void OnEnable()
     {
         if (shopManager != null)
-        {
             shopManager.OnStateChanged += RefreshHeader;
-        }
     }
 
     private void OnDisable()
     {
         if (shopManager != null)
-        {
             shopManager.OnStateChanged -= RefreshHeader;
-        }
     }
 
     private void Start()
     {
         if (shopManager != null)
-        {
             shopManager.SyncSupplierSystem();
-        }
 
         if (generateArrivalsOnStart && supplierSystem != null)
-        {
             supplierSystem.GenerateDailyArrivals();
-        }
 
         RefreshAll();
     }
 
-    /// <summary>
-    /// 今日の入荷を作り直し、一覧を再表示します。
-    /// デバッグ用や日付更新後の呼び出しにも使えます。
-    /// </summary>
     [ContextMenu("今日の仕入れ画面を更新")]
     public void RegenerateTodayArrivals()
     {
         if (shopManager != null)
-        {
             shopManager.SyncSupplierSystem();
-        }
 
         if (supplierSystem != null)
-        {
             supplierSystem.GenerateDailyArrivals();
-        }
 
         RefreshAll();
     }
@@ -117,39 +101,56 @@ public class SupplierUI : MonoBehaviour
         foreach (SupplierSystem.ArrivalItem arrival in supplierSystem.TodayArrivals)
         {
             SupplierItemUI item = Instantiate(itemPrefab, itemContainer);
-            item.Bind(arrival, TryBuyOne);
+            item.Bind(arrival, TryBuyOne, TryBuyMultiple);
             spawnedItems.Add(item);
         }
     }
 
     /// <summary>
     /// 商品を1個購入します。
-    /// 代金支払い → 入荷残数減少 → 在庫追加 の順に処理します。
     /// </summary>
     private void TryBuyOne(SupplierSystem.ArrivalItem arrival)
+    {
+        TryBuyMultiple(arrival, 1);
+    }
+
+    /// <summary>
+    /// TryBuyMultiple（トライ・バイ・マルチプル）
+    /// Multiple＝複数。
+    /// 指定数をまとめて購入します。残数を超えず、1回の上限は5本です。
+    /// </summary>
+    private void TryBuyMultiple(SupplierSystem.ArrivalItem arrival, int requestedQuantity)
     {
         if (arrival == null || arrival.flower == null) return;
         if (shopManager == null || inventorySystem == null) return;
         if (arrival.RemainingQuantity <= 0) return;
 
-        int price = arrival.UnitPurchasePrice;
+        int quantity = Mathf.Clamp(requestedQuantity, 1, 5);
+        quantity = Mathf.Min(quantity, arrival.RemainingQuantity);
 
-        if (!shopManager.TryPurchaseFromSupplier(price))
+        if (quantity <= 0) return;
+
+        int totalPrice = arrival.UnitPurchasePrice * quantity;
+
+        // まとめ買いは表示されている本数を一括購入する仕様。
+        // 所持金が合計額に足りない場合は、一部だけ買わず購入自体を行いません。
+        if (!shopManager.TryPurchaseFromSupplier(totalPrice))
         {
-            Debug.Log($"所持金が足りないため、{arrival.flower.flowerName}を購入できませんでした。");
+            Debug.Log($"所持金が足りないため、{arrival.flower.flowerName}を{quantity}個まとめて購入できませんでした。必要額：{totalPrice:N0}円");
             return;
         }
 
-        arrival.purchasedQuantity++;
-        inventorySystem.AddFlower(arrival.flower, 1);
+        arrival.purchasedQuantity += quantity;
+        inventorySystem.AddFlower(arrival.flower, quantity);
 
-        Debug.Log($"{arrival.flower.flowerName}（{arrival.flower.color}）を1個仕入れました。{price}円");
+        Debug.Log($"{arrival.flower.flowerName}（{arrival.flower.color}）を{quantity}個仕入れました。合計{totalPrice:N0}円");
 
         RefreshHeader();
 
         foreach (SupplierItemUI item in spawnedItems)
         {
-            if (item != null) item.Refresh();
+            if (item != null)
+                item.Refresh();
         }
     }
 }
