@@ -17,12 +17,14 @@ public class InventoryItemUI : MonoBehaviour
     private InventorySystem.InventoryBatch batch;
     private BouquetSystem.BouquetComponent bouquetComponent;
     private bool showPurchasePrice = true;
+    private bool showTexts = true;
 
     public void Bind(InventorySystem.InventoryBatch inventoryBatch)
     {
         batch = inventoryBatch;
         bouquetComponent = null;
         showPurchasePrice = true;
+        showTexts = true;
         Refresh();
     }
 
@@ -32,9 +34,19 @@ public class InventoryItemUI : MonoBehaviour
     /// </summary>
     public void Bind(BouquetSystem.BouquetComponent component, bool showPrice)
     {
+        Bind(component, showPrice, true);
+    }
+
+    /// <summary>
+    /// 花束材料カードの表示方法を指定して結び付けます。
+    /// showTexts=falseなら、閉じた花束プレビュー用に背景だけ表示します。
+    /// </summary>
+    public void Bind(BouquetSystem.BouquetComponent component, bool showPrice, bool showTexts)
+    {
         bouquetComponent = component;
         batch = null;
         showPurchasePrice = showPrice;
+        this.showTexts = showTexts;
         Refresh();
     }
 
@@ -43,6 +55,11 @@ public class InventoryItemUI : MonoBehaviour
         if (bouquetComponent != null && bouquetComponent.flower != null)
         {
             gameObject.SetActive(true);
+
+            SetTextObjectActive(nameText, showTexts);
+            SetTextObjectActive(colorText, showTexts);
+            SetTextObjectActive(quantityText, showTexts);
+            SetTextObjectActive(freshnessText, showTexts);
 
             if (nameText != null)
                 nameText.text = bouquetComponent.flower.flowerName;
@@ -58,8 +75,9 @@ public class InventoryItemUI : MonoBehaviour
 
             if (purchasePriceText != null)
             {
-                purchasePriceText.gameObject.SetActive(showPurchasePrice);
-                if (showPurchasePrice)
+                bool shouldShowPrice = showTexts && showPurchasePrice;
+                purchasePriceText.gameObject.SetActive(shouldShowPrice);
+                if (shouldShowPrice)
                     purchasePriceText.text = $"仕入 {bouquetComponent.flower.purchasePrice:N0}円";
             }
 
@@ -73,6 +91,12 @@ public class InventoryItemUI : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        showTexts = true;
+
+        SetTextObjectActive(nameText, true);
+        SetTextObjectActive(colorText, true);
+        SetTextObjectActive(quantityText, true);
+        SetTextObjectActive(freshnessText, true);
 
         if (nameText != null)
             nameText.text = batch.flower.flowerName;
@@ -91,5 +115,11 @@ public class InventoryItemUI : MonoBehaviour
             purchasePriceText.gameObject.SetActive(true);
             purchasePriceText.text = $"仕入 {batch.flower.purchasePrice:N0}円";
         }
+    }
+
+    private static void SetTextObjectActive(TMP_Text text, bool active)
+    {
+        if (text != null)
+            text.gameObject.SetActive(active);
     }
 }
