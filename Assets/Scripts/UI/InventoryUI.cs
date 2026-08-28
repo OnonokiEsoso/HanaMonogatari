@@ -5,12 +5,13 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 在庫画面全体を管理します。
-/// InventorySystemのロット一覧をUIへ展開し、在庫変化時に自動更新します。
+/// 通常在庫と作成済み花束を同じ一覧へ表示します。
 /// </summary>
 public class InventoryUI : MonoBehaviour
 {
     [Header("参照")]
     [SerializeField] private InventorySystem inventorySystem;
+    [SerializeField] private BouquetSystem bouquetSystem;
 
     [Header("一覧表示")]
     [SerializeField] private Transform itemContainer;
@@ -30,23 +31,24 @@ public class InventoryUI : MonoBehaviour
             inventorySystem.OnInventoryChanged += RefreshAll;
         }
 
-        // タブが非表示中に仕入れが行われても、
-        // 在庫タブを開いた瞬間に最新状態を必ず表示する。
+        if (bouquetSystem != null)
+        {
+            bouquetSystem.OnBouquetsChanged -= RefreshAll;
+            bouquetSystem.OnBouquetsChanged += RefreshAll;
+        }
+
         RefreshAll();
     }
 
     private void OnDisable()
     {
         if (inventorySystem != null)
-        {
             inventorySystem.OnInventoryChanged -= RefreshAll;
-        }
+
+        if (bouquetSystem != null)
+            bouquetSystem.OnBouquetsChanged -= RefreshAll;
     }
 
-    /// <summary>
-    /// Refresh（リフレッシュ）＝更新する。
-    /// 在庫数表示と一覧を現在のInventorySystemに合わせて更新します。
-    /// </summary>
     [ContextMenu("在庫画面を更新")]
     public void RefreshAll()
     {
@@ -56,19 +58,19 @@ public class InventoryUI : MonoBehaviour
 
     private void RefreshHeader()
     {
-        if (inventorySystem == null)
+        int totalQuantity = 0;
+
+        if (inventorySystem != null)
         {
-            if (totalStockText != null) totalStockText.text = "在庫：0個";
-            if (emptyMessageText != null) emptyMessageText.gameObject.SetActive(true);
-            return;
+            foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
+            {
+                if (batch != null)
+                    totalQuantity += Mathf.Max(0, batch.quantity);
+            }
         }
 
-        int totalQuantity = 0;
-        foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
-        {
-            if (batch != null)
-                totalQuantity += Mathf.Max(0, batch.quantity);
-        }
+        if (bouquetSystem != null)
+            totalQuantity += bouquetSystem.Bouquets.Count;
 
         if (totalStockText != null)
             totalStockText.text = $"在庫：{totalQuantity}個";
@@ -90,30 +92,40 @@ public class InventoryUI : MonoBehaviour
         }
         spawnedItems.Clear();
 
-        if (inventorySystem == null || itemContainer == null || itemPrefab == null)
+        if (itemContainer == null || itemPrefab == null)
         {
-            Debug.LogWarning("InventoryUI: InventorySystem / ItemContainer / ItemPrefab のどれかが未設定です。");
+            Debug.LogWarning("InventoryUI: ItemContainer / ItemPrefab のどちらかが未設定です。");
             return;
         }
 
-        foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
+        if (inventorySystem != null)
         {
-            if (batch == null || batch.flower == null || batch.quantity <= 0)
-                continue;
+            foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
+            {
+                if (batch == null || batch.flower == null || batch.quantity <= 0)
+                    continue;
 
-            InventoryItemUI item = Instantiate(itemPrefab, itemContainer);
-            item.Bind(batch);
-            spawnedItems.Add(item);
+                InventoryItemUI item = Instantiate(itemPrefab, itemContainer);
+                item.Bind(batch);
+                spawnedItems.Add(item);
+            }
+        }
+
+        if (bouquetSystem != null)
+        {
+            foreach (BouquetSystem.BouquetData bouquet in bouquetSystem.Bouquets)
+            {
+                if (bouquet == null) continue;
+
+                InventoryItemUI item = Instantiate(itemPrefab, itemContainer);
+                item.Bind(bouquet);
+                spawnedItems.Add(item);
+            }
         }
 
         ForceRebuildLayout();
     }
 
-    /// <summary>
-    /// ForceRebuildLayout（フォース・リビルド・レイアウト）
-    /// Force＝強制、Rebuild＝作り直す、Layout＝配置。
-    /// 商品カード追加後にVertical Layout Groupへ再計算を命令します。
-    /// </summary>
     private void ForceRebuildLayout()
     {
         if (itemContainer is not RectTransform rectTransform) return;
