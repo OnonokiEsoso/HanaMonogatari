@@ -131,14 +131,16 @@ public class InventoryBouquetItemUI : MonoBehaviour
         if (expandedContainer != null)
             expandedContainer.gameObject.SetActive(isExpanded);
 
-        if (!isExpanded)
-        {
-            if (collapsedPreviewContainer != null)
-                collapsedPreviewContainer.SetAsFirstSibling();
+        // 描画順は「材料プレビュー < 花束全体トグル < 削除ボタン」に固定する。
+        // これで花束全体を覆うToggleButtonがDeleteButtonのクリックを奪わない。
+        if (collapsedPreviewContainer != null)
+            collapsedPreviewContainer.SetAsFirstSibling();
 
-            if (toggleButton != null)
-                toggleButton.transform.SetAsLastSibling();
-        }
+        if (toggleButton != null)
+            toggleButton.transform.SetAsLastSibling();
+
+        if (deleteButton != null)
+            deleteButton.transform.SetAsLastSibling();
 
         UpdatePreferredHeight();
     }
