@@ -6,6 +6,7 @@ using UnityEngine;
 /// <summary>
 /// 客が「単品花」か「花束」かを先に決め、魅力で商品を見つけたあと価格を見て購入判断します。
 /// 花束は基本1個、単品花は予算内で複数本・複数種類を購入できます。
+/// 来店目的によって花束を見る確率も変化します。
 /// </summary>
 public class CustomerPurchaseSystem : MonoBehaviour
 {
@@ -89,7 +90,8 @@ public class CustomerPurchaseSystem : MonoBehaviour
             return result;
         }
 
-        bool wantsBouquet = UnityEngine.Random.value < GetBouquetPreferenceChance(customer.data.customerType);
+        float bouquetChance = GetPurposeAdjustedBouquetChance(customer);
+        bool wantsBouquet = UnityEngine.Random.value < bouquetChance;
         List<Candidate> preferred = wantsBouquet ? BuildBouquetCandidates(customer) : BuildFlowerCandidates(customer);
 
         // 希望カテゴリに魅力条件を満たす商品が1つもない時だけ、反対カテゴリも見ます。
@@ -101,7 +103,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
 
         if (preferred.Count == 0)
         {
-            result.message = $"{customer.data.displayName}：好みに合う商品がありませんでした";
+            result.message = $"{customer.data.displayName}（{CustomerSystem.GetPurposeLabel(customer.purpose)}）：好みに合う商品がありませんでした";
             return result;
         }
 
@@ -130,6 +132,27 @@ public class CustomerPurchaseSystem : MonoBehaviour
         };
     }
 
+    /// <summary>
+    /// GetPurposeAdjustedBouquetChance（ゲット・パーパス・アジャステッド・ブーケ・チャンス）
+    /// 来店目的を加味して、実際に花束を見る確率を返します。
+    /// 自宅用は単品寄り、プレゼントと記念日は花束寄り、お供えはやや単品寄りです。
+    /// </summary>
+    private static float GetPurposeAdjustedBouquetChance(CustomerSystem.VisitingCustomer customer)
+    {
+        float baseChance = GetBouquetPreferenceChance(customer.data.customerType);
+
+        float adjusted = customer.purpose switch
+        {
+            VisitPurpose.SelfUse => baseChance * 0.45f,
+            VisitPurpose.Gift => Mathf.Lerp(baseChance, 1f, 0.25f),
+            VisitPurpose.Offering => baseChance * 0.75f,
+            VisitPurpose.Anniversary => Mathf.Lerp(baseChance, 1f, 0.55f),
+            _ => baseChance
+        };
+
+        return Mathf.Clamp01(adjusted);
+    }
+
     private void TryPurchaseBouquet(CustomerSystem.VisitingCustomer customer, List<Candidate> candidates, PurchaseResult result)
     {
         List<Candidate> remaining = new(candidates);
@@ -140,7 +163,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
             if (selected == null) break;
             remaining.Remove(selected);
 
-            // 値札を見るのは候補を気に入った後。予算オーバーならここで諦めます。
             if (selected.price <= 0 || selected.price > customer.data.budget)
                 continue;
 
@@ -175,7 +197,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
             return;
         }
 
-        result.message = $"{customer.data.displayName}は花束を見ましたが、値段などを考えて購入しませんでした";
+        result.message = $"{customer.data.displayName}（{CustomerSystem.GetPurposeLabel(customer.purpose)}）は花束を見ましたが、値段などを考えて購入しませんでした";
     }
 
     private void TryPurchaseFlowers(CustomerSystem.VisitingCustomer customer, PurchaseResult result)
@@ -199,8 +221,8 @@ public class CustomerPurchaseSystem : MonoBehaviour
                 if (selected.flower == null || selected.price <= 0 || selected.price > remainingBudget)
                     continue;
 
-                // 単品花はまだ専用の適正価格を持たないため、今回は「残り予算に対する値段」で最終判断します。
-                float buyChance = CalculateFlowerPurchaseChance(selected.price, remainingBudget);
+                // 単品花も花束と同じく、魅力で選んだあと「販売価格 ÷ 適正価格」で購入判断します。
+                float buyChance = CalculatePricePurchaseChance(selected.price, selected.recommendedPrice);
                 if (UnityEngine.Random.value > buyChance)
                     continue;
 
@@ -230,18 +252,16 @@ public class CustomerPurchaseSystem : MonoBehaviour
                 break;
             }
 
-            // 3候補見ても買わなかったら、その時点で買い物を終えます。
             if (!boughtThisRound)
                 break;
 
-            // 1回目の購入後は70%、2回目の購入後は40%でさらに店内を見る。3回目で終了。
             if (round == 0 && UnityEngine.Random.value > 0.70f) break;
             if (round == 1 && UnityEngine.Random.value > 0.40f) break;
         }
 
         if (purchases.Count == 0)
         {
-            result.message = $"{customer.data.displayName}は花を見ましたが、値段などを考えて購入しませんでした";
+            result.message = $"{customer.data.displayName}（{CustomerSystem.GetPurposeLabel(customer.purpose)}）は花を見ましたが、値段などを考えて購入しませんでした";
             return;
         }
 
@@ -287,6 +307,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
             {
                 flower = flower,
                 price = price,
+                recommendedPrice = pricingSystem.GetRecommendedPrice(flower),
                 weight = CalculateAttractivenessWeight(
                     customer,
                     flower.basePopularity,
@@ -364,27 +385,35 @@ public class CustomerPurchaseSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// 花束は「適正価格に対して何％の売価か」で最終購入率を決め、花束評価で少し補正します。
+    /// 適正価格に対する販売価格の比率から、最終的な購入率を返します。
+    /// 単品花と花束で共通して使用します。
     /// </summary>
-    private static float CalculateBouquetPurchaseChance(int salePrice, int recommendedPrice, int qualityScore)
+    private static float CalculatePricePurchaseChance(int salePrice, int recommendedPrice)
     {
         if (salePrice <= 0 || recommendedPrice <= 0) return 0f;
 
         float ratio = salePrice / (float)recommendedPrice;
-        float baseChance;
 
-        if (ratio <= 0.70f) baseChance = 0.98f;
-        else if (ratio <= 0.80f) baseChance = Mathf.Lerp(0.98f, 0.95f, Mathf.InverseLerp(0.70f, 0.80f, ratio));
-        else if (ratio <= 0.90f) baseChance = Mathf.Lerp(0.95f, 0.92f, Mathf.InverseLerp(0.80f, 0.90f, ratio));
-        else if (ratio <= 1.00f) baseChance = Mathf.Lerp(0.92f, 0.88f, Mathf.InverseLerp(0.90f, 1.00f, ratio));
-        else if (ratio <= 1.10f) baseChance = Mathf.Lerp(0.88f, 0.78f, Mathf.InverseLerp(1.00f, 1.10f, ratio));
-        else if (ratio <= 1.20f) baseChance = Mathf.Lerp(0.78f, 0.65f, Mathf.InverseLerp(1.10f, 1.20f, ratio));
-        else if (ratio <= 1.30f) baseChance = Mathf.Lerp(0.65f, 0.48f, Mathf.InverseLerp(1.20f, 1.30f, ratio));
-        else if (ratio <= 1.40f) baseChance = Mathf.Lerp(0.48f, 0.32f, Mathf.InverseLerp(1.30f, 1.40f, ratio));
-        else if (ratio <= 1.50f) baseChance = Mathf.Lerp(0.32f, 0.20f, Mathf.InverseLerp(1.40f, 1.50f, ratio));
-        else if (ratio <= 1.75f) baseChance = Mathf.Lerp(0.20f, 0.08f, Mathf.InverseLerp(1.50f, 1.75f, ratio));
-        else if (ratio <= 2.00f) baseChance = Mathf.Lerp(0.08f, 0.02f, Mathf.InverseLerp(1.75f, 2.00f, ratio));
-        else baseChance = 0.02f;
+        if (ratio <= 0.70f) return 0.98f;
+        if (ratio <= 0.80f) return Mathf.Lerp(0.98f, 0.95f, Mathf.InverseLerp(0.70f, 0.80f, ratio));
+        if (ratio <= 0.90f) return Mathf.Lerp(0.95f, 0.92f, Mathf.InverseLerp(0.80f, 0.90f, ratio));
+        if (ratio <= 1.00f) return Mathf.Lerp(0.92f, 0.88f, Mathf.InverseLerp(0.90f, 1.00f, ratio));
+        if (ratio <= 1.10f) return Mathf.Lerp(0.88f, 0.78f, Mathf.InverseLerp(1.00f, 1.10f, ratio));
+        if (ratio <= 1.20f) return Mathf.Lerp(0.78f, 0.65f, Mathf.InverseLerp(1.10f, 1.20f, ratio));
+        if (ratio <= 1.30f) return Mathf.Lerp(0.65f, 0.48f, Mathf.InverseLerp(1.20f, 1.30f, ratio));
+        if (ratio <= 1.40f) return Mathf.Lerp(0.48f, 0.32f, Mathf.InverseLerp(1.30f, 1.40f, ratio));
+        if (ratio <= 1.50f) return Mathf.Lerp(0.32f, 0.20f, Mathf.InverseLerp(1.40f, 1.50f, ratio));
+        if (ratio <= 1.75f) return Mathf.Lerp(0.20f, 0.08f, Mathf.InverseLerp(1.50f, 1.75f, ratio));
+        if (ratio <= 2.00f) return Mathf.Lerp(0.08f, 0.02f, Mathf.InverseLerp(1.75f, 2.00f, ratio));
+        return 0.02f;
+    }
+
+    /// <summary>
+    /// 花束は共通の価格購入率に、花束評価による補正を加えます。
+    /// </summary>
+    private static float CalculateBouquetPurchaseChance(int salePrice, int recommendedPrice, int qualityScore)
+    {
+        float baseChance = CalculatePricePurchaseChance(salePrice, recommendedPrice);
 
         float qualityMultiplier = qualityScore switch
         {
@@ -396,21 +425,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
         };
 
         return Mathf.Clamp01(baseChance * qualityMultiplier);
-    }
-
-    /// <summary>
-    /// 単品花は専用適正価格をまだ持たないため、残り予算に占める単価の割合で最終判断します。
-    /// </summary>
-    private static float CalculateFlowerPurchaseChance(int unitPrice, int remainingBudget)
-    {
-        if (unitPrice <= 0 || remainingBudget <= 0 || unitPrice > remainingBudget) return 0f;
-
-        float ratio = unitPrice / (float)remainingBudget;
-        if (ratio <= 0.10f) return 0.98f;
-        if (ratio <= 0.25f) return 0.95f;
-        if (ratio <= 0.50f) return 0.88f;
-        if (ratio <= 0.75f) return 0.75f;
-        return 0.60f;
     }
 
     private static int RollFlowerQuantity()
@@ -464,7 +478,8 @@ public class CustomerPurchaseSystem : MonoBehaviour
                 : $"　常連P {regularResult.currentPoints}/{regularResult.requiredPoints}";
         }
 
-        result.message = $"{customer.data.displayName}が{purchasedItemText}を購入　合計{totalSalePrice:N0}円　満足度：{GetSatisfactionLabel(satisfactionLevel)}　店評価+{ratingGain}{qualityText}{regularText}";
+        string purposeText = CustomerSystem.GetPurposeLabel(customer.purpose);
+        result.message = $"{customer.data.displayName}（{purposeText}）が{purchasedItemText}を購入　合計{totalSalePrice:N0}円　満足度：{GetSatisfactionLabel(satisfactionLevel)}　店評価+{ratingGain}{qualityText}{regularText}";
         Debug.Log(result.message);
     }
 
