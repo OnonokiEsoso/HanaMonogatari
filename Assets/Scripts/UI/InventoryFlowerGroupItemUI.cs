@@ -220,6 +220,11 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         return 100f;
     }
 
+    /// <summary>
+    /// ForceRebuildParentLayout（フォース・リビルド・ペアレント・レイアウト）
+    /// Force Rebuild＝強制再計算、Parent Layout＝親の一覧レイアウト。
+    /// 展開後の高さをScrollViewのContentまで即座に反映し、最下段でも下へスクロールできるようにします。
+    /// </summary>
     private void ForceRebuildParentLayout()
     {
         Canvas.ForceUpdateCanvases();
@@ -230,12 +235,24 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         if (rootRectTransform != null)
             LayoutRebuilder.ForceRebuildLayoutImmediate(rootRectTransform);
 
-        if (transform.parent is RectTransform parentRect)
+        if (transform.parent is RectTransform contentRect)
         {
-            LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect);
+            // この親がInventory ScrollViewのContent。
+            // 子のLayoutElementが変わった後にVerticalLayoutGroup / ContentSizeFitterを再計算する。
+            LayoutRebuilder.MarkLayoutForRebuild(contentRect);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
+            Canvas.ForceUpdateCanvases();
 
-            if (parentRect.parent is RectTransform grandParentRect)
-                LayoutRebuilder.ForceRebuildLayoutImmediate(grandParentRect);
+            // ContentSizeFitterの更新タイミングに依存せず、ScrollRectが正しい下端を認識できるよう
+            // Content自身の高さを現在のPreferred Heightへ同期する。
+            float preferredHeight = LayoutUtility.GetPreferredHeight(contentRect);
+            if (preferredHeight > 0f)
+                contentRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
+
+            if (contentRect.parent is RectTransform viewportRect)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(viewportRect);
         }
 
         PositionHeaderAtTop();
