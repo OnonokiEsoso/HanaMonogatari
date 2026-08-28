@@ -3,7 +3,19 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 1日の来客数・客タイプ抽選・常連化の進行を担当します。
+/// VisitPurpose（ビジット・パーパス）＝来店目的。
+/// 客が何のために花屋へ来たかを表します。
+/// </summary>
+public enum VisitPurpose
+{
+    SelfUse,
+    Gift,
+    Offering,
+    Anniversary
+}
+
+/// <summary>
+/// 1日の来客数・客タイプ抽選・来店目的・常連化の進行を担当します。
 /// </summary>
 public class CustomerSystem : MonoBehaviour
 {
@@ -12,11 +24,13 @@ public class CustomerSystem : MonoBehaviour
     {
         public CustomerData data;
         public string favoriteColor;
+        public VisitPurpose purpose;
 
-        public VisitingCustomer(CustomerData data, string favoriteColor)
+        public VisitingCustomer(CustomerData data, string favoriteColor, VisitPurpose purpose)
         {
             this.data = data;
             this.favoriteColor = favoriteColor;
+            this.purpose = purpose;
         }
     }
 
@@ -90,7 +104,8 @@ public class CustomerSystem : MonoBehaviour
             if (profile == null) continue;
 
             string favoriteColor = PickFavoriteColor();
-            todayCustomers.Add(new VisitingCustomer(profile, favoriteColor));
+            VisitPurpose purpose = PickVisitPurpose(profile.customerType);
+            todayCustomers.Add(new VisitingCustomer(profile, favoriteColor, purpose));
         }
 
         Debug.Log($"本日の来客を生成しました。{todayCustomers.Count}人");
@@ -105,9 +120,7 @@ public class CustomerSystem : MonoBehaviour
         int visitors = Mathf.Max(1, Mathf.RoundToInt(baseVisitors * randomMultiplier));
 
         if (shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear <= 7)
-        {
             visitors += openingBonusVisitors;
-        }
 
         return visitors;
     }
@@ -141,6 +154,60 @@ public class CustomerSystem : MonoBehaviour
         }
 
         return new RegularPointResult(status.currentPoints, required, status.regularCount, becameRegular);
+    }
+
+    /// <summary>
+    /// 客タイプごとに自然な来店目的を重み付きで抽選します。
+    /// 数値は合計100になる割合です。
+    /// </summary>
+    private static VisitPurpose PickVisitPurpose(CustomerType customerType)
+    {
+        float selfUse;
+        float gift;
+        float offering;
+
+        switch (customerType)
+        {
+            case CustomerType.Housewife:
+                selfUse = 50f; gift = 25f; offering = 20f;
+                break;
+            case CustomerType.Student:
+                selfUse = 45f; gift = 40f; offering = 5f;
+                break;
+            case CustomerType.Grandmother:
+                selfUse = 35f; gift = 20f; offering = 40f;
+                break;
+            case CustomerType.Wealthy:
+                selfUse = 15f; gift = 35f; offering = 10f;
+                break;
+            case CustomerType.Child:
+                selfUse = 70f; gift = 25f; offering = 5f;
+                break;
+            case CustomerType.OfficeWorker:
+                selfUse = 10f; gift = 55f; offering = 10f;
+                break;
+            default:
+                selfUse = 45f; gift = 30f; offering = 15f;
+                break;
+        }
+
+        float roll = UnityEngine.Random.Range(0f, 100f);
+        if (roll < selfUse) return VisitPurpose.SelfUse;
+        if (roll < selfUse + gift) return VisitPurpose.Gift;
+        if (roll < selfUse + gift + offering) return VisitPurpose.Offering;
+        return VisitPurpose.Anniversary;
+    }
+
+    public static string GetPurposeLabel(VisitPurpose purpose)
+    {
+        return purpose switch
+        {
+            VisitPurpose.SelfUse => "自宅用",
+            VisitPurpose.Gift => "プレゼント",
+            VisitPurpose.Offering => "お供え",
+            VisitPurpose.Anniversary => "記念日",
+            _ => "その他"
+        };
     }
 
     private CustomerData PickCustomerProfile()
