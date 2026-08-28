@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 在庫画面全体を管理します。
-/// 通常在庫と作成済み花束を同じ一覧へ表示します。
+/// 通常商品はInventoryItem、花束は専用の展開式InventoryBouquetItemで表示します。
 /// </summary>
 public class InventoryUI : MonoBehaviour
 {
@@ -16,12 +16,14 @@ public class InventoryUI : MonoBehaviour
     [Header("一覧表示")]
     [SerializeField] private Transform itemContainer;
     [SerializeField] private InventoryItemUI itemPrefab;
+    [SerializeField] private InventoryBouquetItemUI bouquetItemPrefab;
 
     [Header("ヘッダー表示")]
     [SerializeField] private TMP_Text totalStockText;
     [SerializeField] private TMP_Text emptyMessageText;
 
     private readonly List<InventoryItemUI> spawnedItems = new();
+    private readonly List<InventoryBouquetItemUI> spawnedBouquetItems = new();
 
     private void OnEnable()
     {
@@ -92,13 +94,20 @@ public class InventoryUI : MonoBehaviour
         }
         spawnedItems.Clear();
 
-        if (itemContainer == null || itemPrefab == null)
+        foreach (InventoryBouquetItemUI item in spawnedBouquetItems)
         {
-            Debug.LogWarning("InventoryUI: ItemContainer / ItemPrefab のどちらかが未設定です。");
+            if (item != null)
+                Destroy(item.gameObject);
+        }
+        spawnedBouquetItems.Clear();
+
+        if (itemContainer == null)
+        {
+            Debug.LogWarning("InventoryUI: ItemContainer が未設定です。");
             return;
         }
 
-        if (inventorySystem != null)
+        if (inventorySystem != null && itemPrefab != null)
         {
             foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
             {
@@ -111,15 +120,15 @@ public class InventoryUI : MonoBehaviour
             }
         }
 
-        if (bouquetSystem != null)
+        if (bouquetSystem != null && bouquetItemPrefab != null)
         {
             foreach (BouquetSystem.BouquetData bouquet in bouquetSystem.Bouquets)
             {
                 if (bouquet == null) continue;
 
-                InventoryItemUI item = Instantiate(itemPrefab, itemContainer);
-                item.Bind(bouquet);
-                spawnedItems.Add(item);
+                InventoryBouquetItemUI item = Instantiate(bouquetItemPrefab, itemContainer);
+                item.Bind(bouquet, bouquetSystem, RefreshAll);
+                spawnedBouquetItems.Add(item);
             }
         }
 
