@@ -62,6 +62,11 @@ public class FlowerData : ScriptableObject
     [Tooltip("仕入先での入荷難易度。1～10")]
     public int arrivalDifficulty = 1;
 
+    [Header("表示順")]
+    [Min(1)]
+    [Tooltip("一覧で並べる順番。Excelの『ソート時の振り分け番号』に対応します。")]
+    public int sortOrder = 9999;
+
     /// <summary>
     /// 指定した季節の珍しさを返します。
     /// </summary>
