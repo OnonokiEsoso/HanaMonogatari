@@ -123,10 +123,10 @@ public class BouquetUI : MonoBehaviour
             i != null && i.Flower != null
                 ? i.Flower.purchasePrice * Mathf.Max(0, i.SelectedQuantity)
                 : 0);
-        int recommendedPrice = materialCost > 0 ? materialCost * 2 : 0;
+        int recommendedPrice = BouquetSystem.CalculateRecommendedPrice(materialCost, total);
 
         if (totalQuantityText != null)
-            totalQuantityText.text = $"合計：{total}/100本";
+            totalQuantityText.text = $"合計：{total}/{BouquetSystem.MaximumBouquetQuantity}本";
 
         if (distinctCountText != null)
             distinctCountText.text = $"種類：{distinct}/3以上";
@@ -135,7 +135,12 @@ public class BouquetUI : MonoBehaviour
             currentRecommendedPriceText.text = $"現在の適正価格：{recommendedPrice:N0}円";
 
         if (createButton != null)
-            createButton.interactable = total <= 100 && distinct >= 3;
+        {
+            createButton.interactable =
+                total >= BouquetSystem.MinimumBouquetQuantity &&
+                total <= BouquetSystem.MaximumBouquetQuantity &&
+                distinct >= 3;
+        }
     }
 
     public void CreateBouquet()
