@@ -25,6 +25,12 @@ public class BouquetSystem : MonoBehaviour
 
         public int TotalQuantity => components?.Sum(c => c != null ? Mathf.Max(0, c.quantity) : 0) ?? 0;
         public int DistinctFlowerCount => components?.Count(c => c?.flower != null && c.quantity > 0) ?? 0;
+
+        /// <summary>
+        /// 花束に使った材料の基準仕入れ価格合計です。
+        /// </summary>
+        public int MaterialCost => components?.Sum(c =>
+            c?.flower != null ? c.flower.purchasePrice * Mathf.Max(0, c.quantity) : 0) ?? 0;
     }
 
     [Header("参照")]
@@ -88,7 +94,6 @@ public class BouquetSystem : MonoBehaviour
             }
         }
 
-        // 全材料の在庫確認が終わってから減らすため、途中失敗で在庫だけ減ることを防ぎます。
         foreach (BouquetComponent component in components)
         {
             if (!inventorySystem.TryRemoveFlower(component.flower, component.quantity))
@@ -111,6 +116,25 @@ public class BouquetSystem : MonoBehaviour
         message = $"{bouquet.bouquetName}を作成しました（{totalQuantity}本 / {salePrice:N0}円）";
         Debug.Log(message);
         return true;
+    }
+
+    /// <summary>
+    /// SetSalePrice（セット・セール・プライス）＝販売価格を設定する。
+    /// 値付け画面から作成済み花束の価格を変更します。
+    /// </summary>
+    public bool SetSalePrice(BouquetData bouquet, int price)
+    {
+        if (bouquet == null || price <= 0 || !bouquets.Contains(bouquet)) return false;
+
+        bouquet.salePrice = price;
+        OnBouquetsChanged?.Invoke();
+        return true;
+    }
+
+    public int GetRecommendedPrice(BouquetData bouquet)
+    {
+        if (bouquet == null) return 0;
+        return Mathf.Max(1, bouquet.MaterialCost * 2);
     }
 
     /// <summary>
