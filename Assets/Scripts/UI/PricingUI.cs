@@ -88,7 +88,8 @@ public class PricingUI : MonoBehaviour
                     flower = g.Key,
                     quantity = g.Sum(b => b.quantity)
                 })
-                .OrderBy(x => x.flower.flowerName)
+                .OrderBy(x => x.flower.sortOrder)
+                .ThenBy(x => x.flower.flowerName)
                 .ThenBy(x => x.flower.color)
                 .ToList()
             : null;
