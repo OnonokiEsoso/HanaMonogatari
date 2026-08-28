@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 同じ花・同じ色の在庫を1行にまとめて表示します。
-/// 表面には合計数と最も古い鮮度を表示し、クリックで鮮度別ロットを展開します。
+/// 通常時はクリックで鮮度別ロットを展開し、展開子には同じInventoryFlowerGroupItemプレハブを使います。
 /// </summary>
 public class InventoryFlowerGroupItemUI : MonoBehaviour
 {
@@ -21,16 +21,17 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
 
     [Header("鮮度別内訳")]
     [SerializeField] private Transform expandedContainer;
-    [SerializeField] private InventoryItemUI lotItemPrefab;
+    [SerializeField] private InventoryFlowerGroupItemUI lotGroupItemPrefab;
     [Min(0f)] [SerializeField] private float headerToItemsSpacing = 6f;
 
     private FlowerData flower;
     private List<InventorySystem.InventoryBatch> batches = new();
     private bool isExpanded;
+    private bool isDetailMode;
     private LayoutElement rootLayoutElement;
     private RectTransform rootRectTransform;
     private float headerHeight = 100f;
-    private readonly List<InventoryItemUI> spawnedLotItems = new();
+    private readonly List<InventoryFlowerGroupItemUI> spawnedLotItems = new();
 
     private void Awake()
     {
@@ -40,7 +41,6 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         if (rootLayoutElement == null)
             rootLayoutElement = gameObject.AddComponent<LayoutElement>();
 
-        // 展開で親の高さが変わってもヘッダー自身の高さは変えない。
         if (toggleButton != null && toggleButton.transform is RectTransform headerRect && headerRect.rect.height > 0f)
             headerHeight = headerRect.rect.height;
 
@@ -61,6 +61,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
     /// </summary>
     public void Bind(FlowerData flowerData, IEnumerable<InventorySystem.InventoryBatch> sourceBatches)
     {
+        isDetailMode = false;
         flower = flowerData;
         batches = sourceBatches?
             .Where(b => b != null && b.flower == flowerData && b.quantity > 0)
@@ -71,8 +72,63 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         Refresh();
     }
 
+    /// <summary>
+    /// BindLotDetail（バインド・ロット・ディテール）
+    /// 鮮度別ロットを、同じInventoryFlowerGroupItemの見た目で1行表示します。
+    /// 元の花名だけ空欄にし、この行自身は展開しません。
+    /// </summary>
+    public void BindLotDetail(InventorySystem.InventoryBatch batch)
+    {
+        isDetailMode = true;
+        isExpanded = false;
+        flower = batch?.flower;
+        batches = batch != null
+            ? new List<InventorySystem.InventoryBatch> { batch }
+            : new List<InventorySystem.InventoryBatch>();
+
+        if (expandedContainer != null)
+            expandedContainer.gameObject.SetActive(false);
+
+        RefreshDetail(batch, hideName: true, showPurchasePrice: true);
+    }
+
+    /// <summary>
+    /// BindBouquetComponent（バインド・ブーケ・コンポーネント）
+    /// 花束の材料を同じInventoryFlowerGroupItemの見た目で1行表示します。
+    /// 花束内では仕入価格は表示しません。
+    /// </summary>
+    public void BindBouquetComponent(BouquetSystem.BouquetComponent component)
+    {
+        isDetailMode = true;
+        isExpanded = false;
+        flower = component?.flower;
+        batches.Clear();
+
+        if (expandedContainer != null)
+            expandedContainer.gameObject.SetActive(false);
+
+        if (component?.flower == null)
+        {
+            gameObject.SetActive(false);
+            return;
+        }
+
+        gameObject.SetActive(true);
+        SetHeaderTexts(
+            component.flower.flowerName,
+            component.flower.color,
+            component.quantity,
+            component.OldestRemainingFreshnessDays,
+            string.Empty);
+
+        SetFixedDetailHeight();
+    }
+
     public void Refresh()
     {
+        if (isDetailMode)
+            return;
+
         if (flower == null || batches.Count == 0)
         {
             gameObject.SetActive(false);
@@ -84,20 +140,12 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         int totalQuantity = batches.Sum(b => b.quantity);
         int oldestFreshness = batches.Min(b => b.remainingFreshnessDays);
 
-        if (nameText != null)
-            nameText.text = flower.flowerName;
-
-        if (colorText != null)
-            colorText.text = flower.color;
-
-        if (quantityText != null)
-            quantityText.text = $"×{totalQuantity}";
-
-        if (freshnessText != null)
-            freshnessText.text = $"あと{oldestFreshness}日";
-
-        if (purchasePriceText != null)
-            purchasePriceText.text = $"{flower.purchasePrice:N0}円";
+        SetHeaderTexts(
+            flower.flowerName,
+            flower.color,
+            totalQuantity,
+            oldestFreshness,
+            $"{flower.purchasePrice:N0}円");
 
         PositionHeaderAtTop();
         PositionExpandedContainerBelowHeader();
@@ -105,21 +153,52 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         ApplyExpandedState();
     }
 
-    /// <summary>
-    /// ToggleExpanded（トグル・エクスパンデッド）
-    /// Toggle＝切り替える、Expanded＝展開状態。
-    /// </summary>
+    private void RefreshDetail(InventorySystem.InventoryBatch batch, bool hideName, bool showPurchasePrice)
+    {
+        if (batch?.flower == null || batch.quantity <= 0)
+        {
+            gameObject.SetActive(false);
+            return;
+        }
+
+        gameObject.SetActive(true);
+        SetHeaderTexts(
+            hideName ? string.Empty : batch.flower.flowerName,
+            batch.flower.color,
+            batch.quantity,
+            batch.remainingFreshnessDays,
+            showPurchasePrice ? $"{batch.flower.purchasePrice:N0}円" : string.Empty);
+
+        SetFixedDetailHeight();
+    }
+
+    private void SetHeaderTexts(string displayName, string color, int quantity, int freshnessDays, string price)
+    {
+        if (nameText != null)
+            nameText.text = displayName;
+
+        if (colorText != null)
+            colorText.text = color;
+
+        if (quantityText != null)
+            quantityText.text = $"×{quantity}";
+
+        if (freshnessText != null)
+            freshnessText.text = $"あと{freshnessDays}日";
+
+        if (purchasePriceText != null)
+            purchasePriceText.text = price;
+    }
+
     private void ToggleExpanded()
     {
+        if (isDetailMode) return;
+
         isExpanded = !isExpanded;
         ApplyExpandedState();
         ForceRebuildParentLayout();
     }
 
-    /// <summary>
-    /// PositionHeaderAtTop（ポジション・ヘッダー・アット・トップ）
-    /// 展開で親オブジェクトが縦に伸びても、元の花プレハブを一番上に固定します。
-    /// </summary>
     private void PositionHeaderAtTop()
     {
         if (toggleButton == null || toggleButton.transform is not RectTransform rect) return;
@@ -132,10 +211,6 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         rect.localScale = Vector3.one;
     }
 
-    /// <summary>
-    /// PositionExpandedContainerBelowHeader（ポジション・エクスパンデッド・コンテナ・ビロウ・ヘッダー）
-    /// 展開一覧を元の花カードの1個下へ配置します。
-    /// </summary>
     private void PositionExpandedContainerBelowHeader()
     {
         if (expandedContainer is not RectTransform rect) return;
@@ -149,19 +224,14 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
 
     private void BuildLotItems()
     {
-        foreach (InventoryItemUI item in spawnedLotItems)
-        {
-            if (item != null)
-                Destroy(item.gameObject);
-        }
-        spawnedLotItems.Clear();
+        ClearLotItems();
 
-        if (expandedContainer == null || lotItemPrefab == null)
+        if (expandedContainer == null || lotGroupItemPrefab == null)
             return;
 
         foreach (InventorySystem.InventoryBatch batch in batches)
         {
-            InventoryItemUI item = Instantiate(lotItemPrefab, expandedContainer);
+            InventoryFlowerGroupItemUI item = Instantiate(lotGroupItemPrefab, expandedContainer);
             item.transform.localScale = Vector3.one;
             item.BindLotDetail(batch);
             spawnedLotItems.Add(item);
@@ -174,14 +244,39 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         }
     }
 
+    private void ClearLotItems()
+    {
+        foreach (InventoryFlowerGroupItemUI item in spawnedLotItems)
+        {
+            if (item != null)
+                Destroy(item.gameObject);
+        }
+        spawnedLotItems.Clear();
+    }
+
     private void ApplyExpandedState()
     {
         if (expandedContainer != null)
-            expandedContainer.gameObject.SetActive(isExpanded);
+            expandedContainer.gameObject.SetActive(isExpanded && !isDetailMode);
 
         UpdatePreferredHeight();
         PositionHeaderAtTop();
         PositionExpandedContainerBelowHeader();
+    }
+
+    private void SetFixedDetailHeight()
+    {
+        PositionHeaderAtTop();
+
+        if (rootLayoutElement != null)
+        {
+            rootLayoutElement.preferredHeight = headerHeight;
+            rootLayoutElement.minHeight = headerHeight;
+            rootLayoutElement.flexibleHeight = 0f;
+        }
+
+        if (rootRectTransform != null)
+            rootRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, headerHeight);
     }
 
     private void UpdatePreferredHeight()
@@ -190,7 +285,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
 
         float targetHeight = headerHeight;
 
-        if (isExpanded)
+        if (isExpanded && !isDetailMode)
         {
             float itemHeight = GetLotItemHeight();
             float spacing = 0f;
@@ -215,16 +310,19 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
 
     private float GetLotItemHeight()
     {
-        if (lotItemPrefab != null && lotItemPrefab.transform is RectTransform rect && rect.rect.height > 0f)
-            return rect.rect.height;
-        return 100f;
+        if (lotGroupItemPrefab != null)
+        {
+            LayoutElement layout = lotGroupItemPrefab.GetComponent<LayoutElement>();
+            if (layout != null && layout.preferredHeight > 0f)
+                return layout.preferredHeight;
+
+            if (lotGroupItemPrefab.transform is RectTransform rect && rect.rect.height > 0f)
+                return rect.rect.height;
+        }
+
+        return headerHeight;
     }
 
-    /// <summary>
-    /// ForceRebuildParentLayout（フォース・リビルド・ペアレント・レイアウト）
-    /// Force Rebuild＝強制再計算、Parent Layout＝親の一覧レイアウト。
-    /// 展開後の高さをScrollViewのContentまで即座に反映し、最下段でも下へスクロールできるようにします。
-    /// </summary>
     private void ForceRebuildParentLayout()
     {
         Canvas.ForceUpdateCanvases();
@@ -237,14 +335,10 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
 
         if (transform.parent is RectTransform contentRect)
         {
-            // この親がInventory ScrollViewのContent。
-            // 子のLayoutElementが変わった後にVerticalLayoutGroup / ContentSizeFitterを再計算する。
             LayoutRebuilder.MarkLayoutForRebuild(contentRect);
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
             Canvas.ForceUpdateCanvases();
 
-            // ContentSizeFitterの更新タイミングに依存せず、ScrollRectが正しい下端を認識できるよう
-            // Content自身の高さを現在のPreferred Heightへ同期する。
             float preferredHeight = LayoutUtility.GetPreferredHeight(contentRect);
             if (preferredHeight > 0f)
                 contentRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
