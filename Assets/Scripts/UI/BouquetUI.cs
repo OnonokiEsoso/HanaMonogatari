@@ -26,6 +26,7 @@ public class BouquetUI : MonoBehaviour
     [Header("表示")]
     [SerializeField] private TMP_Text totalQuantityText;
     [SerializeField] private TMP_Text distinctCountText;
+    [SerializeField] private TMP_Text currentRecommendedPriceText;
     [SerializeField] private TMP_Text resultText;
 
     [Header("操作")]
@@ -118,12 +119,20 @@ public class BouquetUI : MonoBehaviour
     {
         int total = spawnedItems.Sum(i => i != null ? i.SelectedQuantity : 0);
         int distinct = spawnedItems.Count(i => i != null && i.SelectedQuantity > 0);
+        int materialCost = spawnedItems.Sum(i =>
+            i != null && i.Flower != null
+                ? i.Flower.purchasePrice * Mathf.Max(0, i.SelectedQuantity)
+                : 0);
+        int recommendedPrice = materialCost > 0 ? materialCost * 2 : 0;
 
         if (totalQuantityText != null)
             totalQuantityText.text = $"合計：{total}/100本";
 
         if (distinctCountText != null)
             distinctCountText.text = $"種類：{distinct}/3以上";
+
+        if (currentRecommendedPriceText != null)
+            currentRecommendedPriceText.text = $"現在の適正価格：{recommendedPrice:N0}円";
 
         if (createButton != null)
             createButton.interactable = total <= 100 && distinct >= 3;
