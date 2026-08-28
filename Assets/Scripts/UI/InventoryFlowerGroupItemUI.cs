@@ -94,10 +94,10 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
             quantityText.text = $"×{totalQuantity}";
 
         if (freshnessText != null)
-            freshnessText.text = $"鮮度 残り{oldestFreshness}日";
+            freshnessText.text = $"あと{oldestFreshness}日";
 
         if (purchasePriceText != null)
-            purchasePriceText.text = $"仕入 {flower.purchasePrice:N0}円";
+            purchasePriceText.text = $"{flower.purchasePrice:N0}円";
 
         PositionHeaderAtTop();
         PositionExpandedContainerBelowHeader();
