@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 在庫一覧の1行分を表示します。
-/// 1つの在庫ロット（商品・数量・残り鮮度）をUIへ反映します。
+/// 通常商品と作成済み花束の両方を表示できます。
 /// </summary>
 public class InventoryItemUI : MonoBehaviour
 {
@@ -15,22 +15,46 @@ public class InventoryItemUI : MonoBehaviour
     [SerializeField] private TMP_Text purchasePriceText;
 
     private InventorySystem.InventoryBatch batch;
+    private BouquetSystem.BouquetData bouquet;
 
-    /// <summary>
-    /// Bind（バインド）＝結び付ける。
-    /// このUI行と在庫ロットを結び付けて表示します。
-    /// </summary>
     public void Bind(InventorySystem.InventoryBatch inventoryBatch)
     {
         batch = inventoryBatch;
+        bouquet = null;
         Refresh();
     }
 
-    /// <summary>
-    /// 現在の在庫ロット情報を画面へ再反映します。
-    /// </summary>
+    public void Bind(BouquetSystem.BouquetData bouquetData)
+    {
+        bouquet = bouquetData;
+        batch = null;
+        Refresh();
+    }
+
     public void Refresh()
     {
+        if (bouquet != null)
+        {
+            gameObject.SetActive(true);
+
+            if (nameText != null)
+                nameText.text = bouquet.bouquetName;
+
+            if (colorText != null)
+                colorText.text = "花束";
+
+            if (quantityText != null)
+                quantityText.text = "×1";
+
+            if (freshnessText != null)
+                freshnessText.text = $"構成 {bouquet.DistinctFlowerCount}種類 / {bouquet.TotalQuantity}本";
+
+            if (purchasePriceText != null)
+                purchasePriceText.text = $"原価 {bouquet.MaterialCost:N0}円";
+
+            return;
+        }
+
         if (batch == null || batch.flower == null)
         {
             gameObject.SetActive(false);
