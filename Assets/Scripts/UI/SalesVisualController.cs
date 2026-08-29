@@ -4,11 +4,13 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Serialization;
+using UnityEngine.UI;
 
 /// <summary>
 /// 営業画面の見た目を担当します。
 /// 客を右側からレジ前へ移動させ、購入内容・金額・一言を表示したあと右側へ退店させます。
 /// 各客画像のInspector上の配置位置を、その客固有のレジ前停止位置として使用します。
+/// 吹き出し本体は常時表示し、開店前・会計中などで中身だけ切り替えます。
 /// </summary>
 public class SalesVisualController : MonoBehaviour
 {
@@ -26,6 +28,12 @@ public class SalesVisualController : MonoBehaviour
     [SerializeField] private TMP_Text purchaseText;
     [SerializeField] private TMP_Text priceText;
     [SerializeField] private TMP_Text commentText;
+
+    [Header("開店確認")]
+    [Tooltip("吹き出し内などに置く『開店する』ボタンを設定します。開店確認中だけ表示されます。")]
+    [SerializeField] private Button openShopConfirmButton;
+    [Tooltip("常駐GameObjectに置いたCustomerUIを設定します。")]
+    [SerializeField] private CustomerUI customerUI;
 
     [Header("移動位置")]
     [Tooltip("各客画像の現在位置から、右へどれだけ離れた場所を入店開始・退店位置にするか。レジ前停止位置は各画像のInspector上の現在位置をそのまま使います。")]
@@ -49,7 +57,71 @@ public class SalesVisualController : MonoBehaviour
     {
         CacheCustomerCounterPositions();
         HideAllCustomers();
-        ClearCheckoutDisplay();
+
+        if (speechBubble != null)
+            speechBubble.SetActive(true);
+
+        if (openShopConfirmButton != null)
+        {
+            openShopConfirmButton.onClick.AddListener(ConfirmOpenShop);
+            openShopConfirmButton.gameObject.SetActive(false);
+        }
+
+        ClearCheckoutText();
+    }
+
+    private void OnDestroy()
+    {
+        if (openShopConfirmButton != null)
+            openShopConfirmButton.onClick.RemoveListener(ConfirmOpenShop);
+    }
+
+    /// <summary>
+    /// ShowOpenConfirmation（ショー・オープン・コンファメーション）
+    /// DailyResultPanelへ入った直後に「開店する？」と確認を表示します。
+    /// </summary>
+    public void ShowOpenConfirmation()
+    {
+        HideAllCustomers();
+        ClearCheckoutText();
+
+        if (speechBubble != null)
+            speechBubble.SetActive(true);
+
+        if (purchaseText != null)
+            purchaseText.text = "開店する？";
+
+        if (openShopConfirmButton != null)
+            openShopConfirmButton.gameObject.SetActive(true);
+    }
+
+    private void ConfirmOpenShop()
+    {
+        if (customerUI == null)
+        {
+            Debug.LogWarning("SalesVisualController: CustomerUIが設定されていません。");
+            return;
+        }
+
+        if (openShopConfirmButton != null)
+            openShopConfirmButton.gameObject.SetActive(false);
+
+        ClearCheckoutText();
+        customerUI.OpenShop();
+    }
+
+    /// <summary>
+    /// 営業開始時に確認表示を消し、常時表示の吹き出しだけ残します。
+    /// </summary>
+    public void PrepareForBusiness()
+    {
+        if (speechBubble != null)
+            speechBubble.SetActive(true);
+
+        if (openShopConfirmButton != null)
+            openShopConfirmButton.gameObject.SetActive(false);
+
+        ClearCheckoutText();
     }
 
     /// <summary>
@@ -86,8 +158,14 @@ public class SalesVisualController : MonoBehaviour
             yield break;
 
         isPlaying = true;
-        ClearCheckoutDisplay();
+        ClearCheckoutText();
         HideAllCustomers();
+
+        if (speechBubble != null)
+            speechBubble.SetActive(true);
+
+        if (openShopConfirmButton != null)
+            openShopConfirmButton.gameObject.SetActive(false);
 
         activeCustomer = GetCustomerImage(customer?.data?.customerType ?? CustomerType.Housewife);
         if (activeCustomer == null)
@@ -97,7 +175,6 @@ public class SalesVisualController : MonoBehaviour
             yield break;
         }
 
-        // 各画像をScene上で配置した位置が、その客固有のレジ前停止位置。
         Vector2 counterPosition = GetCounterPosition(activeCustomer);
         float outsideX = counterPosition.x + Mathf.Abs(outsideRightOffset);
 
@@ -105,9 +182,6 @@ public class SalesVisualController : MonoBehaviour
         activeCustomer.gameObject.SetActive(true);
 
         yield return MoveX(activeCustomer, counterPosition.x, enterDuration);
-
-        if (speechBubble != null)
-            speechBubble.SetActive(true);
 
         if (purchaseText != null)
             purchaseText.text = BuildPurchaseText(result);
@@ -129,10 +203,9 @@ public class SalesVisualController : MonoBehaviour
         if (commentDisplayDuration > 0f)
             yield return new WaitForSeconds(commentDisplayDuration);
 
-        ClearCheckoutDisplay();
+        ClearCheckoutText();
         yield return MoveX(activeCustomer, outsideX, exitDuration);
 
-        // 次回も同じ客固有位置を基準にできるよう、非表示にする前に元の位置へ戻します。
         activeCustomer.anchoredPosition = counterPosition;
         activeCustomer.gameObject.SetActive(false);
         activeCustomer = null;
@@ -165,7 +238,7 @@ public class SalesVisualController : MonoBehaviour
         {
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / duration);
-            t = t * t * (3f - 2f * t); // SmoothStep
+            t = t * t * (3f - 2f * t);
             target.anchoredPosition = Vector2.LerpUnclamped(start, end, t);
             yield return null;
         }
@@ -192,8 +265,6 @@ public class SalesVisualController : MonoBehaviour
         if (result == null || !result.purchased)
             return "今回は購入なし";
 
-        // PurchaseResult.messageには「客名（目的）が［購入内容］を購入　合計...」の形で購入内容が入っています。
-        // 複数種類購入にも対応するため、その部分だけを営業画面用に抜き出します。
         string message = result.message ?? string.Empty;
         int start = message.IndexOf("）が", StringComparison.Ordinal);
         if (start >= 0)
@@ -252,11 +323,8 @@ public class SalesVisualController : MonoBehaviour
         SetActive(officeWorkerImage, false);
     }
 
-    private void ClearCheckoutDisplay()
+    private void ClearCheckoutText()
     {
-        if (speechBubble != null)
-            speechBubble.SetActive(false);
-
         if (purchaseText != null)
             purchaseText.text = string.Empty;
 
