@@ -21,6 +21,13 @@ public class SalesVisualController : MonoBehaviour
         ThirdParty
     }
 
+    private enum ActionButtonMode
+    {
+        None,
+        OpenShop,
+        CloseShop
+    }
+
     [Header("客画像")]
     [SerializeField] private RectTransform housewifeImage;
     [SerializeField] private RectTransform studentImage1;
@@ -34,16 +41,19 @@ public class SalesVisualController : MonoBehaviour
     [SerializeField] private GameObject speechBubble;
     [Tooltip("主人公が話す時だけ表示する吹き出しの一部を設定します。")]
     [SerializeField] private GameObject protagonistBubblePart;
-    [Tooltip("お客など第三者が話す時だけ表示する吹き出しの一部を設定します。以前の Text Background Image に相当します。")]
+    [Tooltip("お客など第三者が話す時だけ表示する吹き出しの一部を設定します。")]
     [FormerlySerializedAs("textBackgroundImage")]
     [SerializeField] private GameObject thirdPartyBubblePart;
     [SerializeField] private TMP_Text purchaseText;
     [SerializeField] private TMP_Text priceText;
     [SerializeField] private TMP_Text commentText;
 
-    [Header("開店確認")]
-    [Tooltip("吹き出し内などに置く『開店する』ボタンを設定します。開店確認中だけ表示されます。")]
-    [SerializeField] private Button openShopConfirmButton;
+    [Header("開店・閉店ボタン")]
+    [Tooltip("開店確認と営業結果で共通利用するボタンを設定します。")]
+    [FormerlySerializedAs("openShopConfirmButton")]
+    [SerializeField] private Button shopActionButton;
+    [Tooltip("Shop Action Button の文字。『開店する』『閉店する』を自動で切り替えます。")]
+    [SerializeField] private TMP_Text shopActionButtonText;
     [Tooltip("常駐GameObjectに置いたCustomerUIを設定します。")]
     [SerializeField] private CustomerUI customerUI;
 
@@ -63,8 +73,15 @@ public class SalesVisualController : MonoBehaviour
     private RectTransform activeCustomer;
     private bool isPlaying;
     private BubbleSpeaker currentSpeaker = BubbleSpeaker.None;
+    private ActionButtonMode actionButtonMode = ActionButtonMode.None;
 
     public bool IsPlaying => isPlaying;
+
+    /// <summary>
+    /// 営業結果画面の「閉店する」が押された時に通知します。
+    /// DailyResultUI側で翌日処理につなげます。
+    /// </summary>
+    public event Action OnCloseShopRequested;
 
     private void Awake()
     {
@@ -74,24 +91,24 @@ public class SalesVisualController : MonoBehaviour
         if (speechBubble != null)
             speechBubble.SetActive(true);
 
-        if (openShopConfirmButton != null)
+        if (shopActionButton != null)
         {
-            openShopConfirmButton.onClick.AddListener(ConfirmOpenShop);
-            openShopConfirmButton.gameObject.SetActive(false);
+            shopActionButton.onClick.AddListener(HandleShopActionButton);
+            shopActionButton.gameObject.SetActive(false);
         }
 
         currentSpeaker = BubbleSpeaker.None;
+        actionButtonMode = ActionButtonMode.None;
         ClearCheckoutText();
     }
 
     private void OnDestroy()
     {
-        if (openShopConfirmButton != null)
-            openShopConfirmButton.onClick.RemoveListener(ConfirmOpenShop);
+        if (shopActionButton != null)
+            shopActionButton.onClick.RemoveListener(HandleShopActionButton);
     }
 
     /// <summary>
-    /// ShowOpenConfirmation（ショー・オープン・コンファメーション）
     /// DailyResultPanelへ入った直後、主人公の吹き出しとして「開店する？」を表示します。
     /// </summary>
     public void ShowOpenConfirmation()
@@ -104,9 +121,43 @@ public class SalesVisualController : MonoBehaviour
 
         currentSpeaker = BubbleSpeaker.Protagonist;
         SetPurchaseText("開店する？");
+        ShowActionButton(ActionButtonMode.OpenShop, "開店する");
+    }
 
-        if (openShopConfirmButton != null)
-            openShopConfirmButton.gameObject.SetActive(true);
+    /// <summary>
+    /// 営業終了後、主人公がその日の結果を吹き出しで報告します。
+    /// 同じボタンを「閉店する」に切り替えます。
+    /// </summary>
+    public void ShowBusinessResult(int totalSales, int purchaseCount, int totalVisitors)
+    {
+        HideAllCustomers();
+        ClearCheckoutText();
+
+        if (speechBubble != null)
+            speechBubble.SetActive(true);
+
+        currentSpeaker = BubbleSpeaker.Protagonist;
+
+        string resultMessage =
+            $"今日は{totalSales:N0}円の売上だったよ！\n" +
+            $"{totalVisitors}人来てくれて、そのうち{purchaseCount}人がお買い物してくれたよ。";
+
+        SetPurchaseText(resultMessage);
+        ShowActionButton(ActionButtonMode.CloseShop, "閉店する");
+    }
+
+    private void HandleShopActionButton()
+    {
+        switch (actionButtonMode)
+        {
+            case ActionButtonMode.OpenShop:
+                ConfirmOpenShop();
+                break;
+
+            case ActionButtonMode.CloseShop:
+                ConfirmCloseShop();
+                break;
+        }
     }
 
     private void ConfirmOpenShop()
@@ -117,12 +168,37 @@ public class SalesVisualController : MonoBehaviour
             return;
         }
 
-        if (openShopConfirmButton != null)
-            openShopConfirmButton.gameObject.SetActive(false);
-
+        HideActionButton();
         currentSpeaker = BubbleSpeaker.None;
         ClearCheckoutText();
         customerUI.OpenShop();
+    }
+
+    private void ConfirmCloseShop()
+    {
+        HideActionButton();
+        currentSpeaker = BubbleSpeaker.None;
+        ClearCheckoutText();
+        OnCloseShopRequested?.Invoke();
+    }
+
+    private void ShowActionButton(ActionButtonMode mode, string label)
+    {
+        actionButtonMode = mode;
+
+        if (shopActionButtonText != null)
+            shopActionButtonText.text = label;
+
+        if (shopActionButton != null)
+            shopActionButton.gameObject.SetActive(true);
+    }
+
+    private void HideActionButton()
+    {
+        actionButtonMode = ActionButtonMode.None;
+
+        if (shopActionButton != null)
+            shopActionButton.gameObject.SetActive(false);
     }
 
     /// <summary>
@@ -133,9 +209,7 @@ public class SalesVisualController : MonoBehaviour
         if (speechBubble != null)
             speechBubble.SetActive(true);
 
-        if (openShopConfirmButton != null)
-            openShopConfirmButton.gameObject.SetActive(false);
-
+        HideActionButton();
         currentSpeaker = BubbleSpeaker.None;
         ClearCheckoutText();
     }
@@ -173,8 +247,7 @@ public class SalesVisualController : MonoBehaviour
         if (speechBubble != null)
             speechBubble.SetActive(true);
 
-        if (openShopConfirmButton != null)
-            openShopConfirmButton.gameObject.SetActive(false);
+        HideActionButton();
 
         activeCustomer = GetCustomerImage(customer?.data?.customerType ?? CustomerType.Housewife);
         if (activeCustomer == null)
@@ -192,7 +265,6 @@ public class SalesVisualController : MonoBehaviour
 
         yield return MoveX(activeCustomer, counterPosition.x, enterDuration);
 
-        // ここからはお客など第三者側の発言・会計表示。
         currentSpeaker = BubbleSpeaker.ThirdParty;
         SetPurchaseText(BuildPurchaseText(result));
 
@@ -370,10 +442,6 @@ public class SalesVisualController : MonoBehaviour
         RefreshBubbleParts();
     }
 
-    /// <summary>
-    /// 話者とテキスト有無に応じて、吹き出しの方向用パーツを切り替えます。
-    /// 主人公発言時は主人公用のみ、客など第三者発言時は第三者用のみ表示します。
-    /// </summary>
     private void RefreshBubbleParts()
     {
         bool hasText =
