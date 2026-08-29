@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 仕入れ・在庫・値付け・花束・営業画面のタブ切り替えを管理します。
-/// 「開店」ボタンは専用CustomerPanelへ移動せず、そのまま営業を開始してDailyResultPanelを表示します。
+/// 「開店」タブを押すとDailyResultPanelへ移動し、吹き出し内の確認ボタンから実際の営業を開始します。
 /// </summary>
 public class ShopTabUI : MonoBehaviour
 {
@@ -27,6 +27,8 @@ public class ShopTabUI : MonoBehaviour
     [Header("営業")]
     [Tooltip("常駐GameObjectに置いたCustomerUIを設定します。")]
     [SerializeField] private CustomerUI customerUI;
+    [Tooltip("DailyResultPanel内のSalesVisualControllerを設定します。")]
+    [SerializeField] private SalesVisualController salesVisualController;
 
     [Header("タブボタン")]
     [SerializeField] private Button supplierTabButton;
@@ -133,8 +135,8 @@ public class ShopTabUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 開店ボタンを押したら、その場で営業開始。
-    /// 営業中または営業終了後はDailyResultPanelへ戻るボタンとして動きます。
+    /// 開店タブを押すと、まずDailyResultPanelへ移動して「開店する？」を表示します。
+    /// 営業中・営業終了後は同じ営業画面へ戻るだけです。
     /// </summary>
     private void HandleBusinessButton()
     {
@@ -144,25 +146,27 @@ public class ShopTabUI : MonoBehaviour
             return;
         }
 
-        if (customerUI.IsShopOpen || customerUI.HasFinishedToday)
-        {
-            SetTab(ShopTab.Business);
-            return;
-        }
+        SetTab(ShopTab.Business);
 
-        customerUI.OpenShop();
+        if (!customerUI.IsShopOpen && !customerUI.HasFinishedToday && salesVisualController != null)
+            salesVisualController.ShowOpenConfirmation();
     }
 
     /// <summary>
     /// CustomerUIから営業状態を受け取ります。
-    /// 開店時はDailyResultPanelへ移動し、営業終了後も結果確認のため同画面を維持します。
+    /// 開店時はDailyResultPanelを維持し、編集系タブをロックします。
     /// </summary>
     public void SetBusinessOpen(bool open)
     {
         isBusinessOpen = open;
 
         if (isBusinessOpen)
+        {
             SetTab(ShopTab.Business);
+
+            if (salesVisualController != null)
+                salesVisualController.PrepareForBusiness();
+        }
 
         RefreshTabInteractable();
     }
