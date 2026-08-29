@@ -4,6 +4,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 1日の営業結果表示と翌日への進行を管理します。
+/// 営業終了時は主人公が吹き出しで結果を報告し、共通ボタンの「閉店する」から翌日へ進みます。
 /// </summary>
 public class DailyResultUI : MonoBehaviour
 {
@@ -14,8 +15,9 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private BouquetSystem bouquetSystem;
     [SerializeField] private SupplierUI supplierUI;
     [SerializeField] private ShopTabUI shopTabUI;
+    [SerializeField] private SalesVisualController salesVisualController;
 
-    [Header("結果画面")]
+    [Header("旧結果表示（任意・未使用でもOK）")]
     [SerializeField] private GameObject resultPanel;
     [SerializeField] private TMP_Text dateText;
     [SerializeField] private TMP_Text visitorsText;
@@ -25,6 +27,8 @@ public class DailyResultUI : MonoBehaviour
 
     private void Awake()
     {
+        // 旧NextDayButtonが残っている場合も動作は維持します。
+        // 新しい営業画面ではSalesVisualControllerの「閉店する」ボタンを使うのが基本です。
         if (nextDayButton != null)
             nextDayButton.onClick.AddListener(GoToNextDay);
     }
@@ -33,12 +37,18 @@ public class DailyResultUI : MonoBehaviour
     {
         if (customerUI != null)
             customerUI.OnBusinessFinished += ShowResult;
+
+        if (salesVisualController != null)
+            salesVisualController.OnCloseShopRequested += GoToNextDay;
     }
 
     private void OnDisable()
     {
         if (customerUI != null)
             customerUI.OnBusinessFinished -= ShowResult;
+
+        if (salesVisualController != null)
+            salesVisualController.OnCloseShopRequested -= GoToNextDay;
     }
 
     private void OnDestroy()
@@ -53,10 +63,15 @@ public class DailyResultUI : MonoBehaviour
             resultPanel.SetActive(false);
     }
 
+    /// <summary>
+    /// 営業終了後のリザルトを表示します。
+    /// 主人公がその日の売上・来客数・購入者数を吹き出しで報告します。
+    /// </summary>
     public void ShowResult()
     {
         if (customerUI == null || shopManager == null) return;
 
+        // 旧結果UIを残している場合は値だけ更新します。
         if (dateText != null)
             dateText.text = $"{shopManager.GameYear}年目 {shopManager.CurrentMonth}月{shopManager.CurrentDay}日の営業結果";
 
@@ -69,8 +84,19 @@ public class DailyResultUI : MonoBehaviour
         if (salesText != null)
             salesText.text = $"売上：{customerUI.TotalSales:N0}円";
 
-        if (resultPanel != null)
+        // 新しい営業画面では主人公の吹き出しがメインのリザルト表示。
+        if (salesVisualController != null)
+        {
+            salesVisualController.ShowBusinessResult(
+                customerUI.TotalSales,
+                customerUI.PurchaseCount,
+                customerUI.TotalVisitors);
+        }
+        else if (resultPanel != null)
+        {
+            // SalesVisualController未設定時だけ旧結果Panelをフォールバック表示。
             resultPanel.SetActive(true);
+        }
     }
 
     /// <summary>
