@@ -25,6 +25,8 @@ public class SalesVisualController : MonoBehaviour
 
     [Header("会計表示")]
     [SerializeField] private GameObject speechBubble;
+    [Tooltip("SpeechBubble内の Image (1) を設定します。Purchase/Price/Comment のいずれかに文字がある時だけ表示します。")]
+    [SerializeField] private GameObject textBackgroundImage;
     [SerializeField] private TMP_Text purchaseText;
     [SerializeField] private TMP_Text priceText;
     [SerializeField] private TMP_Text commentText;
@@ -88,8 +90,7 @@ public class SalesVisualController : MonoBehaviour
         if (speechBubble != null)
             speechBubble.SetActive(true);
 
-        if (purchaseText != null)
-            purchaseText.text = "開店する？";
+        SetPurchaseText("開店する？");
 
         if (openShopConfirmButton != null)
             openShopConfirmButton.gameObject.SetActive(true);
@@ -183,22 +184,19 @@ public class SalesVisualController : MonoBehaviour
 
         yield return MoveX(activeCustomer, counterPosition.x, enterDuration);
 
-        if (purchaseText != null)
-            purchaseText.text = BuildPurchaseText(result);
+        SetPurchaseText(BuildPurchaseText(result));
 
         if (purchaseDisplayDelay > 0f)
             yield return new WaitForSeconds(purchaseDisplayDelay);
 
-        if (priceText != null)
-            priceText.text = result != null && result.purchased
-                ? $"{result.salePrice:N0}円"
-                : string.Empty;
+        SetPriceText(result != null && result.purchased
+            ? $"{result.salePrice:N0}円"
+            : string.Empty);
 
         if (priceDisplayDelay > 0f)
             yield return new WaitForSeconds(priceDisplayDelay);
 
-        if (commentText != null)
-            commentText.text = BuildComment(result);
+        SetCommentText(BuildComment(result));
 
         if (commentDisplayDuration > 0f)
             yield return new WaitForSeconds(commentDisplayDuration);
@@ -323,6 +321,30 @@ public class SalesVisualController : MonoBehaviour
         SetActive(officeWorkerImage, false);
     }
 
+    private void SetPurchaseText(string value)
+    {
+        if (purchaseText != null)
+            purchaseText.text = value ?? string.Empty;
+
+        RefreshTextBackground();
+    }
+
+    private void SetPriceText(string value)
+    {
+        if (priceText != null)
+            priceText.text = value ?? string.Empty;
+
+        RefreshTextBackground();
+    }
+
+    private void SetCommentText(string value)
+    {
+        if (commentText != null)
+            commentText.text = value ?? string.Empty;
+
+        RefreshTextBackground();
+    }
+
     private void ClearCheckoutText()
     {
         if (purchaseText != null)
@@ -333,6 +355,24 @@ public class SalesVisualController : MonoBehaviour
 
         if (commentText != null)
             commentText.text = string.Empty;
+
+        RefreshTextBackground();
+    }
+
+    /// <summary>
+    /// PurchaseText / PriceText / CommentText のどれかに文字がある時だけ
+    /// SpeechBubble内の補助背景 Image (1) を表示します。
+    /// </summary>
+    private void RefreshTextBackground()
+    {
+        if (textBackgroundImage == null) return;
+
+        bool hasText =
+            (purchaseText != null && !string.IsNullOrWhiteSpace(purchaseText.text)) ||
+            (priceText != null && !string.IsNullOrWhiteSpace(priceText.text)) ||
+            (commentText != null && !string.IsNullOrWhiteSpace(commentText.text));
+
+        textBackgroundImage.SetActive(hasText);
     }
 
     private static void SetActive(RectTransform target, bool active)
