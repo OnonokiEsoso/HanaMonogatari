@@ -10,10 +10,17 @@ using UnityEngine.UI;
 /// 営業画面の見た目を担当します。
 /// 客を右側からレジ前へ移動させ、購入内容・金額・一言を表示したあと右側へ退店させます。
 /// 各客画像のInspector上の配置位置を、その客固有のレジ前停止位置として使用します。
-/// 吹き出し本体は常時表示し、開店前・会計中などで中身だけ切り替えます。
+/// 吹き出し本体は常時表示し、話者に応じて主人公用・第三者用の吹き出しパーツを切り替えます。
 /// </summary>
 public class SalesVisualController : MonoBehaviour
 {
+    private enum BubbleSpeaker
+    {
+        None,
+        Protagonist,
+        ThirdParty
+    }
+
     [Header("客画像")]
     [SerializeField] private RectTransform housewifeImage;
     [SerializeField] private RectTransform studentImage1;
@@ -25,8 +32,11 @@ public class SalesVisualController : MonoBehaviour
 
     [Header("会計表示")]
     [SerializeField] private GameObject speechBubble;
-    [Tooltip("SpeechBubble内の Image (1) を設定します。Purchase/Price/Comment のいずれかに文字がある時だけ表示します。")]
-    [SerializeField] private GameObject textBackgroundImage;
+    [Tooltip("主人公が話す時だけ表示する吹き出しの一部を設定します。")]
+    [SerializeField] private GameObject protagonistBubblePart;
+    [Tooltip("お客など第三者が話す時だけ表示する吹き出しの一部を設定します。以前の Text Background Image に相当します。")]
+    [FormerlySerializedAs("textBackgroundImage")]
+    [SerializeField] private GameObject thirdPartyBubblePart;
     [SerializeField] private TMP_Text purchaseText;
     [SerializeField] private TMP_Text priceText;
     [SerializeField] private TMP_Text commentText;
@@ -52,6 +62,7 @@ public class SalesVisualController : MonoBehaviour
     private readonly Dictionary<RectTransform, Vector2> customerCounterPositions = new();
     private RectTransform activeCustomer;
     private bool isPlaying;
+    private BubbleSpeaker currentSpeaker = BubbleSpeaker.None;
 
     public bool IsPlaying => isPlaying;
 
@@ -69,6 +80,7 @@ public class SalesVisualController : MonoBehaviour
             openShopConfirmButton.gameObject.SetActive(false);
         }
 
+        currentSpeaker = BubbleSpeaker.None;
         ClearCheckoutText();
     }
 
@@ -80,7 +92,7 @@ public class SalesVisualController : MonoBehaviour
 
     /// <summary>
     /// ShowOpenConfirmation（ショー・オープン・コンファメーション）
-    /// DailyResultPanelへ入った直後に「開店する？」と確認を表示します。
+    /// DailyResultPanelへ入った直後、主人公の吹き出しとして「開店する？」を表示します。
     /// </summary>
     public void ShowOpenConfirmation()
     {
@@ -90,6 +102,7 @@ public class SalesVisualController : MonoBehaviour
         if (speechBubble != null)
             speechBubble.SetActive(true);
 
+        currentSpeaker = BubbleSpeaker.Protagonist;
         SetPurchaseText("開店する？");
 
         if (openShopConfirmButton != null)
@@ -107,12 +120,13 @@ public class SalesVisualController : MonoBehaviour
         if (openShopConfirmButton != null)
             openShopConfirmButton.gameObject.SetActive(false);
 
+        currentSpeaker = BubbleSpeaker.None;
         ClearCheckoutText();
         customerUI.OpenShop();
     }
 
     /// <summary>
-    /// 営業開始時に確認表示を消し、常時表示の吹き出しだけ残します。
+    /// 営業開始時に確認表示を消し、常時表示の吹き出し本体だけ残します。
     /// </summary>
     public void PrepareForBusiness()
     {
@@ -122,13 +136,10 @@ public class SalesVisualController : MonoBehaviour
         if (openShopConfirmButton != null)
             openShopConfirmButton.gameObject.SetActive(false);
 
+        currentSpeaker = BubbleSpeaker.None;
         ClearCheckoutText();
     }
 
-    /// <summary>
-    /// CacheCustomerCounterPositions（キャッシュ・カスタマー・カウンター・ポジションズ）
-    /// Unity上で配置した各客画像の位置を、その客専用のレジ前停止位置として記憶します。
-    /// </summary>
     private void CacheCustomerCounterPositions()
     {
         customerCounterPositions.Clear();
@@ -147,10 +158,6 @@ public class SalesVisualController : MonoBehaviour
             customerCounterPositions[target] = target.anchoredPosition;
     }
 
-    /// <summary>
-    /// PlayCustomerSequence（プレイ・カスタマー・シークエンス）
-    /// 客の入店→会計→一言→退店を順番に再生します。
-    /// </summary>
     public IEnumerator PlayCustomerSequence(
         CustomerSystem.VisitingCustomer customer,
         CustomerPurchaseSystem.PurchaseResult result)
@@ -159,6 +166,7 @@ public class SalesVisualController : MonoBehaviour
             yield break;
 
         isPlaying = true;
+        currentSpeaker = BubbleSpeaker.None;
         ClearCheckoutText();
         HideAllCustomers();
 
@@ -184,6 +192,8 @@ public class SalesVisualController : MonoBehaviour
 
         yield return MoveX(activeCustomer, counterPosition.x, enterDuration);
 
+        // ここからはお客など第三者側の発言・会計表示。
+        currentSpeaker = BubbleSpeaker.ThirdParty;
         SetPurchaseText(BuildPurchaseText(result));
 
         if (purchaseDisplayDelay > 0f)
@@ -201,6 +211,7 @@ public class SalesVisualController : MonoBehaviour
         if (commentDisplayDuration > 0f)
             yield return new WaitForSeconds(commentDisplayDuration);
 
+        currentSpeaker = BubbleSpeaker.None;
         ClearCheckoutText();
         yield return MoveX(activeCustomer, outsideX, exitDuration);
 
@@ -326,7 +337,7 @@ public class SalesVisualController : MonoBehaviour
         if (purchaseText != null)
             purchaseText.text = value ?? string.Empty;
 
-        RefreshTextBackground();
+        RefreshBubbleParts();
     }
 
     private void SetPriceText(string value)
@@ -334,7 +345,7 @@ public class SalesVisualController : MonoBehaviour
         if (priceText != null)
             priceText.text = value ?? string.Empty;
 
-        RefreshTextBackground();
+        RefreshBubbleParts();
     }
 
     private void SetCommentText(string value)
@@ -342,7 +353,7 @@ public class SalesVisualController : MonoBehaviour
         if (commentText != null)
             commentText.text = value ?? string.Empty;
 
-        RefreshTextBackground();
+        RefreshBubbleParts();
     }
 
     private void ClearCheckoutText()
@@ -356,23 +367,25 @@ public class SalesVisualController : MonoBehaviour
         if (commentText != null)
             commentText.text = string.Empty;
 
-        RefreshTextBackground();
+        RefreshBubbleParts();
     }
 
     /// <summary>
-    /// PurchaseText / PriceText / CommentText のどれかに文字がある時だけ
-    /// SpeechBubble内の補助背景 Image (1) を表示します。
+    /// 話者とテキスト有無に応じて、吹き出しの方向用パーツを切り替えます。
+    /// 主人公発言時は主人公用のみ、客など第三者発言時は第三者用のみ表示します。
     /// </summary>
-    private void RefreshTextBackground()
+    private void RefreshBubbleParts()
     {
-        if (textBackgroundImage == null) return;
-
         bool hasText =
             (purchaseText != null && !string.IsNullOrWhiteSpace(purchaseText.text)) ||
             (priceText != null && !string.IsNullOrWhiteSpace(priceText.text)) ||
             (commentText != null && !string.IsNullOrWhiteSpace(commentText.text));
 
-        textBackgroundImage.SetActive(hasText);
+        if (protagonistBubblePart != null)
+            protagonistBubblePart.SetActive(hasText && currentSpeaker == BubbleSpeaker.Protagonist);
+
+        if (thirdPartyBubblePart != null)
+            thirdPartyBubblePart.SetActive(hasText && currentSpeaker == BubbleSpeaker.ThirdParty);
     }
 
     private static void SetActive(RectTransform target, bool active)
