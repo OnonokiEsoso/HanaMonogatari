@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -6,6 +7,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 開店から、その日の客を先客順に処理する簡易UIです。
+/// SalesVisualControllerが設定されている場合は、客の入店→会計→退店演出を再生します。
 /// </summary>
 public class CustomerUI : MonoBehaviour
 {
@@ -13,6 +15,7 @@ public class CustomerUI : MonoBehaviour
     [SerializeField] private CustomerSystem customerSystem;
     [SerializeField] private CustomerPurchaseSystem purchaseSystem;
     [SerializeField] private ShopTabUI shopTabUI;
+    [SerializeField] private SalesVisualController salesVisualController;
 
     [Header("ボタン")]
     [SerializeField] private Button openShopButton;
@@ -30,6 +33,7 @@ public class CustomerUI : MonoBehaviour
     private int totalSales;
     private bool isShopOpen;
     private bool hasFinishedToday;
+    private bool isProcessingCustomer;
 
     public bool IsShopOpen => isShopOpen;
     public bool HasFinishedToday => hasFinishedToday;
@@ -66,7 +70,7 @@ public class CustomerUI : MonoBehaviour
 
     public void OpenShop()
     {
-        if (isShopOpen || hasFinishedToday) return;
+        if (isShopOpen || hasFinishedToday || isProcessingCustomer) return;
         if (customerSystem == null) return;
 
         customerSystem.GenerateTodayCustomers();
@@ -91,8 +95,14 @@ public class CustomerUI : MonoBehaviour
         RefreshState();
     }
 
+    /// <summary>
+    /// ProcessNextCustomer（プロセス・ネクスト・カスタマー）
+    /// 次の客を1人だけ処理します。営業演出中の連打は無効です。
+    /// </summary>
     public void ProcessNextCustomer()
     {
+        if (isProcessingCustomer) return;
+
         if (!isShopOpen)
         {
             if (resultText != null)
@@ -108,12 +118,21 @@ public class CustomerUI : MonoBehaviour
             return;
         }
 
+        StartCoroutine(ProcessNextCustomerRoutine());
+    }
+
+    private IEnumerator ProcessNextCustomerRoutine()
+    {
+        isProcessingCustomer = true;
+        RefreshState();
+
         CustomerSystem.VisitingCustomer customer = waitingCustomers.Dequeue();
         processedVisitors++;
 
+        CustomerPurchaseSystem.PurchaseResult result = null;
         if (purchaseSystem != null)
         {
-            CustomerPurchaseSystem.PurchaseResult result = purchaseSystem.TryPurchase(customer);
+            result = purchaseSystem.TryPurchase(customer);
             if (result != null && result.purchased)
             {
                 purchaseCount++;
@@ -123,6 +142,13 @@ public class CustomerUI : MonoBehaviour
             if (resultText != null)
                 resultText.text = result != null ? result.message : "購入処理に失敗しました";
         }
+
+        RefreshState();
+
+        if (salesVisualController != null)
+            yield return salesVisualController.PlayCustomerSequence(customer, result);
+
+        isProcessingCustomer = false;
 
         if (waitingCustomers.Count == 0)
             FinishBusinessDay();
@@ -146,6 +172,8 @@ public class CustomerUI : MonoBehaviour
 
     public void PrepareNextDay()
     {
+        StopAllCoroutines();
+        isProcessingCustomer = false;
         waitingCustomers.Clear();
         totalVisitors = 0;
         processedVisitors = 0;
@@ -153,6 +181,9 @@ public class CustomerUI : MonoBehaviour
         totalSales = 0;
         hasFinishedToday = false;
         SetShopOpen(false);
+
+        if (salesVisualController != null)
+            salesVisualController.HideAllCustomers();
 
         if (resultText != null)
             resultText.text = "開店前です";
@@ -184,14 +215,16 @@ public class CustomerUI : MonoBehaviour
             }
             else
             {
-                currentCustomerText.text = "待っているお客はいません";
+                currentCustomerText.text = isProcessingCustomer
+                    ? "ただいま会計中です"
+                    : "待っているお客はいません";
             }
         }
 
         if (nextCustomerButton != null)
-            nextCustomerButton.interactable = isShopOpen && waitingCustomers.Count > 0;
+            nextCustomerButton.interactable = isShopOpen && waitingCustomers.Count > 0 && !isProcessingCustomer;
 
         if (openShopButton != null)
-            openShopButton.interactable = !isShopOpen && !hasFinishedToday;
+            openShopButton.interactable = !isShopOpen && !hasFinishedToday && !isProcessingCustomer;
     }
 }
