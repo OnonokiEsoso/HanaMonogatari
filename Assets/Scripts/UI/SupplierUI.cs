@@ -13,6 +13,8 @@ public class SupplierUI : MonoBehaviour
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private SupplierSystem supplierSystem;
     [SerializeField] private InventorySystem inventorySystem;
+    [Tooltip("仕入先キャラクターの吹き出し表示を担当するControllerを設定します。")]
+    [SerializeField] private SupplierCommentController supplierCommentController;
 
     [Header("一覧表示")]
     [SerializeField] private Transform itemContainer;
@@ -144,6 +146,10 @@ public class SupplierUI : MonoBehaviour
         inventorySystem.AddFlower(arrival.flower, quantity);
 
         Debug.Log($"{arrival.flower.flowerName}（{arrival.flower.color}）を{quantity}個仕入れました。合計{totalPrice:N0}円");
+
+        // 購入に成功した花について、仕入先キャラクターが一言しゃべります。
+        if (supplierCommentController != null)
+            supplierCommentController.ShowFlowerComment(arrival.flower);
 
         RefreshHeader();
 
