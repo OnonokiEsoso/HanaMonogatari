@@ -3,12 +3,12 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 /// <summary>
 /// 開店から、その日の客を先客順に自動処理する営業UIです。
-/// SalesVisualControllerが設定されている場合は、客の入店→会計→退店演出を再生し、
-/// 少し間を空けて次の客へ進みます。
+/// ShopTabUIの「開店」ボタンからOpenShopを直接呼び出し、
+/// SalesVisualControllerの演出を1人ずつ自動再生します。
+/// このコンポーネントは営業画面の切り替えで非表示にならない常駐GameObjectに置いてください。
 /// </summary>
 public class CustomerUI : MonoBehaviour
 {
@@ -18,11 +18,7 @@ public class CustomerUI : MonoBehaviour
     [SerializeField] private ShopTabUI shopTabUI;
     [SerializeField] private SalesVisualController salesVisualController;
 
-    [Header("ボタン")]
-    [SerializeField] private Button openShopButton;
-    [SerializeField] private Button nextCustomerButton;
-
-    [Header("表示")]
+    [Header("表示（任意）")]
     [SerializeField] private TMP_Text visitorCountText;
     [SerializeField] private TMP_Text currentCustomerText;
     [SerializeField] private TMP_Text resultText;
@@ -52,22 +48,6 @@ public class CustomerUI : MonoBehaviour
 
     public event Action OnBusinessFinished;
 
-    private void Awake()
-    {
-        if (openShopButton != null)
-            openShopButton.onClick.AddListener(OpenShop);
-
-        // 営業は自動進行に変更したため、旧「次のお客」ボタンは非表示にします。
-        if (nextCustomerButton != null)
-            nextCustomerButton.gameObject.SetActive(false);
-    }
-
-    private void OnDestroy()
-    {
-        if (openShopButton != null)
-            openShopButton.onClick.RemoveListener(OpenShop);
-    }
-
     private void Start()
     {
         SetShopOpen(false);
@@ -76,6 +56,7 @@ public class CustomerUI : MonoBehaviour
 
     /// <summary>
     /// OpenShop（オープン・ショップ）＝開店する。
+    /// 上部の「開店」タブから直接呼ばれます。
     /// 今日の来客を生成したあと、全員を先客順に自動で処理します。
     /// </summary>
     public void OpenShop()
@@ -94,6 +75,8 @@ public class CustomerUI : MonoBehaviour
         purchaseCount = 0;
         totalSales = 0;
 
+        // 先にDailyResultPanelへ切り替える。
+        // CustomerUI自身は常駐GameObjectに置くため、この切り替えで非アクティブになりません。
         SetShopOpen(true);
 
         if (resultText != null)
@@ -110,10 +93,6 @@ public class CustomerUI : MonoBehaviour
         businessRoutine = StartCoroutine(ProcessAllCustomersRoutine());
     }
 
-    /// <summary>
-    /// ProcessAllCustomersRoutine（プロセス・オール・カスタマーズ・ルーチン）
-    /// 開店中のお客を1人ずつ、演出終了を待ちながら自動で流します。
-    /// </summary>
     private IEnumerator ProcessAllCustomersRoutine()
     {
         if (firstCustomerDelay > 0f)
@@ -133,10 +112,6 @@ public class CustomerUI : MonoBehaviour
             FinishBusinessDay();
     }
 
-    /// <summary>
-    /// ProcessOneCustomerRoutine（プロセス・ワン・カスタマー・ルーチン）
-    /// 1人分の購入処理と営業演出を完了させます。
-    /// </summary>
     private IEnumerator ProcessOneCustomerRoutine()
     {
         if (waitingCustomers.Count == 0)
@@ -170,8 +145,7 @@ public class CustomerUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 旧ボタンなど外部から呼ばれても、自動営業中は二重処理しません。
-    /// デバッグ用に残しています。
+    /// デバッグ用。通常営業では自動処理を使用します。
     /// </summary>
     public void ProcessNextCustomer()
     {
@@ -249,8 +223,5 @@ public class CustomerUI : MonoBehaviour
                 currentCustomerText.text = "待っているお客はいません";
             }
         }
-
-        if (openShopButton != null)
-            openShopButton.interactable = !isShopOpen && !hasFinishedToday && businessRoutine == null;
     }
 }
