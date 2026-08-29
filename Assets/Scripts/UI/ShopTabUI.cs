@@ -4,6 +4,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 仕入れ・在庫・値付け・花束・営業画面のタブ切り替えを管理します。
 /// 営業中は仕入れ・値付け・花束タブを使用できません。
+/// 開店すると、営業演出を配置しているDailyResultPanelへ自動的に切り替えます。
 /// </summary>
 public class ShopTabUI : MonoBehaviour
 {
@@ -13,7 +14,8 @@ public class ShopTabUI : MonoBehaviour
         Inventory,
         Pricing,
         Bouquet,
-        Customer
+        Customer,
+        Business
     }
 
     [Header("画面")]
@@ -22,6 +24,8 @@ public class ShopTabUI : MonoBehaviour
     [SerializeField] private GameObject pricingPanel;
     [SerializeField] private GameObject bouquetPanel;
     [SerializeField] private GameObject customerPanel;
+    [Tooltip("営業演出と営業結果を表示するDailyResultPanelを設定します。")]
+    [SerializeField] private GameObject dailyResultPanel;
 
     [Header("タブボタン")]
     [SerializeField] private Button supplierTabButton;
@@ -129,24 +133,27 @@ public class ShopTabUI : MonoBehaviour
 
     public void ShowCustomerTab()
     {
+        // 営業中に開店タブを押した場合も、営業演出画面へ戻します。
+        if (isBusinessOpen)
+        {
+            SetTab(ShopTab.Business);
+            return;
+        }
+
         SetTab(ShopTab.Customer);
     }
 
     /// <summary>
     /// SetBusinessOpen（セット・ビジネス・オープン）
-    /// Set＝設定する、Business Open＝営業中。
-    /// 開店中は仕入れ・値付け・花束タブを無効化します。
+    /// 開店した瞬間にDailyResultPanelへ切り替え、営業アニメーションを見せます。
+    /// 営業終了後も結果確認のため、その画面を維持します。
     /// </summary>
     public void SetBusinessOpen(bool open)
     {
         isBusinessOpen = open;
 
-        // 開店時に編集系画面にいた場合は営業画面へ移動する。
-        if (isBusinessOpen &&
-            (currentTab == ShopTab.Supplier || currentTab == ShopTab.Pricing || currentTab == ShopTab.Bouquet))
-        {
-            SetTab(ShopTab.Customer);
-        }
+        if (isBusinessOpen)
+            SetTab(ShopTab.Business);
 
         RefreshTabInteractable();
     }
@@ -169,6 +176,9 @@ public class ShopTabUI : MonoBehaviour
 
         if (customerPanel != null)
             customerPanel.SetActive(selectedTab == ShopTab.Customer);
+
+        if (dailyResultPanel != null)
+            dailyResultPanel.SetActive(selectedTab == ShopTab.Business);
 
         UpdateTabColors(selectedTab);
     }
@@ -205,8 +215,11 @@ public class ShopTabUI : MonoBehaviour
         SetButtonColor(bouquetTabButton,
             selectedTab == ShopTab.Bouquet ? bouquetSelectedColor : bouquetUnselectedColor);
 
+        // 営業演出中は「開店」タブを選択中として見せます。
         SetButtonColor(customerTabButton,
-            selectedTab == ShopTab.Customer ? customerSelectedColor : customerUnselectedColor);
+            selectedTab == ShopTab.Customer || selectedTab == ShopTab.Business
+                ? customerSelectedColor
+                : customerUnselectedColor);
     }
 
     private static void SetButtonColor(Button button, Color color)
