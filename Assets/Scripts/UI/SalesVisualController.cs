@@ -1,11 +1,14 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 営業画面の見た目を担当します。
 /// 客を右側からレジ前へ移動させ、購入内容・金額・一言を表示したあと右側へ退店させます。
+/// 各客画像のInspector上の配置位置を、その客固有のレジ前停止位置として使用します。
 /// </summary>
 public class SalesVisualController : MonoBehaviour
 {
@@ -25,10 +28,9 @@ public class SalesVisualController : MonoBehaviour
     [SerializeField] private TMP_Text commentText;
 
     [Header("移動位置")]
-    [Tooltip("レジ前に停止するX座標。客画像ごとの現在Y座標はそのまま使います。")]
-    [SerializeField] private float counterX = 120f;
-    [Tooltip("画面右外のX座標。入店開始位置と退店先に使います。")]
-    [SerializeField] private float outsideRightX = 850f;
+    [Tooltip("各客画像の現在位置から、右へどれだけ離れた場所を入店開始・退店位置にするか。レジ前停止位置は各画像のInspector上の現在位置をそのまま使います。")]
+    [FormerlySerializedAs("outsideRightX")]
+    [SerializeField] private float outsideRightOffset = 850f;
 
     [Header("演出時間")]
     [Min(0.05f)] [SerializeField] private float enterDuration = 0.65f;
@@ -37,6 +39,7 @@ public class SalesVisualController : MonoBehaviour
     [Min(0f)] [SerializeField] private float commentDisplayDuration = 1.1f;
     [Min(0.05f)] [SerializeField] private float exitDuration = 0.65f;
 
+    private readonly Dictionary<RectTransform, Vector2> customerCounterPositions = new();
     private RectTransform activeCustomer;
     private bool isPlaying;
 
@@ -44,8 +47,31 @@ public class SalesVisualController : MonoBehaviour
 
     private void Awake()
     {
+        CacheCustomerCounterPositions();
         HideAllCustomers();
         ClearCheckoutDisplay();
+    }
+
+    /// <summary>
+    /// CacheCustomerCounterPositions（キャッシュ・カスタマー・カウンター・ポジションズ）
+    /// Unity上で配置した各客画像の位置を、その客専用のレジ前停止位置として記憶します。
+    /// </summary>
+    private void CacheCustomerCounterPositions()
+    {
+        customerCounterPositions.Clear();
+        CachePosition(housewifeImage);
+        CachePosition(studentImage1);
+        CachePosition(studentImage2);
+        CachePosition(grandmotherImage);
+        CachePosition(wealthyImage);
+        CachePosition(childImage);
+        CachePosition(officeWorkerImage);
+    }
+
+    private void CachePosition(RectTransform target)
+    {
+        if (target != null)
+            customerCounterPositions[target] = target.anchoredPosition;
     }
 
     /// <summary>
@@ -71,11 +97,14 @@ public class SalesVisualController : MonoBehaviour
             yield break;
         }
 
-        Vector2 current = activeCustomer.anchoredPosition;
-        activeCustomer.anchoredPosition = new Vector2(outsideRightX, current.y);
+        // 各画像をScene上で配置した位置が、その客固有のレジ前停止位置。
+        Vector2 counterPosition = GetCounterPosition(activeCustomer);
+        float outsideX = counterPosition.x + Mathf.Abs(outsideRightOffset);
+
+        activeCustomer.anchoredPosition = new Vector2(outsideX, counterPosition.y);
         activeCustomer.gameObject.SetActive(true);
 
-        yield return MoveX(activeCustomer, counterX, enterDuration);
+        yield return MoveX(activeCustomer, counterPosition.x, enterDuration);
 
         if (speechBubble != null)
             speechBubble.SetActive(true);
@@ -101,11 +130,21 @@ public class SalesVisualController : MonoBehaviour
             yield return new WaitForSeconds(commentDisplayDuration);
 
         ClearCheckoutDisplay();
-        yield return MoveX(activeCustomer, outsideRightX, exitDuration);
+        yield return MoveX(activeCustomer, outsideX, exitDuration);
 
+        // 次回も同じ客固有位置を基準にできるよう、非表示にする前に元の位置へ戻します。
+        activeCustomer.anchoredPosition = counterPosition;
         activeCustomer.gameObject.SetActive(false);
         activeCustomer = null;
         isPlaying = false;
+    }
+
+    private Vector2 GetCounterPosition(RectTransform target)
+    {
+        if (target != null && customerCounterPositions.TryGetValue(target, out Vector2 position))
+            return position;
+
+        return target != null ? target.anchoredPosition : Vector2.zero;
     }
 
     private IEnumerator MoveX(RectTransform target, float destinationX, float duration)
