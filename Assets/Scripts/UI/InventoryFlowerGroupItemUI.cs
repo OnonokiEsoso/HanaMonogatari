@@ -13,6 +13,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
 {
     [Header("ヘッダー")]
     [SerializeField] private Button toggleButton;
+    [SerializeField] private Image flowerImage;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text colorText;
     [SerializeField] private TMP_Text quantityText;
@@ -75,7 +76,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
     /// <summary>
     /// BindLotDetail（バインド・ロット・ディテール）
     /// 鮮度別ロットを、同じInventoryFlowerGroupItemの見た目で1行表示します。
-    /// 元の花名だけ空欄にし、この行自身は展開しません。
+    /// 元の花名と花画像は空欄にし、この行自身は展開しません。
     /// </summary>
     public void BindLotDetail(InventorySystem.InventoryBatch batch)
     {
@@ -114,6 +115,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        SetFlowerImage(component.flower, true);
         SetHeaderTexts(
             component.flower.flowerName,
             component.flower.color,
@@ -136,6 +138,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        SetFlowerImage(flower, true);
 
         int totalQuantity = batches.Sum(b => b.quantity);
         int oldestFreshness = batches.Min(b => b.remainingFreshnessDays);
@@ -162,6 +165,7 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        SetFlowerImage(batch.flower, !hideName);
         SetHeaderTexts(
             hideName ? string.Empty : batch.flower.flowerName,
             batch.flower.color,
@@ -170,6 +174,17 @@ public class InventoryFlowerGroupItemUI : MonoBehaviour
             showPurchasePrice ? $"{batch.flower.purchasePrice:N0}円" : string.Empty);
 
         SetFixedDetailHeight();
+    }
+
+    private void SetFlowerImage(FlowerData flowerData, bool visible)
+    {
+        if (flowerImage == null) return;
+
+        Sprite sprite = visible ? FlowerSpriteLoader.GetSprite(flowerData) : null;
+        flowerImage.sprite = sprite;
+        flowerImage.gameObject.SetActive(visible && sprite != null);
+        flowerImage.preserveAspect = true;
+        flowerImage.raycastTarget = false;
     }
 
     private void SetHeaderTexts(string displayName, string color, int quantity, int freshnessDays, string price)
