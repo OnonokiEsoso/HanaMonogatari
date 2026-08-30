@@ -10,6 +10,7 @@ using UnityEngine.UI;
 public class PricingItemUI : MonoBehaviour
 {
     [Header("表示")]
+    [SerializeField] private Image flowerImage;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text colorText;
     [SerializeField] private TMP_Text stockText;
@@ -81,6 +82,8 @@ public class PricingItemUI : MonoBehaviour
     {
         if (bouquet != null && bouquetSystem != null)
         {
+            RefreshFlowerImage(null);
+
             int recommendedPrice = bouquetSystem.GetRecommendedPrice(bouquet);
 
             if (nameText != null)
@@ -107,7 +110,13 @@ public class PricingItemUI : MonoBehaviour
             return;
         }
 
-        if (flower == null || pricingSystem == null) return;
+        if (flower == null || pricingSystem == null)
+        {
+            RefreshFlowerImage(null);
+            return;
+        }
+
+        RefreshFlowerImage(flower);
 
         int flowerRecommendedPrice = pricingSystem.GetRecommendedPrice(flower);
         int currentPrice = pricingSystem.GetSalePrice(flower);
@@ -135,6 +144,17 @@ public class PricingItemUI : MonoBehaviour
                 ? currentPrice.ToString()
                 : string.Empty;
         }
+    }
+
+    private void RefreshFlowerImage(FlowerData targetFlower)
+    {
+        if (flowerImage == null) return;
+
+        Sprite sprite = FlowerSpriteLoader.GetSprite(targetFlower);
+        flowerImage.sprite = sprite;
+        flowerImage.preserveAspect = true;
+        flowerImage.raycastTarget = false;
+        flowerImage.gameObject.SetActive(sprite != null);
     }
 
     private void ApplyPrice()
