@@ -9,6 +9,7 @@ using UnityEngine.UI;
 public class BouquetIngredientItemUI : MonoBehaviour
 {
     [Header("表示")]
+    [SerializeField] private Image flowerImage;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text colorText;
     [SerializeField] private TMP_Text stockText;
@@ -87,6 +88,8 @@ public class BouquetIngredientItemUI : MonoBehaviour
 
     private void Refresh()
     {
+        RefreshFlowerImage();
+
         if (nameText != null)
             nameText.text = flower != null ? flower.flowerName : "-";
 
@@ -104,5 +107,16 @@ public class BouquetIngredientItemUI : MonoBehaviour
 
         if (plusButton != null)
             plusButton.interactable = selectedQuantity < stock;
+    }
+
+    private void RefreshFlowerImage()
+    {
+        if (flowerImage == null) return;
+
+        Sprite sprite = FlowerSpriteLoader.GetSprite(flower);
+        flowerImage.sprite = sprite;
+        flowerImage.preserveAspect = true;
+        flowerImage.raycastTarget = false;
+        flowerImage.gameObject.SetActive(sprite != null);
     }
 }
