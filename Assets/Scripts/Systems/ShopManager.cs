@@ -165,22 +165,22 @@ public class ShopManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 現在の累計仕入額と店評価から、条件上到達できるLvを返します。
+    /// 現在の累計仕入額から、条件上到達できるLvを返します。
+    /// 店評価条件は現時点では使用しません。
     /// </summary>
     private int CalculateEligibleSupplierLevel()
     {
         int newLevel = 1;
 
-        if (cumulativePurchaseAmount >= 1000) newLevel = 2;
-        if (cumulativePurchaseAmount >= 3000) newLevel = 3;
-        if (cumulativePurchaseAmount >= 5000) newLevel = 4;
-
-        if (cumulativePurchaseAmount >= 8000 && shopRating >= 500) newLevel = 5;
-        if (cumulativePurchaseAmount >= 10000 && shopRating >= 1000) newLevel = 6;
-        if (cumulativePurchaseAmount >= 20000 && shopRating >= 2000) newLevel = 7;
-        if (cumulativePurchaseAmount >= 30000 && shopRating >= 4000) newLevel = 8;
-        if (cumulativePurchaseAmount >= 40000 && shopRating >= 6500) newLevel = 9;
-        if (cumulativePurchaseAmount >= 50000 && shopRating >= 8500) newLevel = 10;
+        if (cumulativePurchaseAmount >= 10000) newLevel = 2;
+        if (cumulativePurchaseAmount >= 30000) newLevel = 3;
+        if (cumulativePurchaseAmount >= 70000) newLevel = 4;
+        if (cumulativePurchaseAmount >= 150000) newLevel = 5;
+        if (cumulativePurchaseAmount >= 300000) newLevel = 6;
+        if (cumulativePurchaseAmount >= 600000) newLevel = 7;
+        if (cumulativePurchaseAmount >= 1200000) newLevel = 8;
+        if (cumulativePurchaseAmount >= 2500000) newLevel = 9;
+        if (cumulativePurchaseAmount >= 5000000) newLevel = 10;
 
         return newLevel;
     }
