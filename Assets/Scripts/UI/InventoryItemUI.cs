@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 在庫一覧の1行分を表示します。
@@ -8,6 +9,7 @@ using UnityEngine;
 public class InventoryItemUI : MonoBehaviour
 {
     [Header("表示")]
+    [SerializeField] private Image flowerImage;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text colorText;
     [SerializeField] private TMP_Text quantityText;
@@ -65,6 +67,7 @@ public class InventoryItemUI : MonoBehaviour
         {
             gameObject.SetActive(true);
 
+            RefreshFlowerImage(bouquetComponent.flower, showTexts);
             SetTextObjectActive(nameText, showTexts);
             SetTextObjectActive(colorText, showTexts);
             SetTextObjectActive(quantityText, showTexts);
@@ -95,6 +98,9 @@ public class InventoryItemUI : MonoBehaviour
 
         if (batch == null || batch.flower == null)
         {
+            if (flowerImage != null)
+                flowerImage.gameObject.SetActive(false);
+
             gameObject.SetActive(false);
             return;
         }
@@ -103,6 +109,7 @@ public class InventoryItemUI : MonoBehaviour
 
         if (lotDetailMode)
         {
+            RefreshFlowerImage(null, false);
             SetTextObjectActive(nameText, false);
             SetTextObjectActive(colorText, false);
             SetTextObjectActive(quantityText, true);
@@ -118,6 +125,7 @@ public class InventoryItemUI : MonoBehaviour
             return;
         }
 
+        RefreshFlowerImage(batch.flower, true);
         SetTextObjectActive(nameText, true);
         SetTextObjectActive(colorText, true);
         SetTextObjectActive(quantityText, true);
@@ -140,6 +148,17 @@ public class InventoryItemUI : MonoBehaviour
             purchasePriceText.gameObject.SetActive(true);
             purchasePriceText.text = $"{batch.flower.purchasePrice:N0}円";
         }
+    }
+
+    private void RefreshFlowerImage(FlowerData flower, bool visible)
+    {
+        if (flowerImage == null) return;
+
+        Sprite sprite = visible ? FlowerSpriteLoader.GetSprite(flower) : null;
+        flowerImage.sprite = sprite;
+        flowerImage.preserveAspect = true;
+        flowerImage.raycastTarget = false;
+        flowerImage.gameObject.SetActive(visible && sprite != null);
     }
 
     private static void SetTextObjectActive(TMP_Text text, bool active)
