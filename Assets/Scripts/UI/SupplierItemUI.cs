@@ -5,11 +5,12 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 仕入れ画面の商品1種類分を表示するUI。
-/// 商品名・色・価格・残り数を表示し、1本購入／最大5本購入をSupplierUIへ通知します。
+/// 商品名・色・価格・残り数・花画像を表示し、1本購入／最大5本購入をSupplierUIへ通知します。
 /// </summary>
 public class SupplierItemUI : MonoBehaviour
 {
     [Header("表示")]
+    [SerializeField] private Image flowerImage;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text colorText;
     [SerializeField] private TMP_Text priceText;
@@ -59,6 +60,7 @@ public class SupplierItemUI : MonoBehaviour
 
     /// <summary>
     /// 現在の商品状態をUI表示へ反映します。
+    /// 花画像は FlowerData の花名＋色から自動取得します。
     /// まとめ買いボタンは残数に応じて「5本購入」～「1本購入」へ自動変更します。
     /// </summary>
     public void Refresh()
@@ -67,6 +69,12 @@ public class SupplierItemUI : MonoBehaviour
 
         if (!valid)
         {
+            if (flowerImage != null)
+            {
+                flowerImage.sprite = null;
+                flowerImage.enabled = false;
+            }
+
             if (nameText != null) nameText.text = "商品なし";
             if (colorText != null) colorText.text = string.Empty;
             if (priceText != null) priceText.text = string.Empty;
@@ -77,6 +85,8 @@ public class SupplierItemUI : MonoBehaviour
             if (buyFiveButtonText != null) buyFiveButtonText.text = "5本購入";
             return;
         }
+
+        RefreshFlowerImage();
 
         if (nameText != null) nameText.text = arrivalItem.flower.flowerName;
         if (colorText != null) colorText.text = $"色：{arrivalItem.flower.color}";
@@ -102,6 +112,17 @@ public class SupplierItemUI : MonoBehaviour
 
         if (buyFiveButtonText != null)
             buyFiveButtonText.text = bulkQuantity > 0 ? $"{bulkQuantity}本購入" : "5本購入";
+    }
+
+    private void RefreshFlowerImage()
+    {
+        if (flowerImage == null) return;
+
+        Sprite sprite = FlowerSpriteLoader.GetSprite(arrivalItem.flower);
+        flowerImage.sprite = sprite;
+        flowerImage.enabled = sprite != null;
+        flowerImage.preserveAspect = true;
+        flowerImage.raycastTarget = false;
     }
 
     private int GetBulkPurchaseQuantity()
