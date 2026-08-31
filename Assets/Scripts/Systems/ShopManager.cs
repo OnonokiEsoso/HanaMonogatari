@@ -9,6 +9,7 @@ public class ShopManager : MonoBehaviour
 {
     [Header("参照")]
     [SerializeField] private SupplierSystem supplierSystem;
+    [SerializeField] private BouquetSystem bouquetSystem;
 
     [Header("お店の状態")]
     [Min(0)] [SerializeField] private int money = 10000;
@@ -23,6 +24,11 @@ public class ShopManager : MonoBehaviour
     [Range(1, 10)] [SerializeField] private int supplierLevel = 1;
     [Range(1, 10)] [SerializeField] private int pendingSupplierLevel = 1;
 
+    [Header("ラッピング抽選")]
+    [Min(0)] [SerializeField] private int todayFlowerPurchaseCount = 0;
+    [SerializeField] private bool gotSupplierWrappingBonusToday = false;
+    [SerializeField] private bool resolvedClosingGiftToday = false;
+
     [Header("クリア状態")]
     [SerializeField] private bool hasCleared = false;
 
@@ -35,6 +41,7 @@ public class ShopManager : MonoBehaviour
     public int GameYear => gameYear;
     public int DayOfYear => dayOfYear;
     public bool HasCleared => hasCleared;
+    public int TodayFlowerPurchaseCount => todayFlowerPurchaseCount;
 
     public int CurrentMonth => GetMonthAndDay(dayOfYear).month;
     public int CurrentDay => GetMonthAndDay(dayOfYear).day;
@@ -48,10 +55,6 @@ public class ShopManager : MonoBehaviour
         SyncSupplierSystem();
     }
 
-    /// <summary>
-    /// 仕入れなどでお金を支払います。
-    /// 所持金が足りない場合はfalseを返します。
-    /// </summary>
     public bool TrySpendMoney(int amount)
     {
         if (amount < 0)
@@ -61,18 +64,13 @@ public class ShopManager : MonoBehaviour
         }
 
         if (money < amount)
-        {
             return false;
-        }
 
         money -= amount;
         NotifyStateChanged();
         return true;
     }
 
-    /// <summary>
-    /// 売上などで所持金を増やします。
-    /// </summary>
     public void AddMoney(int amount)
     {
         if (amount <= 0) return;
@@ -81,9 +79,7 @@ public class ShopManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 仕入先から商品を購入したときに呼びます。
-    /// 支払いと累計仕入額の加算を同時に行います。
-    /// 仕入先Lvの条件を満たしても、その日のうちはLvを上げず翌日まで待機します。
+    /// 仕入先への支払いと累計仕入額を記録します。
     /// </summary>
     public bool TryPurchaseFromSupplier(int totalPrice)
     {
@@ -95,14 +91,58 @@ public class ShopManager : MonoBehaviour
 
         RefreshPendingSupplierLevel();
         NotifyStateChanged();
-
         return true;
     }
 
     /// <summary>
-    /// 客の満足などによって店評価を増やします。
-    /// 一度でも10000に到達したらクリア状態を保持します。
+    /// 花を仕入れた本数を1本ずつ記録し、11本目からラッピングおまけ抽選を行います。
+    /// 11本目=1%、12本目=2%…と上昇し、当選した日は以後抽選しません。
     /// </summary>
+    public bool RegisterSupplierFlowerPurchase(int quantity)
+    {
+        if (quantity <= 0) return false;
+
+        bool won = false;
+        for (int i = 0; i < quantity; i++)
+        {
+            todayFlowerPurchaseCount++;
+
+            if (gotSupplierWrappingBonusToday || todayFlowerPurchaseCount <= 10)
+                continue;
+
+            float chance = Mathf.Clamp01((todayFlowerPurchaseCount - 10) * 0.01f);
+            if (UnityEngine.Random.value < chance)
+            {
+                gotSupplierWrappingBonusToday = true;
+                won = true;
+                bouquetSystem?.AddWrapping(1);
+                Debug.Log($"仕入れ{todayFlowerPurchaseCount}個目のおまけ抽選に当選！ ラッピングを1個もらいました。");
+            }
+        }
+
+        return won;
+    }
+
+    /// <summary>
+    /// 閉店時、購入者数×1%でラッピング1個の差し入れ抽選を一度だけ行います。
+    /// </summary>
+    public bool TryGiveClosingWrappingGift(int purchaserCount)
+    {
+        if (resolvedClosingGiftToday) return false;
+        resolvedClosingGiftToday = true;
+
+        if (purchaserCount <= 0 || bouquetSystem == null)
+            return false;
+
+        float chance = Mathf.Clamp01(purchaserCount * 0.01f);
+        if (UnityEngine.Random.value >= chance)
+            return false;
+
+        bouquetSystem.AddWrapping(1);
+        Debug.Log($"閉店後の差し入れ！ 購入者{purchaserCount}人 → {chance * 100f:0.#}%抽選に当選し、ラッピングを1個もらいました。");
+        return true;
+    }
+
     public void AddShopRating(int amount)
     {
         if (amount <= 0) return;
@@ -119,23 +159,14 @@ public class ShopManager : MonoBehaviour
         NotifyStateChanged();
     }
 
-    /// <summary>
-    /// 必要になった場合の評価減少用。
-    /// クリア済みフラグは評価が下がっても解除されません。
-    /// </summary>
     public void RemoveShopRating(int amount)
     {
         if (amount <= 0) return;
         shopRating = Mathf.Clamp(shopRating - amount, 0, 10000);
-
         RefreshPendingSupplierLevel();
         NotifyStateChanged();
     }
 
-    /// <summary>
-    /// 1日進めます。365日を超えると翌年1月1日になります。
-    /// 日付が変わるこのタイミングで、待機中の仕入先Lvアップを適用します。
-    /// </summary>
     [ContextMenu("翌日へ進む")]
     public void AdvanceDay()
     {
@@ -148,26 +179,22 @@ public class ShopManager : MonoBehaviour
         }
 
         ApplyPendingSupplierLevel();
+
+        todayFlowerPurchaseCount = 0;
+        gotSupplierWrappingBonusToday = false;
+        resolvedClosingGiftToday = false;
+
         SyncSupplierSystem();
         NotifyStateChanged();
 
         Debug.Log($"{gameYear}年目 {CurrentMonth}月{CurrentDay}日 / {CurrentSeason}");
     }
 
-    /// <summary>
-    /// RecalculateSupplierLevel（リカルキュレート・サプライヤー・レベル）
-    /// 現在の条件から「翌日に到達できる仕入先Lv」を再計算します。
-    /// 実際のsupplierLevelはここでは変更しません。
-    /// </summary>
     public void RecalculateSupplierLevel()
     {
         RefreshPendingSupplierLevel();
     }
 
-    /// <summary>
-    /// 現在の累計仕入額から、条件上到達できるLvを返します。
-    /// 店評価条件は現時点では使用しません。
-    /// </summary>
     private int CalculateEligibleSupplierLevel()
     {
         int newLevel = 1;
@@ -185,9 +212,6 @@ public class ShopManager : MonoBehaviour
         return newLevel;
     }
 
-    /// <summary>
-    /// 条件達成状況を確認して、翌日適用予定のLvだけを更新します。
-    /// </summary>
     private void RefreshPendingSupplierLevel()
     {
         int eligibleLevel = CalculateEligibleSupplierLevel();
@@ -198,39 +222,56 @@ public class ShopManager : MonoBehaviour
             pendingSupplierLevel = newPendingLevel;
 
             if (pendingSupplierLevel > supplierLevel)
-            {
                 Debug.Log($"仕入先Lv.{pendingSupplierLevel}の条件を達成しました。翌日にレベルアップします。");
-            }
         }
     }
 
     /// <summary>
-    /// ApplyPendingSupplierLevel（アプライ・ペンディング・サプライヤー・レベル）
-    /// Apply＝適用する、Pending＝待機中。
-    /// 翌日になった瞬間に、条件を満たしているLvまで実際の仕入先Lvを上げます。
+    /// 翌日に仕入先Lvを適用し、到達した各Lvのラッピング報酬も同時に付与します。
+    /// Lv2:+2 / Lv3:+2 / Lv4:+3 / Lv5:+3 / Lv6:+4 / Lv7:+4 / Lv8:+5 / Lv9:+5 / Lv10:+10
     /// </summary>
     private void ApplyPendingSupplierLevel()
     {
-        // 日付変更時点の条件をもう一度確認してから適用します。
         pendingSupplierLevel = Mathf.Max(supplierLevel, CalculateEligibleSupplierLevel());
 
         if (pendingSupplierLevel > supplierLevel)
         {
+            int oldLevel = supplierLevel;
             supplierLevel = pendingSupplierLevel;
-            Debug.Log($"仕入先Lvが{supplierLevel}になりました！");
+
+            int wrappingReward = 0;
+            for (int level = oldLevel + 1; level <= supplierLevel; level++)
+                wrappingReward += GetWrappingRewardForLevel(level);
+
+            if (wrappingReward > 0)
+                bouquetSystem?.AddWrapping(wrappingReward);
+
+            Debug.Log($"仕入先Lvが{supplierLevel}になりました！ ラッピング報酬：{wrappingReward}個");
         }
 
         pendingSupplierLevel = supplierLevel;
     }
 
-    /// <summary>
-    /// ShopManagerの現在状態をSupplierSystemへ反映します。
-    /// 待機中Lvではなく、実際に適用済みのsupplierLevelだけを反映します。
-    /// </summary>
+    private static int GetWrappingRewardForLevel(int level)
+    {
+        return level switch
+        {
+            2 => 2,
+            3 => 2,
+            4 => 3,
+            5 => 3,
+            6 => 4,
+            7 => 4,
+            8 => 5,
+            9 => 5,
+            10 => 10,
+            _ => 0
+        };
+    }
+
     public void SyncSupplierSystem()
     {
         if (supplierSystem == null) return;
-
         supplierSystem.SetSupplierLevel(supplierLevel);
         supplierSystem.SetSeason(CurrentSeason);
     }
@@ -259,9 +300,7 @@ public class ShopManager : MonoBehaviour
         for (int month = 0; month < monthLengths.Length; month++)
         {
             if (remaining <= monthLengths[month])
-            {
                 return (month + 1, remaining);
-            }
 
             remaining -= monthLengths[month];
         }
