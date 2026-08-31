@@ -83,6 +83,11 @@ public class SupplierUI : MonoBehaviour
         if (supplierSystem != null)
             supplierSystem.GenerateDailyArrivals();
 
+        // 日付をまたいで翌日の仕入れに切り替わったら、
+        // 前日に最後に仕入れた花の豆知識を残さず待機メッセージへ戻します。
+        if (supplierCommentController != null)
+            supplierCommentController.ShowDefaultMessage();
+
         RefreshAll();
     }
 
