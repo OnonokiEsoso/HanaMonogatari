@@ -59,22 +59,30 @@ public class SupplierSystem : MonoBehaviour
     [Tooltip("各入荷商品がセールになる確率。『極まれ』の仮値として2%。")]
     [Range(0f, 1f)] [SerializeField] private float saleChancePerItem = 0.02f;
 
+    [Header("ラッピング販売")]
+    [Range(0f, 1f)] [SerializeField] private float wrappingAppearanceChance = 0.15f;
+    [Min(1)] [SerializeField] private int wrappingUnitPrice = 300;
+    [SerializeField] private bool wrappingAvailableToday;
+    [Min(0)] [SerializeField] private int wrappingPurchaseLimitToday;
+    [Min(0)] [SerializeField] private int wrappingPurchasedToday;
+
     [SerializeField] private List<ArrivalItem> todayArrivals = new();
 
     public IReadOnlyList<ArrivalItem> TodayArrivals => todayArrivals;
     public int SupplierLevel => supplierLevel;
+    public bool WrappingAvailableToday => wrappingAvailableToday;
+    public int WrappingUnitPrice => wrappingUnitPrice;
+    public int WrappingPurchaseLimitToday => wrappingPurchaseLimitToday;
+    public int WrappingRemainingToday => Mathf.Max(0, wrappingPurchaseLimitToday - wrappingPurchasedToday);
 
     public void SetSupplierLevel(int level) => supplierLevel = Mathf.Clamp(level, 1, 10);
     public void SetSeason(Season season) => currentSeason = season;
 
-    /// <summary>
-    /// 現在の仕入先Lvと季節を使って、本日の入荷を生成します。
-    /// 同じ商品が同日に複数枠から選ばれないよう、抽選は重複なしです。
-    /// </summary>
     [ContextMenu("本日の入荷を生成")]
     public void GenerateDailyArrivals()
     {
         todayArrivals.Clear();
+        RollWrappingOffer();
 
         if (flowerDatabase == null || flowerDatabase.flowers == null || flowerDatabase.flowers.Count == 0)
         {
@@ -114,12 +122,28 @@ public class SupplierSystem : MonoBehaviour
             }
         }
 
-        Debug.Log($"本日の入荷を生成しました。仕入先Lv.{supplierLevel} / {currentSeason} / {todayArrivals.Count}種類");
+        Debug.Log($"本日の入荷を生成しました。仕入先Lv.{supplierLevel} / {currentSeason} / {todayArrivals.Count}種類 / ラッピング販売:{(wrappingAvailableToday ? WrappingRemainingToday + "個" : "なし")}");
     }
 
     /// <summary>
-    /// 季節重み = 1 + (10 - 現在季節の珍しさ) × 0.15 を使う重み付き抽選。
+    /// どのLvでも15%でラッピング販売。販売数は現在Lvと同数です。
     /// </summary>
+    private void RollWrappingOffer()
+    {
+        wrappingAvailableToday = UnityEngine.Random.value < wrappingAppearanceChance;
+        wrappingPurchaseLimitToday = wrappingAvailableToday ? supplierLevel : 0;
+        wrappingPurchasedToday = 0;
+    }
+
+    public bool TryPurchaseWrapping(int quantity)
+    {
+        if (!wrappingAvailableToday || quantity <= 0) return false;
+        if (WrappingRemainingToday < quantity) return false;
+
+        wrappingPurchasedToday += quantity;
+        return true;
+    }
+
     private static FlowerData PickWeightedBySeason(List<FlowerData> candidates, Season season)
     {
         float totalWeight = 0f;
@@ -143,7 +167,7 @@ public class SupplierSystem : MonoBehaviour
     private int RollSaleDiscount()
     {
         if (UnityEngine.Random.value > saleChancePerItem) return 0;
-        return UnityEngine.Random.Range(1, 6) * 10; // 10,20,30,40,50%OFF
+        return UnityEngine.Random.Range(1, 6) * 10;
     }
 
     private static int GetPurchaseLimit(int level, int difficulty)
@@ -163,7 +187,6 @@ public class SupplierSystem : MonoBehaviour
             _ => 5
         };
 
-        // 仕様上の希少品上限。
         if (level == 8 && difficulty >= 9) return 1;
         if ((level == 7 || level == 8) && difficulty >= 6) return 3;
         if ((level == 9 || level == 10) && difficulty >= 9) return 3;
