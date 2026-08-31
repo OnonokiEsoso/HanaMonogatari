@@ -27,8 +27,6 @@ public class DailyResultUI : MonoBehaviour
 
     private void Awake()
     {
-        // 旧NextDayButtonが残っている場合も動作は維持します。
-        // 新しい営業画面ではSalesVisualControllerの「閉店する」ボタンを使うのが基本です。
         if (nextDayButton != null)
             nextDayButton.onClick.AddListener(GoToNextDay);
     }
@@ -63,15 +61,10 @@ public class DailyResultUI : MonoBehaviour
             resultPanel.SetActive(false);
     }
 
-    /// <summary>
-    /// 営業終了後のリザルトを表示します。
-    /// 主人公がその日の売上・来客数・購入者数を吹き出しで報告します。
-    /// </summary>
     public void ShowResult()
     {
         if (customerUI == null || shopManager == null) return;
 
-        // 旧結果UIを残している場合は値だけ更新します。
         if (dateText != null)
             dateText.text = $"{shopManager.GameYear}年目 {shopManager.CurrentMonth}月{shopManager.CurrentDay}日の営業結果";
 
@@ -84,7 +77,6 @@ public class DailyResultUI : MonoBehaviour
         if (salesText != null)
             salesText.text = $"売上：{customerUI.TotalSales:N0}円";
 
-        // 新しい営業画面では主人公の吹き出しがメインのリザルト表示。
         if (salesVisualController != null)
         {
             salesVisualController.ShowBusinessResult(
@@ -94,19 +86,20 @@ public class DailyResultUI : MonoBehaviour
         }
         else if (resultPanel != null)
         {
-            // SalesVisualController未設定時だけ旧結果Panelをフォールバック表示。
             resultPanel.SetActive(true);
         }
     }
 
     /// <summary>
-    /// GoToNextDay（ゴー・トゥ・ネクスト・デイ）＝翌日へ進む。
-    /// 通常在庫と花束の鮮度低下 → 日付更新 → 翌日の入荷生成 の順に処理します。
+    /// 閉店時に購入者数×1%のラッピング差し入れ抽選を行ったあと、
+    /// 鮮度低下 → 日付更新 → 翌日の入荷生成 の順に処理します。
     /// </summary>
     public void GoToNextDay()
     {
         if (shopManager == null || customerUI == null) return;
         if (!customerUI.HasFinishedToday) return;
+
+        shopManager.TryGiveClosingWrappingGift(customerUI.PurchaseCount);
 
         if (inventorySystem != null)
             inventorySystem.AdvanceFreshnessOneDay();
