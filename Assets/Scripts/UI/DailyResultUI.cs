@@ -63,6 +63,9 @@ public class DailyResultUI : MonoBehaviour
     {
         if (resultPanel != null)
             resultPanel.SetActive(false);
+
+        if (monthlyResultUI != null)
+            monthlyResultUI.HideImmediate();
     }
 
     public void ShowResult()
@@ -116,8 +119,14 @@ public class DailyResultUI : MonoBehaviour
         if (bouquetSystem != null)
             bouquetSystem.AdvanceFreshnessOneDay();
 
-        if (shopManager.IsMonthEnd && monthlyResultUI != null)
+        if (shopManager.IsMonthEnd)
         {
+            if (monthlyResultUI == null)
+            {
+                Debug.LogError("DailyResultUI: 月末ですがMonthlyResultUIが設定されていません。Inspectorを確認してください。");
+                return;
+            }
+
             waitingForMonthlyResult = true;
             monthlyResultUI.ShowMonthlyResult();
             return;
