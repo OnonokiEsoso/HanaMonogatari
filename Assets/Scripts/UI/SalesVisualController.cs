@@ -77,10 +77,6 @@ public class SalesVisualController : MonoBehaviour
 
     public bool IsPlaying => isPlaying;
 
-    /// <summary>
-    /// 営業結果画面の「閉店する」が押された時に通知します。
-    /// DailyResultUI側で翌日処理につなげます。
-    /// </summary>
     public event Action OnCloseShopRequested;
 
     private void Awake()
@@ -108,9 +104,6 @@ public class SalesVisualController : MonoBehaviour
             shopActionButton.onClick.RemoveListener(HandleShopActionButton);
     }
 
-    /// <summary>
-    /// DailyResultPanelへ入った直後、主人公の吹き出しとして「開店する？」を表示します。
-    /// </summary>
     public void ShowOpenConfirmation()
     {
         HideAllCustomers();
@@ -124,10 +117,6 @@ public class SalesVisualController : MonoBehaviour
         ShowActionButton(ActionButtonMode.OpenShop, "開店する");
     }
 
-    /// <summary>
-    /// 営業終了後、主人公がその日の結果を吹き出しで報告します。
-    /// 同じボタンを「閉店する」に切り替えます。
-    /// </summary>
     public void ShowBusinessResult(int totalSales, int purchaseCount, int totalVisitors)
     {
         HideAllCustomers();
@@ -153,7 +142,6 @@ public class SalesVisualController : MonoBehaviour
             case ActionButtonMode.OpenShop:
                 ConfirmOpenShop();
                 break;
-
             case ActionButtonMode.CloseShop:
                 ConfirmCloseShop();
                 break;
@@ -196,14 +184,10 @@ public class SalesVisualController : MonoBehaviour
     private void HideActionButton()
     {
         actionButtonMode = ActionButtonMode.None;
-
         if (shopActionButton != null)
             shopActionButton.gameObject.SetActive(false);
     }
 
-    /// <summary>
-    /// 営業開始時に確認表示を消し、常時表示の吹き出し本体だけ残します。
-    /// </summary>
     public void PrepareForBusiness()
     {
         if (speechBubble != null)
@@ -278,7 +262,7 @@ public class SalesVisualController : MonoBehaviour
         if (priceDisplayDelay > 0f)
             yield return new WaitForSeconds(priceDisplayDelay);
 
-        SetCommentText(BuildComment(result));
+        SetCommentText(BuildComment(customer, result));
 
         if (commentDisplayDuration > 0f)
             yield return new WaitForSeconds(commentDisplayDuration);
@@ -297,7 +281,6 @@ public class SalesVisualController : MonoBehaviour
     {
         if (target != null && customerCounterPositions.TryGetValue(target, out Vector2 position))
             return position;
-
         return target != null ? target.anchoredPosition : Vector2.zero;
     }
 
@@ -358,32 +341,156 @@ public class SalesVisualController : MonoBehaviour
 
         if (result.bouquet != null)
             return $"{result.bouquet.bouquetName} ×1";
-
         if (result.flower != null)
             return $"{result.flower.flowerName}（{result.flower.color}）";
-
         return "お花を購入";
     }
 
-    private static string BuildComment(CustomerPurchaseSystem.PurchaseResult result)
+    /// <summary>
+    /// お客の種類 × 満足度（または購入なし）に応じた3種類のセリフからランダムに選びます。
+    /// </summary>
+    private static string BuildComment(
+        CustomerSystem.VisitingCustomer customer,
+        CustomerPurchaseSystem.PurchaseResult result)
     {
+        CustomerType type = customer?.data?.customerType ?? CustomerType.Housewife;
+
         if (result == null || !result.purchased)
-            return "今日はやめておこうかな。";
+            return GetNoPurchaseComment(type);
 
         return result.satisfactionLevel switch
         {
-            CustomerPurchaseSystem.SatisfactionLevel.Best => PickRandom(
-                "すごく素敵！ また来ます！",
-                "いいお買い物ができた！",
-                "これは気に入ったな。"),
-            CustomerPurchaseSystem.SatisfactionLevel.Good => PickRandom(
-                "いい感じですね。",
-                "うん、これにしてよかった。",
-                "ありがとうございます。"),
-            _ => PickRandom(
-                "まあ、これでいいかな。",
-                "今回はこれにしよう。",
-                "うん、ありがとう。")
+            CustomerPurchaseSystem.SatisfactionLevel.Best => GetBestComment(type),
+            CustomerPurchaseSystem.SatisfactionLevel.Good => GetGoodComment(type),
+            _ => GetOkayComment(type)
+        };
+    }
+
+    private static string GetBestComment(CustomerType type)
+    {
+        return type switch
+        {
+            CustomerType.Housewife => PickRandom(
+                "まあ、素敵！ 家に飾るのが楽しみね。",
+                "これ、すごくいいわ。また見に来るわね。",
+                "今日はいいお花に出会えたわ。"),
+            CustomerType.Student => PickRandom(
+                "これめっちゃいい！ 部屋に飾りたい！",
+                "かわいい！ これにして正解かも。",
+                "お、これ好き！ ネットに上げなきゃ"),
+            CustomerType.Grandmother => PickRandom(
+                "まあまあ、きれいねえ。大事に飾るわ。",
+                "とっても素敵ね。いいものを選べたわ。",
+                "こういうお花、好きなのよ。うれしいわ。"),
+            CustomerType.Wealthy => PickRandom(
+                "これは素晴らしい。実に気に入ったよ。",
+                "いいね。こういうものを探していたんだ。",
+                "見事だね。また良いものを見せてほしい。"),
+            CustomerType.Child => PickRandom(
+                "わあ！ これすっごくきれい！",
+                "やったー！ このお花にする！",
+                "これだいすき！ おうちにかざる！"),
+            CustomerType.OfficeWorker => PickRandom(
+                "これ、すごくいいですね。喜んでもらえそうです。",
+                "いいものが見つかりました。助かりました。",
+                "これは素敵ですね。またお願いしたいです。"),
+            _ => "すごく素敵！"
+        };
+    }
+
+    private static string GetGoodComment(CustomerType type)
+    {
+        return type switch
+        {
+            CustomerType.Housewife => PickRandom(
+                "うん、これなら家に飾るのにちょうどいいわね。",
+                "いい感じね。これにするわ。",
+                "これなら長く楽しめそうね。"),
+            CustomerType.Student => PickRandom(
+                "いい感じ！ これにしよう。",
+                "これなら予算もちょうどいいかな。",
+                "うん、結構好きかも。これください。"),
+            CustomerType.Grandmother => PickRandom(
+                "きれいねえ。これをいただこうかしら。",
+                "うん、いいお花ね。これにするわ。",
+                "ちょうどよさそうね。ありがとう。"),
+            CustomerType.Wealthy => PickRandom(
+                "ほお、よい。これをいただこう。",
+                "なかなかいいね。これにしよう。",
+                "このくらいなら十分満足だよ。"),
+            CustomerType.Child => PickRandom(
+                "これかわいい！ これにする！",
+                "うん！ このお花すき！",
+                "きれいだね！ これください！"),
+            CustomerType.OfficeWorker => PickRandom(
+                "いいですね。これなら安心して渡せそうです。",
+                "うん、これにしましょう。ちょうどよさそうです。",
+                "これなら良さそうですね。お願いします。"),
+            _ => "いい感じですね。"
+        };
+    }
+
+    private static string GetOkayComment(CustomerType type)
+    {
+        return type switch
+        {
+            CustomerType.Housewife => PickRandom(
+                "うん、今日はこれにしておこうかしら。",
+                "悪くないわね。これをもらうわ。",
+                "ちょうど欲しかったし、これにするわね。"),
+            CustomerType.Student => PickRandom(
+                "まあ、これならいいかな。",
+                "うん、今日はこれにしとこう。",
+                "強いて言うなら、これにします。"),
+            CustomerType.Grandmother => PickRandom(
+                "そうねえ、今日はこれにしましょう。",
+                "うん、これならよさそうね。",
+                "せっかくだし、これをいただくわ。"),
+            CustomerType.Wealthy => PickRandom(
+                "まあ、今日はこれにしておこう。",
+                "悪くはないね。これをいただくよ。",
+                "うん、今回はこれでいいだろう。"),
+            CustomerType.Child => PickRandom(
+                "うん、これにしようかな。",
+                "えーっとぉ、これにする！",
+                "じゃあ今日はこれにするね。"),
+            CustomerType.OfficeWorker => PickRandom(
+                "そうですね、今日はこれにします。",
+                "時間もないし、これでお願いできますか。",
+                "うん、これなら大丈夫そうですね。"),
+            _ => "今回はこれにしよう。"
+        };
+    }
+
+    private static string GetNoPurchaseComment(CustomerType type)
+    {
+        return type switch
+        {
+            CustomerType.Housewife => PickRandom(
+                "今日は見るだけにしておこうかしら。",
+                "また今度、ゆっくり選びに来るわね。",
+                "今日は決めきれないわ。また来るわね。"),
+            CustomerType.Student => PickRandom(
+                "うーん、今日はやめとこうかな。",
+                "もうちょっと考えてからにしよう。",
+                "またお金ある時に見に来ようかな。"),
+            CustomerType.Grandmother => PickRandom(
+                "今日は見るだけにしておくわね。",
+                "また今度、いい日に寄らせてもらうわ。",
+                "今日は決めずに帰ろうかしらね。"),
+            CustomerType.Wealthy => PickRandom(
+                "今日は見送ろう。また寄らせてもらうよ。",
+                "今回は決めずにおこう。",
+                "また別の日に見せてもらおうかな。"),
+            CustomerType.Child => PickRandom(
+                "今日は見るだけにする！",
+                "うーん、またこんどにする！",
+                "どれにするか決められないや。"),
+            CustomerType.OfficeWorker => PickRandom(
+                "今日は決めずに、また寄ります。",
+                "もう少し考えてみます。ありがとうございました。",
+                "今回は見送ります。またお願いします。"),
+            _ => "今日はやめておこうかな。"
         };
     }
 
@@ -408,7 +515,6 @@ public class SalesVisualController : MonoBehaviour
     {
         if (purchaseText != null)
             purchaseText.text = value ?? string.Empty;
-
         RefreshBubbleParts();
     }
 
@@ -416,7 +522,6 @@ public class SalesVisualController : MonoBehaviour
     {
         if (priceText != null)
             priceText.text = value ?? string.Empty;
-
         RefreshBubbleParts();
     }
 
@@ -424,7 +529,6 @@ public class SalesVisualController : MonoBehaviour
     {
         if (commentText != null)
             commentText.text = value ?? string.Empty;
-
         RefreshBubbleParts();
     }
 
@@ -432,13 +536,10 @@ public class SalesVisualController : MonoBehaviour
     {
         if (purchaseText != null)
             purchaseText.text = string.Empty;
-
         if (priceText != null)
             priceText.text = string.Empty;
-
         if (commentText != null)
             commentText.text = string.Empty;
-
         RefreshBubbleParts();
     }
 
@@ -451,7 +552,6 @@ public class SalesVisualController : MonoBehaviour
 
         if (protagonistBubblePart != null)
             protagonistBubblePart.SetActive(hasText && currentSpeaker == BubbleSpeaker.Protagonist);
-
         if (thirdPartyBubblePart != null)
             thirdPartyBubblePart.SetActive(hasText && currentSpeaker == BubbleSpeaker.ThirdParty);
     }
