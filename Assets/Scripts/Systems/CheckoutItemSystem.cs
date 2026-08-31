@@ -99,12 +99,6 @@ public class CheckoutItemSystem : MonoBehaviour
         NormalizeStocks();
     }
 
-    private void Start()
-    {
-        if (string.IsNullOrEmpty(todayOfferItemId))
-            GenerateDailyOffer();
-    }
-
     public void GenerateDailyOffer()
     {
         todayOfferItemId = null;
@@ -131,7 +125,9 @@ public class CheckoutItemSystem : MonoBehaviour
     {
         CheckoutItemDefinition item = TodayOffer;
         if (item == null || todayOfferPurchased || shopManager == null) return false;
-        if (!shopManager.TrySpendMoney(item.boxPurchasePrice)) return false;
+
+        // 仕入先から買う商品なので、月間仕入れ額と累計仕入額にも含めます。
+        if (!shopManager.TryPurchaseFromSupplier(item.boxPurchasePrice)) return false;
 
         todayOfferPurchased = true;
         AddStock(item.id, item.boxQuantity, autoInstall: true);
@@ -265,7 +261,6 @@ public class CheckoutItemSystem : MonoBehaviour
         foreach (CheckoutItemDefinition item in catalog)
             GetOrCreateStock(item.id);
 
-        bool slotsFull = false;
         int installed = 0;
         foreach (CheckoutItemStock stock in stocks)
         {
@@ -279,10 +274,7 @@ public class CheckoutItemSystem : MonoBehaviour
             {
                 installed++;
                 if (installed > MaxInstalledItems)
-                {
                     stock.installed = false;
-                    slotsFull = true;
-                }
             }
         }
     }
