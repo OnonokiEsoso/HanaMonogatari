@@ -7,6 +7,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 花束作成画面全体を管理します。
 /// 在庫から花束に使える商品を一覧表示し、使用本数・名前・販売価格を指定して花束を作成します。
+/// 花束1個の作成にはラッピングを1個使用します。
 /// 作成済み花束の確認・削除は在庫画面で行います。
 /// </summary>
 public class BouquetUI : MonoBehaviour
@@ -27,6 +28,7 @@ public class BouquetUI : MonoBehaviour
     [SerializeField] private TMP_Text totalQuantityText;
     [SerializeField] private TMP_Text distinctCountText;
     [SerializeField] private TMP_Text currentRecommendedPriceText;
+    [SerializeField] private TMP_Text wrappingCountText;
     [SerializeField] private TMP_Text resultText;
 
     [Header("操作")]
@@ -49,6 +51,9 @@ public class BouquetUI : MonoBehaviour
         if (inventorySystem != null)
             inventorySystem.OnInventoryChanged += RefreshAll;
 
+        if (bouquetSystem != null)
+            bouquetSystem.OnWrappingChanged += RefreshSummary;
+
         RefreshAll();
     }
 
@@ -56,6 +61,9 @@ public class BouquetUI : MonoBehaviour
     {
         if (inventorySystem != null)
             inventorySystem.OnInventoryChanged -= RefreshAll;
+
+        if (bouquetSystem != null)
+            bouquetSystem.OnWrappingChanged -= RefreshSummary;
     }
 
     private void OnDestroy()
@@ -134,9 +142,17 @@ public class BouquetUI : MonoBehaviour
         if (currentRecommendedPriceText != null)
             currentRecommendedPriceText.text = $"現在の適正価格：{recommendedPrice:N0}円";
 
+        if (wrappingCountText != null)
+        {
+            int wrappingCount = bouquetSystem != null ? bouquetSystem.WrappingCount : 0;
+            wrappingCountText.text = $"ラッピング：{wrappingCount}個";
+        }
+
         if (createButton != null)
         {
             createButton.interactable =
+                bouquetSystem != null &&
+                bouquetSystem.CanCreateWithWrapping &&
                 total >= BouquetSystem.MinimumBouquetQuantity &&
                 total <= BouquetSystem.MaximumBouquetQuantity &&
                 distinct >= 3;
@@ -149,6 +165,13 @@ public class BouquetUI : MonoBehaviour
         {
             if (resultText != null)
                 resultText.text = "BouquetSystemが設定されていません";
+            return;
+        }
+
+        if (!bouquetSystem.CanCreateWithWrapping)
+        {
+            if (resultText != null)
+                resultText.text = "ラッピングが足りません";
             return;
         }
 
