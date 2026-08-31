@@ -4,7 +4,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 1日の営業結果表示と翌日への進行を管理します。
-/// 営業終了時は主人公が吹き出しで結果を報告し、共通ボタンの「閉店する」から翌日へ進みます。
+/// 月末だけは通常の閉店処理の途中でMonthlyResultPanelを表示し、
+/// 維持費支払い後に翌月へ進みます。
 /// </summary>
 public class DailyResultUI : MonoBehaviour
 {
@@ -16,6 +17,7 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private SupplierUI supplierUI;
     [SerializeField] private ShopTabUI shopTabUI;
     [SerializeField] private SalesVisualController salesVisualController;
+    [SerializeField] private MonthlyResultUI monthlyResultUI;
 
     [Header("旧結果表示（任意・未使用でもOK）")]
     [SerializeField] private GameObject resultPanel;
@@ -24,6 +26,8 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private TMP_Text buyersText;
     [SerializeField] private TMP_Text salesText;
     [SerializeField] private Button nextDayButton;
+
+    private bool waitingForMonthlyResult;
 
     private void Awake()
     {
@@ -91,13 +95,18 @@ public class DailyResultUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 閉店時に購入者数×1%のラッピング差し入れ抽選を行ったあと、
-    /// 鮮度低下 → 日付更新 → 翌日の入荷生成 の順に処理します。
+    /// 通常日の「閉店する」。
+    /// 月末ならその日の処理を済ませたあと月間集計を表示し、日付更新は一旦止めます。
     /// </summary>
     public void GoToNextDay()
     {
         if (shopManager == null || customerUI == null) return;
-        if (!customerUI.HasFinishedToday) return;
+        if (!customerUI.HasFinishedToday || waitingForMonthlyResult) return;
+
+        shopManager.RecordDailyBusinessResult(
+            customerUI.TotalSales,
+            customerUI.TotalVisitors,
+            customerUI.PurchaseCount);
 
         shopManager.TryGiveClosingWrappingGift(customerUI.PurchaseCount);
 
@@ -106,6 +115,31 @@ public class DailyResultUI : MonoBehaviour
 
         if (bouquetSystem != null)
             bouquetSystem.AdvanceFreshnessOneDay();
+
+        if (shopManager.IsMonthEnd && monthlyResultUI != null)
+        {
+            waitingForMonthlyResult = true;
+            monthlyResultUI.ShowMonthlyResult();
+            return;
+        }
+
+        CompleteDayTransition();
+    }
+
+    /// <summary>
+    /// MonthlyResultUIの「次の月へ」ボタンから呼ばれます。
+    /// 維持費支払い後に、月末10日→翌月1日へ進めます。
+    /// </summary>
+    public void CompleteDayAfterMonthlyResult()
+    {
+        if (!waitingForMonthlyResult) return;
+        waitingForMonthlyResult = false;
+        CompleteDayTransition();
+    }
+
+    private void CompleteDayTransition()
+    {
+        if (shopManager == null || customerUI == null) return;
 
         shopManager.AdvanceDay();
 
