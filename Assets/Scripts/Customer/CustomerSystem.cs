@@ -66,7 +66,7 @@ public class CustomerSystem : MonoBehaviour
     [SerializeField] private List<CustomerData> customerProfiles = new();
 
     [Header("来客数")]
-    [Tooltip("初週の開店ボーナス。ゲーム開始から7日間だけ加算します。")]
+    [Tooltip("開店直後の来客ボーナス。ゲーム開始から2日間だけ加算します。")]
     [SerializeField] private int openingBonusVisitors = 5;
 
     [Header("常連")]
@@ -119,7 +119,8 @@ public class CustomerSystem : MonoBehaviour
         float randomMultiplier = UnityEngine.Random.Range(0.8f, 1.2f);
         int visitors = Mathf.Max(1, Mathf.RoundToInt(baseVisitors * randomMultiplier));
 
-        if (shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear <= 7)
+        // 開店ボーナスは1年目の最初の2日間だけ。
+        if (shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear <= 2)
             visitors += openingBonusVisitors;
 
         return visitors;
