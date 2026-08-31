@@ -5,6 +5,7 @@ using UnityEngine;
 /// <summary>
 /// 仕入先キャラクターの吹き出しテキストを管理します。
 /// 花を仕入れた時、その花に対応する短い豆知識・概要を表示します。
+/// デイリートレンド発生日は、朝の待機セリフでその日の傾向を示唆します。
 /// </summary>
 public class SupplierCommentController : MonoBehaviour
 {
@@ -60,11 +61,6 @@ public class SupplierCommentController : MonoBehaviour
         ShowDefaultMessage();
     }
 
-    /// <summary>
-    /// ShowFlowerComment（ショー・フラワー・コメント）
-    /// 購入した花に対応する一言を吹き出しへ表示します。
-    /// 色違いでも同じ花名なら同じ一言を使用します。
-    /// </summary>
     public void ShowFlowerComment(FlowerData flower)
     {
         if (speechText == null || flower == null)
@@ -79,14 +75,27 @@ public class SupplierCommentController : MonoBehaviour
         speechText.text = $"{flower.flowerName}だね！大事に扱ってあげてね。";
     }
 
-    /// <summary>
-    /// ゲーム開始時・翌日の仕入れ開始時に、待機セリフをランダムで表示します。
-    /// </summary>
     [ContextMenu("待機メッセージを表示")]
     public void ShowDefaultMessage()
     {
+        ShowDefaultMessage(null);
+    }
+
+    /// <summary>
+    /// デイリートレンドがある日は、その内容を示唆する専用セリフを優先します。
+    /// 通常日は従来の待機セリフからランダム表示します。
+    /// </summary>
+    public void ShowDefaultMessage(ShopManager shopManager)
+    {
         if (speechText == null)
             return;
+
+        string trendMessage = TrendSystem.GetDailySupplierMessage(shopManager);
+        if (!string.IsNullOrWhiteSpace(trendMessage))
+        {
+            speechText.text = trendMessage;
+            return;
+        }
 
         int count = AdditionalDefaultMessages.Length + 1;
         int index = Random.Range(0, count);
