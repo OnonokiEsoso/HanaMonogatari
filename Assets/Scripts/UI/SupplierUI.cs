@@ -7,6 +7,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 仕入れ画面全体を管理します。
 /// 今日の花・ラッピング・レジ横商品の入荷を生成し、購入処理を各システムへつなぎます。
+/// 花とレジ横商品は同じItemContainer・同じSupplierItemUI Prefabに表示します。
 /// </summary>
 public class SupplierUI : MonoBehaviour
 {
@@ -34,13 +35,6 @@ public class SupplierUI : MonoBehaviour
     [SerializeField] private TMP_Text wrappingOfferText;
     [SerializeField] private Button wrappingBuyButton;
 
-    [Header("レジ横商品販売UI（任意）")]
-    [Tooltip("レジ横商品が入荷した日にだけ表示する親オブジェクト。")]
-    [SerializeField] private GameObject checkoutOfferRoot;
-    [SerializeField] private Image checkoutOfferImage;
-    [SerializeField] private TMP_Text checkoutOfferText;
-    [SerializeField] private Button checkoutOfferBuyButton;
-
     [Header("開始時")]
     [Tooltip("画面開始時に今日の入荷を自動生成します。")]
     [SerializeField] private bool generateArrivalsOnStart = true;
@@ -51,9 +45,6 @@ public class SupplierUI : MonoBehaviour
     {
         if (wrappingBuyButton != null)
             wrappingBuyButton.onClick.AddListener(TryBuyWrapping);
-
-        if (checkoutOfferBuyButton != null)
-            checkoutOfferBuyButton.onClick.AddListener(TryBuyCheckoutOffer);
     }
 
     private void OnEnable()
@@ -62,7 +53,7 @@ public class SupplierUI : MonoBehaviour
             shopManager.OnStateChanged += RefreshHeader;
 
         if (checkoutItemSystem != null)
-            checkoutItemSystem.OnChanged += RefreshCheckoutOffer;
+            checkoutItemSystem.OnChanged += RefreshAll;
     }
 
     private void OnDisable()
@@ -71,16 +62,13 @@ public class SupplierUI : MonoBehaviour
             shopManager.OnStateChanged -= RefreshHeader;
 
         if (checkoutItemSystem != null)
-            checkoutItemSystem.OnChanged -= RefreshCheckoutOffer;
+            checkoutItemSystem.OnChanged -= RefreshAll;
     }
 
     private void OnDestroy()
     {
         if (wrappingBuyButton != null)
             wrappingBuyButton.onClick.RemoveListener(TryBuyWrapping);
-
-        if (checkoutOfferBuyButton != null)
-            checkoutOfferBuyButton.onClick.RemoveListener(TryBuyCheckoutOffer);
     }
 
     private void Start()
@@ -123,7 +111,6 @@ public class SupplierUI : MonoBehaviour
         RefreshHeader();
         RebuildItemList();
         RefreshWrappingOffer();
-        RefreshCheckoutOffer();
     }
 
     private void RefreshHeader()
@@ -164,6 +151,18 @@ public class SupplierUI : MonoBehaviour
             SupplierItemUI item = Instantiate(itemPrefab, itemContainer);
             item.Bind(arrival, TryBuyOne, TryBuyMultiple);
             spawnedItems.Add(item);
+        }
+
+        // レジ横商品も花と同じ一覧・同じPrefabに1商品として追加します。
+        if (checkoutItemSystem != null && checkoutItemSystem.HasTodayOffer)
+        {
+            CheckoutItemSystem.CheckoutItemDefinition offer = checkoutItemSystem.TodayOffer;
+            if (offer != null)
+            {
+                SupplierItemUI item = Instantiate(itemPrefab, itemContainer);
+                item.BindCheckout(checkoutItemSystem, offer, TryBuyCheckoutOffer);
+                spawnedItems.Add(item);
+            }
         }
     }
 
@@ -209,6 +208,21 @@ public class SupplierUI : MonoBehaviour
         }
     }
 
+    private void TryBuyCheckoutOffer(CheckoutItemSystem.CheckoutItemDefinition item)
+    {
+        if (checkoutItemSystem == null || item == null) return;
+
+        if (!checkoutItemSystem.TryBuyTodayOffer())
+        {
+            Debug.Log($"{item.displayName}のBOXを購入できませんでした。必要額：{item.boxPurchasePrice:N0}円");
+            return;
+        }
+
+        Debug.Log($"{item.displayName} ×{item.boxQuantity}を{item.boxPurchasePrice:N0}円で仕入れました。");
+        RefreshHeader();
+        RebuildItemList();
+    }
+
     private void TryBuyWrapping()
     {
         if (supplierSystem == null || shopManager == null || bouquetSystem == null) return;
@@ -233,24 +247,6 @@ public class SupplierUI : MonoBehaviour
         RefreshWrappingOffer();
     }
 
-    private void TryBuyCheckoutOffer()
-    {
-        if (checkoutItemSystem == null) return;
-
-        CheckoutItemSystem.CheckoutItemDefinition item = checkoutItemSystem.TodayOffer;
-        if (item == null) return;
-
-        if (!checkoutItemSystem.TryBuyTodayOffer())
-        {
-            Debug.Log($"{item.displayName}のBOXを購入できませんでした。必要額：{item.boxPurchasePrice:N0}円");
-            return;
-        }
-
-        Debug.Log($"{item.displayName} ×{item.boxQuantity}を{item.boxPurchasePrice:N0}円で仕入れました。");
-        RefreshHeader();
-        RefreshCheckoutOffer();
-    }
-
     private void RefreshWrappingOffer()
     {
         if (supplierSystem == null)
@@ -272,29 +268,5 @@ public class SupplierUI : MonoBehaviour
 
         if (wrappingBuyButton != null)
             wrappingBuyButton.interactable = visible && shopManager != null && shopManager.Money >= supplierSystem.WrappingUnitPrice;
-    }
-
-    private void RefreshCheckoutOffer()
-    {
-        CheckoutItemSystem.CheckoutItemDefinition item = checkoutItemSystem != null ? checkoutItemSystem.TodayOffer : null;
-        bool visible = checkoutItemSystem != null && checkoutItemSystem.HasTodayOffer && item != null;
-
-        if (checkoutOfferRoot != null)
-            checkoutOfferRoot.SetActive(visible);
-
-        if (checkoutOfferText != null)
-            checkoutOfferText.text = visible
-                ? $"{item.displayName} ×{item.boxQuantity}　{item.boxPurchasePrice:N0}円"
-                : string.Empty;
-
-        if (checkoutOfferImage != null)
-        {
-            Sprite sprite = visible ? checkoutItemSystem.LoadSprite(item) : null;
-            checkoutOfferImage.sprite = sprite;
-            checkoutOfferImage.enabled = sprite != null;
-        }
-
-        if (checkoutOfferBuyButton != null)
-            checkoutOfferBuyButton.interactable = visible && shopManager != null && shopManager.Money >= item.boxPurchasePrice;
     }
 }
