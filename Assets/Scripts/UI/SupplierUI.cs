@@ -104,7 +104,7 @@ public class SupplierUI : MonoBehaviour
             supplierLevelText.text = $"仕入先Lv.{shopManager.SupplierLevel}";
 
         if (dateText != null)
-            dateText.text = $"{shopManager.GameYear}年目 {shopManager.CurrentMonth}月{shopManager.CurrentDay}日";
+            dateText.text = shopManager.DateDisplayText;
     }
 
     private void RebuildItemList()
@@ -196,7 +196,6 @@ public class SupplierUI : MonoBehaviour
 
         if (!supplierSystem.TryPurchaseWrapping(1))
         {
-            // 通常はここへ来ませんが、購入状態が変化していた場合は代金を戻します。
             shopManager.AddMoney(price);
             return;
         }
