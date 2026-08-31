@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// お店全体の進行状態を管理するクラス。
-/// 所持金・店評価・日付・累計仕入額・仕入先Lvをまとめて保持します。
+/// 所持金・店評価・日付・累計仕入額・仕入先Lv・月間集計をまとめて保持します。
 /// ゲーム内カレンダーは4月スタート、1か月10日、1年120日です。
 /// </summary>
 public class ShopManager : MonoBehaviour
@@ -30,6 +30,15 @@ public class ShopManager : MonoBehaviour
     [Range(1, 10)] [SerializeField] private int supplierLevel = 1;
     [Range(1, 10)] [SerializeField] private int pendingSupplierLevel = 1;
 
+    [Header("月間集計")]
+    [Min(0)] [SerializeField] private int monthlySales = 0;
+    [Min(0)] [SerializeField] private int monthlyPurchaseCost = 0;
+    [Min(0)] [SerializeField] private int monthlyVisitors = 0;
+    [Min(0)] [SerializeField] private int monthlyBuyers = 0;
+    [Min(0)] [SerializeField] private int monthlyShopRatingGain = 0;
+    [Min(0)] [SerializeField] private int monthlyMaintenanceCost = 5000;
+    [SerializeField] private bool recordedBusinessResultToday = false;
+
     [Header("ラッピング抽選")]
     [Min(0)] [SerializeField] private int todayFlowerPurchaseCount = 0;
     [SerializeField] private bool gotSupplierWrappingBonusToday = false;
@@ -53,6 +62,15 @@ public class ShopManager : MonoBehaviour
     public int CurrentDay => GetMonthAndDay(dayOfYear).day;
     public Season CurrentSeason => GetSeason(CurrentMonth);
     public string DateDisplayText => $"{gameYear}年目　{CurrentMonth}月 {CurrentDay}/{DaysPerMonth}日";
+    public bool IsMonthEnd => CurrentDay == DaysPerMonth;
+
+    public int MonthlySales => monthlySales;
+    public int MonthlyPurchaseCost => monthlyPurchaseCost;
+    public int MonthlyProfit => monthlySales - monthlyPurchaseCost;
+    public int MonthlyVisitors => monthlyVisitors;
+    public int MonthlyBuyers => monthlyBuyers;
+    public int MonthlyShopRatingGain => monthlyShopRatingGain;
+    public int MonthlyMaintenanceCost => monthlyMaintenanceCost;
 
     public event Action OnStateChanged;
 
@@ -88,6 +106,7 @@ public class ShopManager : MonoBehaviour
 
     /// <summary>
     /// 仕入先への支払いと累計仕入額を記録します。
+    /// 花の仕入れ代は月間仕入れ額にも加算します。
     /// </summary>
     public bool TryPurchaseFromSupplier(int totalPrice)
     {
@@ -96,10 +115,49 @@ public class ShopManager : MonoBehaviour
 
         money -= totalPrice;
         cumulativePurchaseAmount += totalPrice;
+        monthlyPurchaseCost += totalPrice;
 
         RefreshPendingSupplierLevel();
         NotifyStateChanged();
         return true;
+    }
+
+    /// <summary>
+    /// その日の営業結果を月間集計へ1回だけ加算します。
+    /// </summary>
+    public void RecordDailyBusinessResult(int sales, int visitors, int buyers)
+    {
+        if (recordedBusinessResultToday) return;
+
+        monthlySales += Mathf.Max(0, sales);
+        monthlyVisitors += Mathf.Max(0, visitors);
+        monthlyBuyers += Mathf.Max(0, buyers);
+        recordedBusinessResultToday = true;
+    }
+
+    /// <summary>
+    /// 月末の店舗維持費を支払います。
+    /// 所持金不足でも支払いは発生し、一時的にマイナス所持金になることがあります。
+    /// </summary>
+    public int PayMonthlyMaintenance()
+    {
+        int cost = Mathf.Max(0, monthlyMaintenanceCost);
+        money -= cost;
+        NotifyStateChanged();
+        Debug.Log($"月末の店舗維持費として{cost:N0}円を支払いました。所持金：{money:N0}円");
+        return cost;
+    }
+
+    /// <summary>
+    /// 次の月を始める前に月間集計だけを0へ戻します。
+    /// </summary>
+    public void ResetMonthlyStatistics()
+    {
+        monthlySales = 0;
+        monthlyPurchaseCost = 0;
+        monthlyVisitors = 0;
+        monthlyBuyers = 0;
+        monthlyShopRatingGain = 0;
     }
 
     /// <summary>
@@ -155,7 +213,9 @@ public class ShopManager : MonoBehaviour
     {
         if (amount <= 0) return;
 
+        int before = shopRating;
         shopRating = Mathf.Clamp(shopRating + amount, 0, 10000);
+        monthlyShopRatingGain += Mathf.Max(0, shopRating - before);
 
         if (!hasCleared && shopRating >= 10000)
         {
@@ -195,6 +255,7 @@ public class ShopManager : MonoBehaviour
         todayFlowerPurchaseCount = 0;
         gotSupplierWrappingBonusToday = false;
         resolvedClosingGiftToday = false;
+        recordedBusinessResultToday = false;
 
         SyncSupplierSystem();
         NotifyStateChanged();
