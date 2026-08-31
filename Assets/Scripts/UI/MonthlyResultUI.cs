@@ -38,11 +38,6 @@ public class MonthlyResultUI : MonoBehaviour
             nextMonthButton.onClick.AddListener(GoToNextMonth);
     }
 
-    private void Start()
-    {
-        gameObject.SetActive(false);
-    }
-
     private void OnDestroy()
     {
         if (nextMonthButton != null)
@@ -50,11 +45,27 @@ public class MonthlyResultUI : MonoBehaviour
     }
 
     /// <summary>
+    /// ゲーム開始時などに月間集計パネルを確実に隠します。
+    /// ShowMonthlyResultで初めて表示した直後にStartが走って消えてしまう問題を避けるため、
+    /// MonthlyResultUI自身のStartでは非表示にしません。
+    /// </summary>
+    public void HideImmediate()
+    {
+        isShowing = false;
+        paymentCompleted = false;
+        gameObject.SetActive(false);
+    }
+
+    /// <summary>
     /// 月間結果を表示します。維持費はこの時点ではまだ徴収しません。
     /// </summary>
     public void ShowMonthlyResult()
     {
-        if (shopManager == null) return;
+        if (shopManager == null)
+        {
+            Debug.LogWarning("MonthlyResultUI: ShopManagerが設定されていません。");
+            return;
+        }
 
         isShowing = true;
         paymentCompleted = false;
@@ -96,6 +107,8 @@ public class MonthlyResultUI : MonoBehaviour
 
         if (nextMonthButton != null)
             nextMonthButton.interactable = true;
+
+        Debug.Log($"月間集計を表示しました：{shopManager.CurrentMonth}月 / 売上{shopManager.MonthlySales:N0}円");
     }
 
     private void GoToNextMonth()
