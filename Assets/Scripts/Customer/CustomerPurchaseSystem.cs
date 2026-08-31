@@ -71,10 +71,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
     private const int MaxCandidateChecks = 3;
     private const int MaxFlowerShoppingRounds = 3;
 
-    /// <summary>
-    /// TryPurchase（トライ・パーチェス）＝購入を試みる。
-    /// 先に商品カテゴリを決め、魅力で候補を選び、その後に価格を見て購入判断します。
-    /// </summary>
     public PurchaseResult TryPurchase(CustomerSystem.VisitingCustomer customer)
     {
         PurchaseResult result = new PurchaseResult
@@ -90,11 +86,10 @@ public class CustomerPurchaseSystem : MonoBehaviour
             return result;
         }
 
-        float bouquetChance = GetPurposeAdjustedBouquetChance(customer);
+        float bouquetChance = TrendSystem.ApplyBouquetChanceBonus(GetPurposeAdjustedBouquetChance(customer), shopManager);
         bool wantsBouquet = UnityEngine.Random.value < bouquetChance;
         List<Candidate> preferred = wantsBouquet ? BuildBouquetCandidates(customer) : BuildFlowerCandidates(customer);
 
-        // 希望カテゴリに魅力条件を満たす商品が1つもない時だけ、反対カテゴリも見ます。
         if (preferred.Count == 0)
         {
             wantsBouquet = !wantsBouquet;
@@ -115,9 +110,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
         return result;
     }
 
-    /// <summary>
-    /// 客タイプごとの「今日は花束を見る」基礎確率。
-    /// </summary>
     private static float GetBouquetPreferenceChance(CustomerType customerType)
     {
         return customerType switch
@@ -132,11 +124,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
         };
     }
 
-    /// <summary>
-    /// GetPurposeAdjustedBouquetChance（ゲット・パーパス・アジャステッド・ブーケ・チャンス）
-    /// 来店目的を加味して、実際に花束を見る確率を返します。
-    /// 自宅用は単品寄り、プレゼントと記念日は花束寄り、お供えはやや単品寄りです。
-    /// </summary>
     private static float GetPurposeAdjustedBouquetChance(CustomerSystem.VisitingCustomer customer)
     {
         float baseChance = GetBouquetPreferenceChance(customer.data.customerType);
@@ -163,7 +150,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
             if (selected == null) break;
             remaining.Remove(selected);
 
-            if (selected.price <= 0 || selected.price > customer.data.budget)
+            if (selected.price <= 0 || selected.price > customer.budget)
                 continue;
 
             float buyChance = CalculateBouquetPurchaseChance(
@@ -202,7 +189,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
 
     private void TryPurchaseFlowers(CustomerSystem.VisitingCustomer customer, PurchaseResult result)
     {
-        int remainingBudget = Mathf.Max(0, customer.data.budget);
+        int remainingBudget = Mathf.Max(0, customer.budget);
         List<FlowerPurchaseRecord> purchases = new();
 
         for (int round = 0; round < MaxFlowerShoppingRounds && remainingBudget > 0; round++)
@@ -221,7 +208,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
                 if (selected.flower == null || selected.price <= 0 || selected.price > remainingBudget)
                     continue;
 
-                // 単品花も花束と同じく、魅力で選んだあと「販売価格 ÷ 適正価格」で購入判断します。
                 float buyChance = CalculatePricePurchaseChance(selected.price, selected.recommendedPrice);
                 if (UnityEngine.Random.value > buyChance)
                     continue;
@@ -356,10 +342,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
         return candidates;
     }
 
-    /// <summary>
-    /// 魅力の入口では価格を使いません。
-    /// 人気度・珍しさの客との相性、好きな色、花束評価、0.85～1.15倍の個体差で重みを作ります。
-    /// </summary>
     private static float CalculateAttractivenessWeight(
         CustomerSystem.VisitingCustomer customer,
         int popularity,
@@ -384,10 +366,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 適正価格に対する販売価格の比率から、最終的な購入率を返します。
-    /// 単品花と花束で共通して使用します。
-    /// </summary>
     private static float CalculatePricePurchaseChance(int salePrice, int recommendedPrice)
     {
         if (salePrice <= 0 || recommendedPrice <= 0) return 0f;
@@ -408,9 +386,6 @@ public class CustomerPurchaseSystem : MonoBehaviour
         return 0.02f;
     }
 
-    /// <summary>
-    /// 花束は共通の価格購入率に、花束評価による補正を加えます。
-    /// </summary>
     private static float CalculateBouquetPurchaseChance(int salePrice, int recommendedPrice, int qualityScore)
     {
         float baseChance = CalculatePricePurchaseChance(salePrice, recommendedPrice);
@@ -486,7 +461,10 @@ public class CustomerPurchaseSystem : MonoBehaviour
     private int CalculateSatisfactionScore(CustomerSystem.VisitingCustomer customer, FlowerData flower, int price)
     {
         int rarity = flower.GetRarity(shopManager.CurrentSeason);
-        return CalculateCommonSatisfactionScore(customer, flower.basePopularity, rarity, price, ColorsEqual(flower.color, customer.favoriteColor));
+        int score = CalculateCommonSatisfactionScore(customer, flower.basePopularity, rarity, price, ColorsEqual(flower.color, customer.favoriteColor));
+        if (TrendSystem.IsMonthlyTrendColor(flower.color, shopManager))
+            score += TrendSystem.MonthlyTrendColorSatisfactionBonus;
+        return score;
     }
 
     private int CalculateBouquetSatisfactionScore(CustomerSystem.VisitingCustomer customer, BouquetSystem.BouquetData bouquet, int price, int qualityScore)
@@ -502,6 +480,9 @@ public class CustomerPurchaseSystem : MonoBehaviour
         if (qualityScore >= 8) score += 2;
         else if (qualityScore >= 5) score += 1;
 
+        if (evaluation.mainColors != null && evaluation.mainColors.Any(color => TrendSystem.IsMonthlyTrendColor(color, shopManager)))
+            score += TrendSystem.MonthlyTrendColorSatisfactionBonus;
+
         return score;
     }
 
@@ -516,7 +497,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
         int rarityCenter = Mathf.RoundToInt((customer.data.minRarity + customer.data.maxRarity) / 2f);
         score += Mathf.Abs(rarity - rarityCenter) <= 1 ? 2 : 1;
 
-        float budgetRatio = price / (float)Mathf.Max(1, customer.data.budget);
+        float budgetRatio = price / (float)Mathf.Max(1, customer.budget);
         if (budgetRatio <= 0.5f) score += 2;
         else if (budgetRatio <= 0.75f) score += 1;
 
