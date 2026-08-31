@@ -16,6 +16,12 @@ public class SupplierCommentController : MonoBehaviour
     [TextArea(2, 4)]
     [SerializeField] private string defaultMessage = "今日はどのお花を仕入れる？";
 
+    private static readonly string[] AdditionalDefaultMessages =
+    {
+        "いらっしゃーい！",
+        "今日もいいお花、そろってるよ！"
+    };
+
     private static readonly Dictionary<string, string> FlowerComments = new()
     {
         { "ガーベラ", "明るく元気な印象の花、実は小さな花でできてるんだって！" },
@@ -73,10 +79,20 @@ public class SupplierCommentController : MonoBehaviour
         speechText.text = $"{flower.flowerName}だね！大事に扱ってあげてね。";
     }
 
+    /// <summary>
+    /// ゲーム開始時・翌日の仕入れ開始時に、待機セリフをランダムで表示します。
+    /// </summary>
     [ContextMenu("待機メッセージを表示")]
     public void ShowDefaultMessage()
     {
-        if (speechText != null)
-            speechText.text = defaultMessage;
+        if (speechText == null)
+            return;
+
+        int count = AdditionalDefaultMessages.Length + 1;
+        int index = Random.Range(0, count);
+
+        speechText.text = index == 0
+            ? defaultMessage
+            : AdditionalDefaultMessages[index - 1];
     }
 }
