@@ -4,8 +4,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 仕入れ画面の商品1種類分を表示するUI。
-/// 商品名・色・価格・残り数・花画像を表示し、1本購入／最大5本購入をSupplierUIへ通知します。
+/// 仕入れ画面の商品1種類分を表示する共通UI。
+/// 花とレジ横商品BOXの両方を同じPrefabで表示します。
 /// </summary>
 public class SupplierItemUI : MonoBehaviour
 {
@@ -23,8 +23,14 @@ public class SupplierItemUI : MonoBehaviour
     [SerializeField] private TMP_Text buyFiveButtonText;
 
     private SupplierSystem.ArrivalItem arrivalItem;
+    private CheckoutItemSystem checkoutItemSystem;
+    private CheckoutItemSystem.CheckoutItemDefinition checkoutItem;
+
     private Action<SupplierSystem.ArrivalItem> onBuyOneRequested;
     private Action<SupplierSystem.ArrivalItem, int> onBuyMultipleRequested;
+    private Action<CheckoutItemSystem.CheckoutItemDefinition> onBuyCheckoutRequested;
+
+    private bool IsCheckoutItem => checkoutItem != null;
 
     private void Awake()
     {
@@ -44,49 +50,61 @@ public class SupplierItemUI : MonoBehaviour
             buyFiveButton.onClick.RemoveListener(HandleBuyFiveClicked);
     }
 
-    /// <summary>
-    /// Bind（バインド）= UIと実際の商品データを結び付けます。
-    /// </summary>
     public void Bind(
         SupplierSystem.ArrivalItem item,
         Action<SupplierSystem.ArrivalItem> buyOneCallback,
         Action<SupplierSystem.ArrivalItem, int> buyMultipleCallback)
     {
         arrivalItem = item;
+        checkoutItemSystem = null;
+        checkoutItem = null;
         onBuyOneRequested = buyOneCallback;
         onBuyMultipleRequested = buyMultipleCallback;
+        onBuyCheckoutRequested = null;
         Refresh();
     }
 
     /// <summary>
-    /// 現在の商品状態をUI表示へ反映します。
-    /// 花画像は FlowerData の花名＋色から自動取得します。
-    /// まとめ買いボタンは残数に応じて「5本購入」～「1本購入」へ自動変更します。
+    /// レジ横商品のBOXを、花と同じ仕入れPrefabへ表示します。
+    /// 1クリックで1BOXだけ購入するため、まとめ買いボタンは非表示にします。
     /// </summary>
+    public void BindCheckout(
+        CheckoutItemSystem system,
+        CheckoutItemSystem.CheckoutItemDefinition item,
+        Action<CheckoutItemSystem.CheckoutItemDefinition> buyCallback)
+    {
+        arrivalItem = null;
+        checkoutItemSystem = system;
+        checkoutItem = item;
+        onBuyOneRequested = null;
+        onBuyMultipleRequested = null;
+        onBuyCheckoutRequested = buyCallback;
+        Refresh();
+    }
+
     public void Refresh()
+    {
+        if (IsCheckoutItem)
+        {
+            RefreshCheckoutItem();
+            return;
+        }
+
+        RefreshFlowerItem();
+    }
+
+    private void RefreshFlowerItem()
     {
         bool valid = arrivalItem != null && arrivalItem.flower != null;
 
         if (!valid)
         {
-            if (flowerImage != null)
-            {
-                flowerImage.sprite = null;
-                flowerImage.enabled = false;
-            }
-
-            if (nameText != null) nameText.text = "商品なし";
-            if (colorText != null) colorText.text = string.Empty;
-            if (priceText != null) priceText.text = string.Empty;
-            if (remainingText != null) remainingText.text = string.Empty;
-            if (saleText != null) saleText.text = string.Empty;
-            if (buyButton != null) buyButton.interactable = false;
-            if (buyFiveButton != null) buyFiveButton.interactable = false;
-            if (buyFiveButtonText != null) buyFiveButtonText.text = "5本購入";
+            ClearDisplay();
             return;
         }
 
-        RefreshFlowerImage();
+        Sprite sprite = FlowerSpriteLoader.GetSprite(arrivalItem.flower);
+        SetImage(sprite);
 
         if (nameText != null) nameText.text = arrivalItem.flower.flowerName;
         if (colorText != null) colorText.text = $"色：{arrivalItem.flower.color}";
@@ -94,31 +112,69 @@ public class SupplierItemUI : MonoBehaviour
         if (remainingText != null) remainingText.text = $"残り {arrivalItem.RemainingQuantity}";
 
         if (saleText != null)
-        {
             saleText.text = arrivalItem.discountPercent > 0
                 ? $"SALE {arrivalItem.discountPercent}%OFF"
                 : string.Empty;
-        }
 
         bool hasStock = arrivalItem.RemainingQuantity > 0;
-
         if (buyButton != null)
+        {
+            buyButton.gameObject.SetActive(true);
             buyButton.interactable = hasStock;
+        }
 
         int bulkQuantity = GetBulkPurchaseQuantity();
-
         if (buyFiveButton != null)
+        {
+            buyFiveButton.gameObject.SetActive(true);
             buyFiveButton.interactable = bulkQuantity > 0;
+        }
 
         if (buyFiveButtonText != null)
             buyFiveButtonText.text = bulkQuantity > 0 ? $"{bulkQuantity}本購入" : "5本購入";
     }
 
-    private void RefreshFlowerImage()
+    private void RefreshCheckoutItem()
+    {
+        bool available = checkoutItemSystem != null
+            && checkoutItem != null
+            && checkoutItemSystem.HasTodayOffer
+            && checkoutItemSystem.TodayOffer == checkoutItem;
+
+        SetImage(checkoutItemSystem != null ? checkoutItemSystem.LoadSprite(checkoutItem) : null);
+
+        if (nameText != null) nameText.text = checkoutItem.displayName;
+        if (colorText != null) colorText.text = "レジ横商品";
+        if (priceText != null) priceText.text = $"{checkoutItem.boxPurchasePrice:N0}円";
+        if (remainingText != null) remainingText.text = $"{checkoutItem.boxQuantity}個入り ×1BOX";
+        if (saleText != null) saleText.text = string.Empty;
+
+        if (buyButton != null)
+        {
+            buyButton.gameObject.SetActive(true);
+            buyButton.interactable = available;
+        }
+
+        // レジ横商品は1BOXが最小単位なので花の「5本購入」は使いません。
+        if (buyFiveButton != null)
+            buyFiveButton.gameObject.SetActive(false);
+    }
+
+    private void ClearDisplay()
+    {
+        SetImage(null);
+        if (nameText != null) nameText.text = "商品なし";
+        if (colorText != null) colorText.text = string.Empty;
+        if (priceText != null) priceText.text = string.Empty;
+        if (remainingText != null) remainingText.text = string.Empty;
+        if (saleText != null) saleText.text = string.Empty;
+        if (buyButton != null) buyButton.interactable = false;
+        if (buyFiveButton != null) buyFiveButton.interactable = false;
+    }
+
+    private void SetImage(Sprite sprite)
     {
         if (flowerImage == null) return;
-
-        Sprite sprite = FlowerSpriteLoader.GetSprite(arrivalItem.flower);
         flowerImage.sprite = sprite;
         flowerImage.enabled = sprite != null;
         flowerImage.preserveAspect = true;
@@ -133,16 +189,21 @@ public class SupplierItemUI : MonoBehaviour
 
     private void HandleBuyClicked()
     {
+        if (IsCheckoutItem)
+        {
+            if (checkoutItemSystem == null || checkoutItem == null || !checkoutItemSystem.HasTodayOffer) return;
+            onBuyCheckoutRequested?.Invoke(checkoutItem);
+            return;
+        }
+
         if (arrivalItem == null || arrivalItem.RemainingQuantity <= 0) return;
         onBuyOneRequested?.Invoke(arrivalItem);
     }
 
-    /// <summary>
-    /// HandleBuyFiveClicked（ハンドル・バイ・ファイブ・クリックド）
-    /// 残数5本以上なら5本、4本以下なら残っている本数をまとめて購入します。
-    /// </summary>
     private void HandleBuyFiveClicked()
     {
+        if (IsCheckoutItem) return;
+
         int quantity = GetBulkPurchaseQuantity();
         if (arrivalItem == null || quantity <= 0) return;
         onBuyMultipleRequested?.Invoke(arrivalItem, quantity);
