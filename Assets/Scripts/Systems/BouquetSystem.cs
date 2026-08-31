@@ -57,7 +57,7 @@ public class BouquetSystem : MonoBehaviour
     [SerializeField] private InventorySystem inventorySystem;
 
     [Header("ラッピング")]
-    [Min(0)] [SerializeField] private int wrappingCount = 3;
+    [Min(0)] [SerializeField] private int wrappingCount = 5;
 
     [Header("作成済み花束")]
     [SerializeField] private List<BouquetData> bouquets = new();
@@ -178,21 +178,12 @@ public class BouquetSystem : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// GetRecommendedPrice（ゲット・レコメンデッド・プライス）
-    /// 花束の材料原価と合計本数から現在の適正価格を返します。
-    /// </summary>
     public int GetRecommendedPrice(BouquetData bouquet)
     {
         if (bouquet == null) return 0;
         return CalculateRecommendedPrice(bouquet.MaterialCost, bouquet.TotalQuantity);
     }
 
-    /// <summary>
-    /// CalculateRecommendedPrice（カルキュレート・レコメンデッド・プライス）
-    /// 3～5本=原価×4.5、6～10本=×4.0、11～20本=×3.5、21～25本=×3.25。
-    /// 最後に50円単位へ四捨五入します。
-    /// </summary>
     public static int CalculateRecommendedPrice(int materialCost, int totalQuantity)
     {
         if (materialCost <= 0 || totalQuantity <= 0) return 0;
@@ -210,11 +201,6 @@ public class BouquetSystem : MonoBehaviour
         return Mathf.Max(50, roundedTo50);
     }
 
-    /// <summary>
-    /// AdvanceFreshnessOneDay（アドバンス・フレッシュネス・ワン・デイ）
-    /// 花束内部の全ロットの鮮度を1日減らします。
-    /// 1つでも鮮度0の材料が出た花束は自動解体し、生きている材料とラッピングを戻します。
-    /// </summary>
     public int AdvanceFreshnessOneDay()
     {
         if (inventorySystem == null) return 0;
@@ -289,10 +275,6 @@ public class BouquetSystem : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 花束が売れた時など、花束そのものだけを在庫から取り除きます。
-    /// この処理ではラッピングは返却しません。
-    /// </summary>
     public bool RemoveBouquet(BouquetData bouquet)
     {
         if (bouquet == null) return false;
