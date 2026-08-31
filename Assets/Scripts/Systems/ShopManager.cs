@@ -4,9 +4,14 @@ using UnityEngine;
 /// <summary>
 /// お店全体の進行状態を管理するクラス。
 /// 所持金・店評価・日付・累計仕入額・仕入先Lvをまとめて保持します。
+/// ゲーム内カレンダーは4月スタート、1か月10日、1年120日です。
 /// </summary>
 public class ShopManager : MonoBehaviour
 {
+    public const int DaysPerMonth = 10;
+    public const int MonthsPerYear = 12;
+    public const int DaysPerYear = DaysPerMonth * MonthsPerYear;
+
     [Header("参照")]
     [SerializeField] private SupplierSystem supplierSystem;
     [SerializeField] private BouquetSystem bouquetSystem;
@@ -18,7 +23,8 @@ public class ShopManager : MonoBehaviour
 
     [Header("日付")]
     [Min(1)] [SerializeField] private int gameYear = 1;
-    [Range(1, 365)] [SerializeField] private int dayOfYear = 1;
+    [Tooltip("4月1日を1日目とするゲーム内年間通算日。1年は120日です。")]
+    [Range(1, DaysPerYear)] [SerializeField] private int dayOfYear = 1;
 
     [Header("仕入先")]
     [Range(1, 10)] [SerializeField] private int supplierLevel = 1;
@@ -46,11 +52,13 @@ public class ShopManager : MonoBehaviour
     public int CurrentMonth => GetMonthAndDay(dayOfYear).month;
     public int CurrentDay => GetMonthAndDay(dayOfYear).day;
     public Season CurrentSeason => GetSeason(CurrentMonth);
+    public string DateDisplayText => $"{gameYear}年目　{CurrentMonth}月 {CurrentDay}/{DaysPerMonth}日";
 
     public event Action OnStateChanged;
 
     private void Awake()
     {
+        dayOfYear = Mathf.Clamp(dayOfYear, 1, DaysPerYear);
         pendingSupplierLevel = Mathf.Max(supplierLevel, CalculateEligibleSupplierLevel());
         SyncSupplierSystem();
     }
@@ -167,12 +175,16 @@ public class ShopManager : MonoBehaviour
         NotifyStateChanged();
     }
 
+    /// <summary>
+    /// 1日進めます。
+    /// 4月1日から始まり、各月10日。3月10日の翌日は翌年4月1日になります。
+    /// </summary>
     [ContextMenu("翌日へ進む")]
     public void AdvanceDay()
     {
         dayOfYear++;
 
-        if (dayOfYear > 365)
+        if (dayOfYear > DaysPerYear)
         {
             dayOfYear = 1;
             gameYear++;
@@ -187,7 +199,7 @@ public class ShopManager : MonoBehaviour
         SyncSupplierSystem();
         NotifyStateChanged();
 
-        Debug.Log($"{gameYear}年目 {CurrentMonth}月{CurrentDay}日 / {CurrentSeason}");
+        Debug.Log($"{DateDisplayText} / {CurrentSeason}");
     }
 
     public void RecalculateSupplierLevel()
@@ -281,30 +293,31 @@ public class ShopManager : MonoBehaviour
         OnStateChanged?.Invoke();
     }
 
+    /// <summary>
+    /// 1季節=3か月。ゲーム開始の4月から春→夏→秋→冬と進みます。
+    /// </summary>
     private static Season GetSeason(int month)
     {
         return month switch
         {
-            3 or 4 or 5 => Season.Spring,
-            6 or 7 or 8 => Season.Summer,
-            9 or 10 or 11 => Season.Autumn,
+            4 or 5 or 6 => Season.Spring,
+            7 or 8 or 9 => Season.Summer,
+            10 or 11 or 12 => Season.Autumn,
             _ => Season.Winter
         };
     }
 
+    /// <summary>
+    /// 年間通算日を、4月始まり・各月10日の月日へ変換します。
+    /// 1=4月1日、10=4月10日、11=5月1日、120=3月10日。
+    /// </summary>
     private static (int month, int day) GetMonthAndDay(int day)
     {
-        int[] monthLengths = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-        int remaining = Mathf.Clamp(day, 1, 365);
+        int clamped = Mathf.Clamp(day, 1, DaysPerYear) - 1;
+        int monthIndex = clamped / DaysPerMonth;
+        int dayInMonth = clamped % DaysPerMonth + 1;
 
-        for (int month = 0; month < monthLengths.Length; month++)
-        {
-            if (remaining <= monthLengths[month])
-                return (month + 1, remaining);
-
-            remaining -= monthLengths[month];
-        }
-
-        return (12, 31);
+        int month = ((3 + monthIndex) % 12) + 1;
+        return (month, dayInMonth);
     }
 }
