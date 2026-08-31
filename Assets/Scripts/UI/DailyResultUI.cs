@@ -66,7 +66,7 @@ public class DailyResultUI : MonoBehaviour
         if (customerUI == null || shopManager == null) return;
 
         if (dateText != null)
-            dateText.text = $"{shopManager.GameYear}年目 {shopManager.CurrentMonth}月{shopManager.CurrentDay}日の営業結果";
+            dateText.text = $"{shopManager.DateDisplayText}の営業結果";
 
         if (visitorsText != null)
             visitorsText.text = $"来客数：{customerUI.TotalVisitors}人";
