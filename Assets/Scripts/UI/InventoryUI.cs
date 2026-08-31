@@ -6,19 +6,21 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 在庫画面全体を管理します。
-/// 通常商品は同一FlowerDataごとにまとめ、花束は専用の展開式InventoryBouquetItemで表示します。
+/// 通常商品は同一FlowerDataごとにまとめ、花束とレジ横商品も専用Prefabで表示します。
 /// </summary>
 public class InventoryUI : MonoBehaviour
 {
     [Header("参照")]
     [SerializeField] private InventorySystem inventorySystem;
     [SerializeField] private BouquetSystem bouquetSystem;
+    [SerializeField] private CheckoutItemSystem checkoutItemSystem;
 
     [Header("一覧表示")]
     [SerializeField] private Transform itemContainer;
     [SerializeField] private InventoryItemUI itemPrefab;
     [SerializeField] private InventoryFlowerGroupItemUI flowerGroupItemPrefab;
     [SerializeField] private InventoryBouquetItemUI bouquetItemPrefab;
+    [SerializeField] private CheckoutInventoryItemUI checkoutItemPrefab;
 
     [Header("ヘッダー表示")]
     [SerializeField] private TMP_Text totalStockText;
@@ -27,6 +29,7 @@ public class InventoryUI : MonoBehaviour
     private readonly List<InventoryItemUI> spawnedItems = new();
     private readonly List<InventoryFlowerGroupItemUI> spawnedFlowerGroups = new();
     private readonly List<InventoryBouquetItemUI> spawnedBouquetItems = new();
+    private readonly List<CheckoutInventoryItemUI> spawnedCheckoutItems = new();
 
     private void OnEnable()
     {
@@ -42,6 +45,12 @@ public class InventoryUI : MonoBehaviour
             bouquetSystem.OnBouquetsChanged += RefreshAll;
         }
 
+        if (checkoutItemSystem != null)
+        {
+            checkoutItemSystem.OnChanged -= RefreshAll;
+            checkoutItemSystem.OnChanged += RefreshAll;
+        }
+
         RefreshAll();
     }
 
@@ -52,6 +61,9 @@ public class InventoryUI : MonoBehaviour
 
         if (bouquetSystem != null)
             bouquetSystem.OnBouquetsChanged -= RefreshAll;
+
+        if (checkoutItemSystem != null)
+            checkoutItemSystem.OnChanged -= RefreshAll;
     }
 
     [ContextMenu("在庫画面を更新")]
@@ -76,6 +88,15 @@ public class InventoryUI : MonoBehaviour
 
         if (bouquetSystem != null)
             totalQuantity += bouquetSystem.Bouquets.Count;
+
+        if (checkoutItemSystem != null)
+        {
+            foreach (CheckoutItemSystem.CheckoutItemStock stock in checkoutItemSystem.Stocks)
+            {
+                if (stock != null)
+                    totalQuantity += Mathf.Max(0, stock.quantity);
+            }
+        }
 
         if (totalStockText != null)
             totalStockText.text = $"在庫：{totalQuantity}個";
@@ -110,6 +131,13 @@ public class InventoryUI : MonoBehaviour
                 Destroy(item.gameObject);
         }
         spawnedBouquetItems.Clear();
+
+        foreach (CheckoutInventoryItemUI item in spawnedCheckoutItems)
+        {
+            if (item != null)
+                Destroy(item.gameObject);
+        }
+        spawnedCheckoutItems.Clear();
 
         if (itemContainer == null)
         {
@@ -156,6 +184,18 @@ public class InventoryUI : MonoBehaviour
                 InventoryBouquetItemUI item = Instantiate(bouquetItemPrefab, itemContainer);
                 item.Bind(bouquet, bouquetSystem, RefreshAll);
                 spawnedBouquetItems.Add(item);
+            }
+        }
+
+        if (checkoutItemSystem != null && checkoutItemPrefab != null)
+        {
+            foreach (CheckoutItemSystem.CheckoutItemDefinition definition in checkoutItemSystem.Catalog)
+            {
+                if (definition == null || checkoutItemSystem.GetStockQuantity(definition.id) <= 0) continue;
+
+                CheckoutInventoryItemUI item = Instantiate(checkoutItemPrefab, itemContainer);
+                item.Bind(checkoutItemSystem, definition);
+                spawnedCheckoutItems.Add(item);
             }
         }
 
