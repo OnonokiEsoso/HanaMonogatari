@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 仕入れ画面全体を管理します。
@@ -13,6 +14,7 @@ public class SupplierUI : MonoBehaviour
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private SupplierSystem supplierSystem;
     [SerializeField] private InventorySystem inventorySystem;
+    [SerializeField] private BouquetSystem bouquetSystem;
     [Tooltip("仕入先キャラクターの吹き出し表示を担当するControllerを設定します。")]
     [SerializeField] private SupplierCommentController supplierCommentController;
 
@@ -25,11 +27,23 @@ public class SupplierUI : MonoBehaviour
     [SerializeField] private TMP_Text supplierLevelText;
     [SerializeField] private TMP_Text dateText;
 
+    [Header("ラッピング販売UI（任意）")]
+    [Tooltip("ラッピングが販売される日にだけ表示する親オブジェクト。")]
+    [SerializeField] private GameObject wrappingOfferRoot;
+    [SerializeField] private TMP_Text wrappingOfferText;
+    [SerializeField] private Button wrappingBuyButton;
+
     [Header("開始時")]
     [Tooltip("画面開始時に今日の入荷を自動生成します。")]
     [SerializeField] private bool generateArrivalsOnStart = true;
 
     private readonly List<SupplierItemUI> spawnedItems = new();
+
+    private void Awake()
+    {
+        if (wrappingBuyButton != null)
+            wrappingBuyButton.onClick.AddListener(TryBuyWrapping);
+    }
 
     private void OnEnable()
     {
@@ -41,6 +55,12 @@ public class SupplierUI : MonoBehaviour
     {
         if (shopManager != null)
             shopManager.OnStateChanged -= RefreshHeader;
+    }
+
+    private void OnDestroy()
+    {
+        if (wrappingBuyButton != null)
+            wrappingBuyButton.onClick.RemoveListener(TryBuyWrapping);
     }
 
     private void Start()
@@ -70,6 +90,7 @@ public class SupplierUI : MonoBehaviour
     {
         RefreshHeader();
         RebuildItemList();
+        RefreshWrappingOffer();
     }
 
     private void RefreshHeader()
@@ -118,11 +139,6 @@ public class SupplierUI : MonoBehaviour
         TryBuyMultiple(arrival, 1);
     }
 
-    /// <summary>
-    /// TryBuyMultiple（トライ・バイ・マルチプル）
-    /// Multiple＝複数。
-    /// 指定数をまとめて購入します。残数を超えず、1回の上限は5本です。
-    /// </summary>
     private void TryBuyMultiple(SupplierSystem.ArrivalItem arrival, int requestedQuantity)
     {
         if (arrival == null || arrival.flower == null) return;
@@ -131,7 +147,6 @@ public class SupplierUI : MonoBehaviour
 
         int quantity = Mathf.Clamp(requestedQuantity, 1, 5);
         quantity = Mathf.Min(quantity, arrival.RemainingQuantity);
-
         if (quantity <= 0) return;
 
         int totalPrice = arrival.UnitPurchasePrice * quantity;
@@ -145,9 +160,12 @@ public class SupplierUI : MonoBehaviour
         arrival.purchasedQuantity += quantity;
         inventorySystem.AddFlower(arrival.flower, quantity);
 
-        Debug.Log($"{arrival.flower.flowerName}（{arrival.flower.color}）を{quantity}個仕入れました。合計{totalPrice:N0}円");
+        bool gotWrappingBonus = shopManager.RegisterSupplierFlowerPurchase(quantity);
 
-        // 購入に成功した花について、仕入先キャラクターが一言しゃべります。
+        Debug.Log($"{arrival.flower.flowerName}（{arrival.flower.color}）を{quantity}個仕入れました。合計{totalPrice:N0}円");
+        if (gotWrappingBonus)
+            Debug.Log("仕入先からラッピングのおまけをもらいました！");
+
         if (supplierCommentController != null)
             supplierCommentController.ShowFlowerComment(arrival.flower);
 
@@ -158,5 +176,59 @@ public class SupplierUI : MonoBehaviour
             if (item != null)
                 item.Refresh();
         }
+    }
+
+    /// <summary>
+    /// 今日ラッピングが販売されている場合、1クリックで1個購入します。
+    /// ラッピング購入額は花の累計仕入額には加算しません。
+    /// </summary>
+    private void TryBuyWrapping()
+    {
+        if (supplierSystem == null || shopManager == null || bouquetSystem == null) return;
+        if (!supplierSystem.WrappingAvailableToday || supplierSystem.WrappingRemainingToday <= 0) return;
+
+        int price = supplierSystem.WrappingUnitPrice;
+        if (!shopManager.TrySpendMoney(price))
+        {
+            Debug.Log($"ラッピングを購入する所持金が足りません。必要額：{price:N0}円");
+            return;
+        }
+
+        if (!supplierSystem.TryPurchaseWrapping(1))
+        {
+            // 通常はここへ来ませんが、購入状態が変化していた場合は代金を戻します。
+            shopManager.AddMoney(price);
+            return;
+        }
+
+        bouquetSystem.AddWrapping(1);
+        Debug.Log($"ラッピングを1個購入しました。{price:N0}円");
+        RefreshHeader();
+        RefreshWrappingOffer();
+    }
+
+    private void RefreshWrappingOffer()
+    {
+        if (supplierSystem == null)
+        {
+            if (wrappingOfferRoot != null)
+                wrappingOfferRoot.SetActive(false);
+            return;
+        }
+
+        bool visible = supplierSystem.WrappingAvailableToday && supplierSystem.WrappingRemainingToday > 0;
+
+        if (wrappingOfferRoot != null)
+            wrappingOfferRoot.SetActive(visible);
+
+        if (wrappingOfferText != null)
+        {
+            wrappingOfferText.text = visible
+                ? $"ラッピング　{supplierSystem.WrappingUnitPrice:N0}円　残り{supplierSystem.WrappingRemainingToday}個"
+                : string.Empty;
+        }
+
+        if (wrappingBuyButton != null)
+            wrappingBuyButton.interactable = visible && shopManager != null && shopManager.Money >= supplierSystem.WrappingUnitPrice;
     }
 }
