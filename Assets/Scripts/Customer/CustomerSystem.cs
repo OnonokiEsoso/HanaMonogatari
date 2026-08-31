@@ -82,6 +82,7 @@ public class CustomerSystem : MonoBehaviour
     private void Awake()
     {
         EnsureDefaultProfiles();
+        ApplyBaseSpawnWeights();
         EnsureRegularStatuses();
     }
 
@@ -93,6 +94,7 @@ public class CustomerSystem : MonoBehaviour
     public void GenerateTodayCustomers()
     {
         EnsureDefaultProfiles();
+        ApplyBaseSpawnWeights();
         EnsureRegularStatuses();
         todayCustomers.Clear();
 
@@ -134,6 +136,7 @@ public class CustomerSystem : MonoBehaviour
     public RegularPointResult AddRegularPoint(CustomerType customerType)
     {
         EnsureDefaultProfiles();
+        ApplyBaseSpawnWeights();
         EnsureRegularStatuses();
 
         CustomerData profile = customerProfiles.Find(p => p != null && p.customerType == customerType);
@@ -244,6 +247,33 @@ public class CustomerSystem : MonoBehaviour
         return baseWeight * multiplier;
     }
 
+    /// <summary>
+    /// 常連補正が0人の時の基礎来店率。
+    /// 主婦42.5%、学生約14.17%、おばあさん約28.33%、サラリーマン10%、
+    /// ちびっこ2.5%、富豪2.5%。
+    /// おばあさん：学生：主婦 = 2：1：3。
+    /// </summary>
+    private void ApplyBaseSpawnWeights()
+    {
+        if (customerProfiles == null) return;
+
+        foreach (CustomerData profile in customerProfiles)
+        {
+            if (profile == null) continue;
+
+            profile.spawnWeight = profile.customerType switch
+            {
+                CustomerType.Housewife => 42.5f,
+                CustomerType.Student => 14.1667f,
+                CustomerType.Grandmother => 28.3333f,
+                CustomerType.Wealthy => 2.5f,
+                CustomerType.Child => 2.5f,
+                CustomerType.OfficeWorker => 10f,
+                _ => 1f
+            };
+        }
+    }
+
     private string PickFavoriteColor()
     {
         if (inventorySystem != null)
@@ -290,12 +320,12 @@ public class CustomerSystem : MonoBehaviour
 
         customerProfiles = new List<CustomerData>
         {
-            new(CustomerType.Housewife, "主婦", 2000, 3, 7, 1, 8, 3, 1.2f),
-            new(CustomerType.Student, "学生", 1000, 1, 6, 1, 10, 5, 1.2f),
-            new(CustomerType.Grandmother, "おばあさん", 5000, 5, 10, 3, 10, 5, 0.9f),
-            new(CustomerType.Wealthy, "富豪", 10000, 7, 10, 7, 10, 10, 0.25f),
-            new(CustomerType.Child, "ちびっこ", 300, 1, 3, 1, 3, 10, 0.35f),
-            new(CustomerType.OfficeWorker, "サラリーマン", 5000, 4, 8, 1, 10, 10, 0.45f)
+            new(CustomerType.Housewife, "主婦", 2000, 3, 7, 1, 8, 3, 42.5f),
+            new(CustomerType.Student, "学生", 1000, 1, 6, 1, 10, 5, 14.1667f),
+            new(CustomerType.Grandmother, "おばあさん", 5000, 5, 10, 3, 10, 5, 28.3333f),
+            new(CustomerType.Wealthy, "富豪", 10000, 7, 10, 7, 10, 10, 2.5f),
+            new(CustomerType.Child, "ちびっこ", 300, 1, 3, 1, 3, 10, 2.5f),
+            new(CustomerType.OfficeWorker, "サラリーマン", 5000, 4, 8, 1, 10, 10, 10f)
         };
     }
 }
