@@ -25,12 +25,14 @@ public class CustomerSystem : MonoBehaviour
         public CustomerData data;
         public string favoriteColor;
         public VisitPurpose purpose;
+        [Min(0)] public int budget;
 
-        public VisitingCustomer(CustomerData data, string favoriteColor, VisitPurpose purpose)
+        public VisitingCustomer(CustomerData data, string favoriteColor, VisitPurpose purpose, int budget)
         {
             this.data = data;
             this.favoriteColor = favoriteColor;
             this.purpose = purpose;
+            this.budget = budget;
         }
     }
 
@@ -86,10 +88,6 @@ public class CustomerSystem : MonoBehaviour
         EnsureRegularStatuses();
     }
 
-    /// <summary>
-    /// GenerateTodayCustomers（ジェネレート・トゥデイ・カスタマーズ）
-    /// Generate＝生成する。今日来る客をまとめて生成します。
-    /// </summary>
     [ContextMenu("本日の来客を生成")]
     public void GenerateTodayCustomers()
     {
@@ -99,6 +97,7 @@ public class CustomerSystem : MonoBehaviour
         todayCustomers.Clear();
 
         int visitorCount = CalculateTodayVisitorCount();
+        float budgetMultiplier = TrendSystem.GetBudgetMultiplier(shopManager);
 
         for (int i = 0; i < visitorCount; i++)
         {
@@ -107,7 +106,8 @@ public class CustomerSystem : MonoBehaviour
 
             string favoriteColor = PickFavoriteColor();
             VisitPurpose purpose = PickVisitPurpose(profile.customerType);
-            todayCustomers.Add(new VisitingCustomer(profile, favoriteColor, purpose));
+            int effectiveBudget = Mathf.Max(0, Mathf.RoundToInt(profile.budget * budgetMultiplier));
+            todayCustomers.Add(new VisitingCustomer(profile, favoriteColor, purpose, effectiveBudget));
         }
 
         Debug.Log($"本日の来客を生成しました。{todayCustomers.Count}人");
@@ -119,7 +119,8 @@ public class CustomerSystem : MonoBehaviour
         int baseVisitors = 2 + Mathf.FloorToInt(rating / 300f);
 
         float randomMultiplier = UnityEngine.Random.Range(0.8f, 1.2f);
-        int visitors = Mathf.Max(1, Mathf.RoundToInt(baseVisitors * randomMultiplier));
+        float trendMultiplier = TrendSystem.GetVisitorMultiplier(shopManager);
+        int visitors = Mathf.Max(1, Mathf.RoundToInt(baseVisitors * randomMultiplier * trendMultiplier));
 
         // 開店ボーナスは1年目の最初の2日間だけ。
         if (shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear <= 2)
@@ -128,11 +129,6 @@ public class CustomerSystem : MonoBehaviour
         return visitors;
     }
 
-    /// <summary>
-    /// AddRegularPoint（アド・レギュラー・ポイント）
-    /// Add＝加える、Regular Point＝常連ポイント。
-    /// 購入した客タイプへ1ポイント加え、上限に達すると常連人数を1人増やします。
-    /// </summary>
     public RegularPointResult AddRegularPoint(CustomerType customerType)
     {
         EnsureDefaultProfiles();
@@ -160,10 +156,6 @@ public class CustomerSystem : MonoBehaviour
         return new RegularPointResult(status.currentPoints, required, status.regularCount, becameRegular);
     }
 
-    /// <summary>
-    /// 客タイプごとに自然な来店目的を重み付きで抽選します。
-    /// 数値は合計100になる割合です。
-    /// </summary>
     private static VisitPurpose PickVisitPurpose(CustomerType customerType)
     {
         float selfUse;
@@ -247,12 +239,6 @@ public class CustomerSystem : MonoBehaviour
         return baseWeight * multiplier;
     }
 
-    /// <summary>
-    /// 常連補正が0人の時の基礎来店率。
-    /// 主婦42.5%、学生約14.17%、おばあさん約28.33%、サラリーマン10%、
-    /// ちびっこ2.5%、富豪2.5%。
-    /// おばあさん：学生：主婦 = 2：1：3。
-    /// </summary>
     private void ApplyBaseSpawnWeights()
     {
         if (customerProfiles == null) return;
@@ -276,21 +262,33 @@ public class CustomerSystem : MonoBehaviour
 
     private string PickFavoriteColor()
     {
+        List<string> colors = new();
+
         if (inventorySystem != null)
         {
-            List<string> colors = new();
             foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
             {
                 if (batch?.flower == null || string.IsNullOrWhiteSpace(batch.flower.color)) continue;
                 if (!colors.Contains(batch.flower.color)) colors.Add(batch.flower.color);
             }
-
-            if (colors.Count > 0)
-                return colors[UnityEngine.Random.Range(0, colors.Count)];
         }
 
-        string[] fallbackColors = { "赤", "桃", "白", "黄", "青", "紫", "橙", "緑" };
-        return fallbackColors[UnityEngine.Random.Range(0, fallbackColors.Length)];
+        if (colors.Count == 0)
+            colors.AddRange(new[] { "赤", "桃", "白", "黄", "青", "紫", "橙", "緑" });
+
+        float totalWeight = 0f;
+        foreach (string color in colors)
+            totalWeight += TrendSystem.IsMonthlyTrendColor(color, shopManager) ? TrendSystem.MonthlyFavoriteColorWeight : 1f;
+
+        float roll = UnityEngine.Random.value * totalWeight;
+        float cursor = 0f;
+        foreach (string color in colors)
+        {
+            cursor += TrendSystem.IsMonthlyTrendColor(color, shopManager) ? TrendSystem.MonthlyFavoriteColorWeight : 1f;
+            if (roll <= cursor) return color;
+        }
+
+        return colors[^1];
     }
 
     private void EnsureRegularStatuses()
