@@ -6,12 +6,15 @@ using UnityEngine;
 /// <summary>
 /// プレイヤーが作成した花束を管理します。
 /// 通常の花束は3種類以上、合計3～25本で作成します。
+/// 花束1個の作成にはラッピングを1個使用します。
+/// 解体時はラッピングが戻り、販売時は戻りません。
 /// 26本以上は将来の花束予約イベント専用とし、通常作成では扱いません。
 /// </summary>
 public class BouquetSystem : MonoBehaviour
 {
     public const int MinimumBouquetQuantity = 3;
     public const int MaximumBouquetQuantity = 25;
+    public const int WrappingCostPerBouquet = 1;
 
     [Serializable]
     public class BouquetFreshnessLot
@@ -53,11 +56,30 @@ public class BouquetSystem : MonoBehaviour
     [Header("参照")]
     [SerializeField] private InventorySystem inventorySystem;
 
+    [Header("ラッピング")]
+    [Min(0)] [SerializeField] private int wrappingCount = 3;
+
     [Header("作成済み花束")]
     [SerializeField] private List<BouquetData> bouquets = new();
 
     public IReadOnlyList<BouquetData> Bouquets => bouquets;
+    public int WrappingCount => wrappingCount;
+    public bool CanCreateWithWrapping => wrappingCount >= WrappingCostPerBouquet;
+
     public event Action OnBouquetsChanged;
+    public event Action OnWrappingChanged;
+
+    /// <summary>
+    /// AddWrapping（アド・ラッピング）
+    /// レベルアップ報酬・仕入れ販売・おまけ・差し入れ等からラッピングを増やすための共通入口です。
+    /// </summary>
+    public void AddWrapping(int amount)
+    {
+        if (amount <= 0) return;
+        wrappingCount += amount;
+        OnWrappingChanged?.Invoke();
+        Debug.Log($"ラッピングを{amount}個入手しました。所持数：{wrappingCount}");
+    }
 
     public bool TryCreateBouquet(string bouquetName, int salePrice, List<BouquetComponent> requestedComponents, out string message)
     {
@@ -66,6 +88,12 @@ public class BouquetSystem : MonoBehaviour
         if (inventorySystem == null)
         {
             message = "InventorySystemが設定されていません";
+            return false;
+        }
+
+        if (!CanCreateWithWrapping)
+        {
+            message = "ラッピングが足りません";
             return false;
         }
 
@@ -124,6 +152,8 @@ public class BouquetSystem : MonoBehaviour
             component.remainingFreshnessDays = component.OldestRemainingFreshnessDays;
         }
 
+        wrappingCount -= WrappingCostPerBouquet;
+
         BouquetData bouquet = new BouquetData
         {
             bouquetName = string.IsNullOrWhiteSpace(bouquetName) ? $"花束{bouquets.Count + 1}" : bouquetName.Trim(),
@@ -132,6 +162,7 @@ public class BouquetSystem : MonoBehaviour
         };
 
         bouquets.Add(bouquet);
+        OnWrappingChanged?.Invoke();
         OnBouquetsChanged?.Invoke();
 
         message = $"{bouquet.bouquetName}を作成しました（{totalQuantity}本 / {salePrice:N0}円）";
@@ -182,7 +213,7 @@ public class BouquetSystem : MonoBehaviour
     /// <summary>
     /// AdvanceFreshnessOneDay（アドバンス・フレッシュネス・ワン・デイ）
     /// 花束内部の全ロットの鮮度を1日減らします。
-    /// 1つでも鮮度0の材料が出た花束は自動解体し、生きている材料だけ在庫へ戻します。
+    /// 1つでも鮮度0の材料が出た花束は自動解体し、生きている材料とラッピングを戻します。
     /// </summary>
     public int AdvanceFreshnessOneDay()
     {
@@ -217,9 +248,13 @@ public class BouquetSystem : MonoBehaviour
         {
             ReturnAliveMaterials(bouquet);
             bouquets.Remove(bouquet);
+            wrappingCount += WrappingCostPerBouquet;
             autoDisassembled++;
-            Debug.Log($"{bouquet.bouquetName}は材料の鮮度切れにより自動解体されました。");
+            Debug.Log($"{bouquet.bouquetName}は材料の鮮度切れにより自動解体されました。ラッピングが戻りました。");
         }
+
+        if (autoDisassembled > 0)
+            OnWrappingChanged?.Invoke();
 
         OnBouquetsChanged?.Invoke();
         return autoDisassembled;
@@ -245,13 +280,19 @@ public class BouquetSystem : MonoBehaviour
 
         string name = bouquet.bouquetName;
         bouquets.Remove(bouquet);
+        wrappingCount += WrappingCostPerBouquet;
+        OnWrappingChanged?.Invoke();
         OnBouquetsChanged?.Invoke();
 
-        message = $"{name}を解体し、材料を在庫へ戻しました";
+        message = $"{name}を解体し、材料とラッピングを戻しました";
         Debug.Log(message);
         return true;
     }
 
+    /// <summary>
+    /// 花束が売れた時など、花束そのものだけを在庫から取り除きます。
+    /// この処理ではラッピングは返却しません。
+    /// </summary>
     public bool RemoveBouquet(BouquetData bouquet)
     {
         if (bouquet == null) return false;
