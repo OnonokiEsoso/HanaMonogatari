@@ -6,15 +6,15 @@ using UnityEngine;
 
 /// <summary>
 /// 開店から、その日の客を先客順に自動処理する営業UIです。
-/// ShopTabUIの「開店」ボタンからOpenShopを直接呼び出し、
-/// SalesVisualControllerの演出を1人ずつ自動再生します。
-/// このコンポーネントは営業画面の切り替えで非表示にならない常駐GameObjectに置いてください。
+/// 花/花束購入後、残り予算があれば設置中のレジ横商品を最大1個だけ追加購入判定します。
 /// </summary>
 public class CustomerUI : MonoBehaviour
 {
     [Header("参照")]
     [SerializeField] private CustomerSystem customerSystem;
     [SerializeField] private CustomerPurchaseSystem purchaseSystem;
+    [SerializeField] private CheckoutItemSystem checkoutItemSystem;
+    [SerializeField] private ShopManager shopManager;
     [SerializeField] private ShopTabUI shopTabUI;
     [SerializeField] private SalesVisualController salesVisualController;
 
@@ -54,11 +54,6 @@ public class CustomerUI : MonoBehaviour
         RefreshState();
     }
 
-    /// <summary>
-    /// OpenShop（オープン・ショップ）＝開店する。
-    /// 上部の「開店」タブから直接呼ばれます。
-    /// 今日の来客を生成したあと、全員を先客順に自動で処理します。
-    /// </summary>
     public void OpenShop()
     {
         if (isShopOpen || hasFinishedToday || businessRoutine != null) return;
@@ -75,8 +70,6 @@ public class CustomerUI : MonoBehaviour
         purchaseCount = 0;
         totalSales = 0;
 
-        // 先にDailyResultPanelへ切り替える。
-        // CustomerUI自身は常駐GameObjectに置くため、この切り替えで非アクティブになりません。
         SetShopOpen(true);
 
         if (resultText != null)
@@ -129,6 +122,7 @@ public class CustomerUI : MonoBehaviour
             result = purchaseSystem.TryPurchase(customer);
             if (result != null && result.purchased)
             {
+                TryAddCheckoutPurchase(customer, result);
                 purchaseCount++;
                 totalSales += result.salePrice;
             }
@@ -144,9 +138,24 @@ public class CustomerUI : MonoBehaviour
         RefreshState();
     }
 
-    /// <summary>
-    /// デバッグ用。通常営業では自動処理を使用します。
-    /// </summary>
+    private void TryAddCheckoutPurchase(CustomerSystem.VisitingCustomer customer, CustomerPurchaseSystem.PurchaseResult result)
+    {
+        if (checkoutItemSystem == null || customer?.data == null || result == null || !result.purchased)
+            return;
+
+        float budgetMultiplier = TrendSystem.GetBudgetMultiplier(shopManager);
+        int effectiveBudget = Mathf.Max(0, Mathf.RoundToInt(customer.data.budget * budgetMultiplier));
+        int remainingBudget = Mathf.Max(0, effectiveBudget - result.salePrice);
+        bool boughtBouquet = result.bouquet != null;
+
+        CheckoutItemSystem.AddonSaleResult addon = checkoutItemSystem.TrySellAddon(boughtBouquet, remainingBudget);
+        if (!addon.purchased) return;
+
+        result.salePrice += addon.price;
+        result.message += $"　＋{addon.itemName} ×1（{addon.price:N0}円）";
+        Debug.Log($"レジ横追加購入：{customer.data.displayName} / {addon.itemName} / {addon.price:N0}円");
+    }
+
     public void ProcessNextCustomer()
     {
         if (!isShopOpen || isProcessingCustomer || businessRoutine != null || waitingCustomers.Count == 0)
@@ -214,8 +223,11 @@ public class CustomerUI : MonoBehaviour
             else if (waitingCustomers.Count > 0)
             {
                 CustomerSystem.VisitingCustomer next = waitingCustomers.Peek();
+                int budget = next?.data != null
+                    ? Mathf.RoundToInt(next.data.budget * TrendSystem.GetBudgetMultiplier(shopManager))
+                    : 0;
                 currentCustomerText.text = next?.data != null
-                    ? $"次のお客：{next.data.displayName}　目的 {CustomerSystem.GetPurposeLabel(next.purpose)}　予算 {next.data.budget:N0}円"
+                    ? $"次のお客：{next.data.displayName}　目的 {CustomerSystem.GetPurposeLabel(next.purpose)}　予算 {budget:N0}円"
                     : "次のお客：不明";
             }
             else
