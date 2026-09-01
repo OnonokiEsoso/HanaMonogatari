@@ -16,6 +16,7 @@ public class SupplierItemUI : MonoBehaviour
     [SerializeField] private TMP_Text priceText;
     [SerializeField] private TMP_Text remainingText;
     [SerializeField] private TMP_Text saleText;
+    [SerializeField] private TMP_Text newText;
 
     [Header("操作")]
     [SerializeField] private Button buyButton;
@@ -25,6 +26,7 @@ public class SupplierItemUI : MonoBehaviour
     private SupplierSystem.ArrivalItem arrivalItem;
     private CheckoutItemSystem checkoutItemSystem;
     private CheckoutItemSystem.CheckoutItemDefinition checkoutItem;
+    private bool showNewMarker;
 
     private Action<SupplierSystem.ArrivalItem> onBuyOneRequested;
     private Action<SupplierSystem.ArrivalItem, int> onBuyMultipleRequested;
@@ -53,11 +55,13 @@ public class SupplierItemUI : MonoBehaviour
     public void Bind(
         SupplierSystem.ArrivalItem item,
         Action<SupplierSystem.ArrivalItem> buyOneCallback,
-        Action<SupplierSystem.ArrivalItem, int> buyMultipleCallback)
+        Action<SupplierSystem.ArrivalItem, int> buyMultipleCallback,
+        bool isNew)
     {
         arrivalItem = item;
         checkoutItemSystem = null;
         checkoutItem = null;
+        showNewMarker = isNew;
         onBuyOneRequested = buyOneCallback;
         onBuyMultipleRequested = buyMultipleCallback;
         onBuyCheckoutRequested = null;
@@ -71,11 +75,13 @@ public class SupplierItemUI : MonoBehaviour
     public void BindCheckout(
         CheckoutItemSystem system,
         CheckoutItemSystem.CheckoutItemDefinition item,
-        Action<CheckoutItemSystem.CheckoutItemDefinition> buyCallback)
+        Action<CheckoutItemSystem.CheckoutItemDefinition> buyCallback,
+        bool isNew)
     {
         arrivalItem = null;
         checkoutItemSystem = system;
         checkoutItem = item;
+        showNewMarker = isNew;
         onBuyOneRequested = null;
         onBuyMultipleRequested = null;
         onBuyCheckoutRequested = buyCallback;
@@ -84,6 +90,8 @@ public class SupplierItemUI : MonoBehaviour
 
     public void Refresh()
     {
+        RefreshNewMarker();
+
         if (IsCheckoutItem)
         {
             RefreshCheckoutItem();
@@ -91,6 +99,19 @@ public class SupplierItemUI : MonoBehaviour
         }
 
         RefreshFlowerItem();
+    }
+
+    public void SetNewMarker(bool isNew)
+    {
+        showNewMarker = isNew;
+        RefreshNewMarker();
+    }
+
+    private void RefreshNewMarker()
+    {
+        if (newText == null) return;
+        newText.text = "New!";
+        newText.gameObject.SetActive(showNewMarker);
     }
 
     private void RefreshFlowerItem()
@@ -168,6 +189,7 @@ public class SupplierItemUI : MonoBehaviour
         if (priceText != null) priceText.text = string.Empty;
         if (remainingText != null) remainingText.text = string.Empty;
         if (saleText != null) saleText.text = string.Empty;
+        if (newText != null) newText.gameObject.SetActive(false);
         if (buyButton != null) buyButton.interactable = false;
         if (buyFiveButton != null) buyFiveButton.interactable = false;
     }
