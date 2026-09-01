@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -29,6 +30,8 @@ public class ShopManager : MonoBehaviour
     [Header("仕入先")]
     [Range(1, 10)] [SerializeField] private int supplierLevel = 1;
     [Range(1, 10)] [SerializeField] private int pendingSupplierLevel = 1;
+    [Tooltip("このゲーム中に一度でも仕入れた商品の識別キー。仕入れ画面のNew!表示判定に使います。")]
+    [SerializeField] private List<string> purchasedSupplierProductKeys = new();
 
     [Header("月間集計")]
     [Min(0)] [SerializeField] private int monthlySales = 0;
@@ -76,9 +79,25 @@ public class ShopManager : MonoBehaviour
 
     private void Awake()
     {
+        purchasedSupplierProductKeys ??= new List<string>();
         dayOfYear = Mathf.Clamp(dayOfYear, 1, DaysPerYear);
         pendingSupplierLevel = Mathf.Max(supplierLevel, CalculateEligibleSupplierLevel());
         SyncSupplierSystem();
+    }
+
+    public bool HasPurchasedSupplierProduct(string productKey)
+    {
+        if (string.IsNullOrWhiteSpace(productKey)) return false;
+        return purchasedSupplierProductKeys != null && purchasedSupplierProductKeys.Contains(productKey);
+    }
+
+    public void RegisterSupplierProductPurchase(string productKey)
+    {
+        if (string.IsNullOrWhiteSpace(productKey)) return;
+        purchasedSupplierProductKeys ??= new List<string>();
+        if (purchasedSupplierProductKeys.Contains(productKey)) return;
+        purchasedSupplierProductKeys.Add(productKey);
+        NotifyStateChanged();
     }
 
     public bool TrySpendMoney(int amount)
