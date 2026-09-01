@@ -148,8 +148,11 @@ public class SupplierUI : MonoBehaviour
                      .ThenBy(a => a.flower.flowerName)
                      .ThenBy(a => a.flower.color))
         {
+            string productKey = GetFlowerProductKey(arrival.flower);
+            bool isNew = shopManager == null || !shopManager.HasPurchasedSupplierProduct(productKey);
+
             SupplierItemUI item = Instantiate(itemPrefab, itemContainer);
-            item.Bind(arrival, TryBuyOne, TryBuyMultiple);
+            item.Bind(arrival, TryBuyOne, TryBuyMultiple, isNew);
             spawnedItems.Add(item);
         }
 
@@ -159,8 +162,11 @@ public class SupplierUI : MonoBehaviour
             CheckoutItemSystem.CheckoutItemDefinition offer = checkoutItemSystem.TodayOffer;
             if (offer != null)
             {
+                string productKey = GetCheckoutProductKey(offer);
+                bool isNew = shopManager == null || !shopManager.HasPurchasedSupplierProduct(productKey);
+
                 SupplierItemUI item = Instantiate(itemPrefab, itemContainer);
-                item.BindCheckout(checkoutItemSystem, offer, TryBuyCheckoutOffer);
+                item.BindCheckout(checkoutItemSystem, offer, TryBuyCheckoutOffer, isNew);
                 spawnedItems.Add(item);
             }
         }
@@ -191,6 +197,7 @@ public class SupplierUI : MonoBehaviour
 
         arrival.purchasedQuantity += quantity;
         inventorySystem.AddFlower(arrival.flower, quantity);
+        shopManager.RegisterSupplierProductPurchase(GetFlowerProductKey(arrival.flower));
         bool gotWrappingBonus = shopManager.RegisterSupplierFlowerPurchase(quantity);
 
         Debug.Log($"{arrival.flower.flowerName}（{arrival.flower.color}）を{quantity}個仕入れました。合計{totalPrice:N0}円");
@@ -201,11 +208,7 @@ public class SupplierUI : MonoBehaviour
             supplierCommentController.ShowFlowerComment(arrival.flower);
 
         RefreshHeader();
-        foreach (SupplierItemUI item in spawnedItems)
-        {
-            if (item != null)
-                item.Refresh();
-        }
+        RebuildItemList();
     }
 
     private void TryBuyCheckoutOffer(CheckoutItemSystem.CheckoutItemDefinition item)
@@ -218,9 +221,22 @@ public class SupplierUI : MonoBehaviour
             return;
         }
 
+        if (shopManager != null)
+            shopManager.RegisterSupplierProductPurchase(GetCheckoutProductKey(item));
+
         Debug.Log($"{item.displayName} ×{item.boxQuantity}を{item.boxPurchasePrice:N0}円で仕入れました。");
         RefreshHeader();
         RebuildItemList();
+    }
+
+    private static string GetFlowerProductKey(FlowerData flower)
+    {
+        return flower != null ? $"flower:{flower.name}" : string.Empty;
+    }
+
+    private static string GetCheckoutProductKey(CheckoutItemSystem.CheckoutItemDefinition item)
+    {
+        return item != null ? $"checkout:{item.id}" : string.Empty;
     }
 
     private void TryBuyWrapping()
