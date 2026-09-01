@@ -82,6 +82,8 @@ public class CheckoutItemSystem : MonoBehaviour
     [Header("デバッグ")]
     [Tooltip("ONの間だけ、1年目4月1日にキープパワーを必ず入荷させます。通常運用へ戻す時はOFFにしてください。")]
     [SerializeField] private bool forceKeepPowerOnFirstDay = true;
+    [Tooltip("ONの間だけ、購入条件と残り予算を満たす花購入客はキープパワーを100%購入します。通常運用へ戻す時はOFFにしてください。")]
+    [SerializeField] private bool forceKeepPowerPurchaseChance = true;
 
     [Header("状態")]
     [SerializeField] private List<CheckoutItemStock> stocks = new();
@@ -217,7 +219,11 @@ public class CheckoutItemSystem : MonoBehaviour
 
         foreach (CheckoutItemDefinition item in candidates)
         {
-            if (UnityEngine.Random.value > item.GetPurchaseChance(shopManager.CurrentMonth))
+            float purchaseChance = forceKeepPowerPurchaseChance && item.id == "keep_power"
+                ? 1f
+                : item.GetPurchaseChance(shopManager.CurrentMonth);
+
+            if (UnityEngine.Random.value > purchaseChance)
                 continue;
 
             CheckoutItemStock stock = GetStock(item.id);
