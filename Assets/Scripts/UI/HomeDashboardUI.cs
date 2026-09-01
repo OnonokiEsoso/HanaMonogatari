@@ -32,6 +32,14 @@ public class HomeDashboardUI : MonoBehaviour
     [Tooltip("複製元に残っているPriceText。任意。設定するとホーム中は空文字にします。")]
     [SerializeField] private TMP_Text homePriceText;
 
+    [Header("通常SpeechBubbleの開店表示")]
+    [Tooltip("既存SpeechBubble内のPurchaseTextを設定します。開店メッセージはここに表示します。")]
+    [SerializeField] private TMP_Text standardPurchaseText;
+    [Tooltip("既存SpeechBubble内のPriceText。任意。開店演出中は空文字にします。")]
+    [SerializeField] private TMP_Text standardPriceText;
+    [Tooltip("既存SpeechBubble内のCommentText。任意。開店演出中は空文字にします。")]
+    [SerializeField] private TMP_Text standardCommentText;
+
     [Header("今日の情報")]
     [SerializeField] private TMP_Text homeDateText;
     [SerializeField] private TMP_Text homeMoneyText;
@@ -94,9 +102,6 @@ public class HomeDashboardUI : MonoBehaviour
             checkoutButton.onClick.RemoveListener(HandleCheckoutClicked);
     }
 
-    /// <summary>
-    /// 開店前のホームを表示します。
-    /// </summary>
     public void ShowHome()
     {
         isOpening = false;
@@ -122,9 +127,6 @@ public class HomeDashboardUI : MonoBehaviour
         Refresh();
     }
 
-    /// <summary>
-    /// 営業中・営業結果ではホーム専用UIを隠します。
-    /// </summary>
     public void HideHome()
     {
         if (homeUIRoot != null)
@@ -182,6 +184,7 @@ public class HomeDashboardUI : MonoBehaviour
         if (homeDashboard != null)
             homeDashboard.SetActive(false);
 
+        // 開店演出はHomeSpeechBubbleではなく、既存のSpeechBubbleに切り替えて表示する。
         if (homeSpeechBubble != null)
             homeSpeechBubble.SetActive(false);
 
@@ -191,8 +194,14 @@ public class HomeDashboardUI : MonoBehaviour
         int month = shopManager != null ? shopManager.CurrentMonth : 0;
         int day = shopManager != null ? shopManager.CurrentDay : 0;
 
-        if (salesVisualController != null)
-            salesVisualController.ShowOpeningAnnouncement($"～～～　{month}月{day}/{ShopManager.DaysPerMonth}日、開店　～～～");
+        if (standardPurchaseText != null)
+            standardPurchaseText.text = $"～～～　{month}月{day}/{ShopManager.DaysPerMonth}日、開店　～～～";
+
+        if (standardPriceText != null)
+            standardPriceText.text = string.Empty;
+
+        if (standardCommentText != null)
+            standardCommentText.text = string.Empty;
 
         if (openingAnnouncementDuration > 0f)
             yield return new WaitForSeconds(openingAnnouncementDuration);
@@ -201,7 +210,6 @@ public class HomeDashboardUI : MonoBehaviour
             salesVisualController.PrepareForBusiness();
 
         customerUI.OpenShop();
-
         HideHome();
 
         if (openShopButton != null)
