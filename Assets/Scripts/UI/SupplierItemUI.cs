@@ -146,7 +146,7 @@ public class SupplierItemUI : MonoBehaviour
         if (nameText != null) nameText.text = checkoutItem.displayName;
         if (colorText != null) colorText.text = "レジ横商品";
         if (priceText != null) priceText.text = $"{checkoutItem.boxPurchasePrice:N0}円";
-        if (remainingText != null) remainingText.text = $"{checkoutItem.boxQuantity}個入り ×1BOX";
+        if (remainingText != null) remainingText.text = $"{checkoutItem.boxQuantity}個";
         if (saleText != null) saleText.text = string.Empty;
 
         if (buyButton != null)
