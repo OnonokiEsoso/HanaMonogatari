@@ -7,6 +7,7 @@ using UnityEngine;
 /// 客が「単品花」か「花束」かを先に決め、魅力で商品を見つけたあと価格を見て購入判断します。
 /// 花束は基本1個、単品花は予算内で複数本・複数種類を購入できます。
 /// 来店目的によって花束を見る確率も変化します。
+/// 好みに合う商品がまったく無い場合、一部の客は人気度・珍しさを下方向にだけ妥協します。
 /// </summary>
 public class CustomerPurchaseSystem : MonoBehaviour
 {
@@ -33,6 +34,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
         public int regularCount;
         public bool becameRegular;
         public int bouquetQualityScore;
+        public bool compromised;
         public string message;
     }
 
@@ -68,8 +70,21 @@ public class CustomerPurchaseSystem : MonoBehaviour
     [Min(0)] [SerializeField] private int goodRatingGain = 3;
     [Min(0)] [SerializeField] private int bestRatingGain = 5;
 
+    [Header("妥協購入")]
+    [Tooltip("本命商品が無い時、人気度を最低希望値から何段階まで下げて候補にするか。上方向への妥協はしません。")]
+    [Range(1, 9)] [SerializeField] private int compromisePopularityDrop = 2;
+    [Tooltip("本命商品が無い時、珍しさを最低希望値から何段階まで下げて候補にするか。上方向への妥協はしません。")]
+    [Range(1, 9)] [SerializeField] private int compromiseRarityDrop = 2;
+    [Tooltip("妥協候補を実際に買う確率へ掛ける倍率。妥協時は候補確認も1商品だけです。")]
+    [Range(0f, 1f)] [SerializeField] private float compromisePurchaseChanceMultiplier = 0.35f;
+    [Tooltip("妥協購入時に満足度スコアから引く値。さらに最高評価にはならないよう上限5に固定します。")]
+    [Min(0)] [SerializeField] private int compromiseSatisfactionPenalty = 1;
+
     private const int MaxCandidateChecks = 3;
     private const int MaxFlowerShoppingRounds = 3;
+    private const int CompromiseCandidateChecks = 1;
+    private const int CompromiseFlowerShoppingRounds = 1;
+    private const int CompromiseMaxSatisfactionScore = 5;
 
     public PurchaseResult TryPurchase(CustomerSystem.VisitingCustomer customer)
     {
@@ -77,6 +92,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
         {
             customer = customer,
             purchased = false,
+            compromised = false,
             message = "購入しませんでした"
         };
 
@@ -87,13 +103,41 @@ public class CustomerPurchaseSystem : MonoBehaviour
         }
 
         float bouquetChance = TrendSystem.ApplyBouquetChanceBonus(GetPurposeAdjustedBouquetChance(customer), shopManager);
-        bool wantsBouquet = UnityEngine.Random.value < bouquetChance;
-        List<Candidate> preferred = wantsBouquet ? BuildBouquetCandidates(customer) : BuildFlowerCandidates(customer);
+        bool originallyWantsBouquet = UnityEngine.Random.value < bouquetChance;
+        bool wantsBouquet = originallyWantsBouquet;
+        bool compromised = false;
+
+        // まずは従来どおり、希望範囲内の商品を優先して探します。
+        List<Candidate> preferred = wantsBouquet
+            ? BuildBouquetCandidates(customer, false)
+            : BuildFlowerCandidates(customer, false);
 
         if (preferred.Count == 0)
         {
             wantsBouquet = !wantsBouquet;
-            preferred = wantsBouquet ? BuildBouquetCandidates(customer) : BuildFlowerCandidates(customer);
+            preferred = wantsBouquet
+                ? BuildBouquetCandidates(customer, false)
+                : BuildFlowerCandidates(customer, false);
+        }
+
+        // 本命商品が単品・花束のどちらにも無い時だけ妥協を検討します。
+        // 富豪とちびっこは妥協しません。
+        if (preferred.Count == 0 && CanCompromise(customer))
+        {
+            wantsBouquet = originallyWantsBouquet;
+            preferred = wantsBouquet
+                ? BuildBouquetCandidates(customer, true)
+                : BuildFlowerCandidates(customer, true);
+
+            if (preferred.Count == 0)
+            {
+                wantsBouquet = !wantsBouquet;
+                preferred = wantsBouquet
+                    ? BuildBouquetCandidates(customer, true)
+                    : BuildFlowerCandidates(customer, true);
+            }
+
+            compromised = preferred.Count > 0;
         }
 
         if (preferred.Count == 0)
@@ -103,11 +147,18 @@ public class CustomerPurchaseSystem : MonoBehaviour
         }
 
         if (wantsBouquet)
-            TryPurchaseBouquet(customer, preferred, result);
+            TryPurchaseBouquet(customer, preferred, result, compromised);
         else
-            TryPurchaseFlowers(customer, result);
+            TryPurchaseFlowers(customer, result, compromised);
 
         return result;
+    }
+
+    private static bool CanCompromise(CustomerSystem.VisitingCustomer customer)
+    {
+        if (customer?.data == null) return false;
+        return customer.data.customerType != CustomerType.Wealthy
+            && customer.data.customerType != CustomerType.Child;
     }
 
     private static float GetBouquetPreferenceChance(CustomerType customerType)
@@ -140,11 +191,16 @@ public class CustomerPurchaseSystem : MonoBehaviour
         return Mathf.Clamp01(adjusted);
     }
 
-    private void TryPurchaseBouquet(CustomerSystem.VisitingCustomer customer, List<Candidate> candidates, PurchaseResult result)
+    private void TryPurchaseBouquet(
+        CustomerSystem.VisitingCustomer customer,
+        List<Candidate> candidates,
+        PurchaseResult result,
+        bool compromised)
     {
         List<Candidate> remaining = new(candidates);
+        int maxChecks = compromised ? CompromiseCandidateChecks : MaxCandidateChecks;
 
-        for (int attempt = 0; attempt < MaxCandidateChecks && remaining.Count > 0; attempt++)
+        for (int attempt = 0; attempt < maxChecks && remaining.Count > 0; attempt++)
         {
             Candidate selected = PickWeighted(remaining);
             if (selected == null) break;
@@ -157,6 +213,9 @@ public class CustomerPurchaseSystem : MonoBehaviour
                 selected.price,
                 selected.recommendedPrice,
                 selected.bouquetQualityScore);
+
+            if (compromised)
+                buyChance *= compromisePurchaseChanceMultiplier;
 
             if (UnityEngine.Random.value > buyChance)
                 continue;
@@ -180,26 +239,31 @@ public class CustomerPurchaseSystem : MonoBehaviour
                 $"{selected.bouquet.bouquetName} ×1",
                 selected.bouquet,
                 null,
-                selected.bouquetQualityScore);
+                selected.bouquetQualityScore,
+                compromised);
             return;
         }
 
-        result.message = $"{customer.data.displayName}（{CustomerSystem.GetPurposeLabel(customer.purpose)}）は花束を見ましたが、値段などを考えて購入しませんでした";
+        result.message = compromised
+            ? $"{customer.data.displayName}（{CustomerSystem.GetPurposeLabel(customer.purpose)}）は少し妥協して花束を見ましたが、購入しませんでした"
+            : $"{customer.data.displayName}（{CustomerSystem.GetPurposeLabel(customer.purpose)}）は花束を見ましたが、値段などを考えて購入しませんでした";
     }
 
-    private void TryPurchaseFlowers(CustomerSystem.VisitingCustomer customer, PurchaseResult result)
+    private void TryPurchaseFlowers(CustomerSystem.VisitingCustomer customer, PurchaseResult result, bool compromised)
     {
         int remainingBudget = Mathf.Max(0, customer.budget);
         List<FlowerPurchaseRecord> purchases = new();
+        int maxRounds = compromised ? CompromiseFlowerShoppingRounds : MaxFlowerShoppingRounds;
+        int maxChecks = compromised ? CompromiseCandidateChecks : MaxCandidateChecks;
 
-        for (int round = 0; round < MaxFlowerShoppingRounds && remainingBudget > 0; round++)
+        for (int round = 0; round < maxRounds && remainingBudget > 0; round++)
         {
-            List<Candidate> candidates = BuildFlowerCandidates(customer);
+            List<Candidate> candidates = BuildFlowerCandidates(customer, compromised);
             if (candidates.Count == 0) break;
 
             bool boughtThisRound = false;
 
-            for (int attempt = 0; attempt < MaxCandidateChecks && candidates.Count > 0; attempt++)
+            for (int attempt = 0; attempt < maxChecks && candidates.Count > 0; attempt++)
             {
                 Candidate selected = PickWeighted(candidates);
                 if (selected == null) break;
@@ -209,6 +273,9 @@ public class CustomerPurchaseSystem : MonoBehaviour
                     continue;
 
                 float buyChance = CalculatePricePurchaseChance(selected.price, selected.recommendedPrice);
+                if (compromised)
+                    buyChance *= compromisePurchaseChanceMultiplier;
+
                 if (UnityEngine.Random.value > buyChance)
                     continue;
 
@@ -241,13 +308,18 @@ public class CustomerPurchaseSystem : MonoBehaviour
             if (!boughtThisRound)
                 break;
 
-            if (round == 0 && UnityEngine.Random.value > 0.70f) break;
-            if (round == 1 && UnityEngine.Random.value > 0.40f) break;
+            if (!compromised)
+            {
+                if (round == 0 && UnityEngine.Random.value > 0.70f) break;
+                if (round == 1 && UnityEngine.Random.value > 0.40f) break;
+            }
         }
 
         if (purchases.Count == 0)
         {
-            result.message = $"{customer.data.displayName}（{CustomerSystem.GetPurposeLabel(customer.purpose)}）は花を見ましたが、値段などを考えて購入しませんでした";
+            result.message = compromised
+                ? $"{customer.data.displayName}（{CustomerSystem.GetPurposeLabel(customer.purpose)}）は少し妥協して花を見ましたが、購入しませんでした"
+                : $"{customer.data.displayName}（{CustomerSystem.GetPurposeLabel(customer.purpose)}）は花を見ましたが、値段などを考えて購入しませんでした";
             return;
         }
 
@@ -268,10 +340,10 @@ public class CustomerPurchaseSystem : MonoBehaviour
             $"{x.flower.flowerName}（{x.flower.color}）×{x.quantity}"));
 
         FlowerData singleFlower = grouped.Count == 1 ? grouped[0].flower : null;
-        CompleteSuccessfulVisit(customer, result, totalSpent, averageSatisfaction, itemText, null, singleFlower, 0);
+        CompleteSuccessfulVisit(customer, result, totalSpent, averageSatisfaction, itemText, null, singleFlower, 0, compromised);
     }
 
-    private List<Candidate> BuildFlowerCandidates(CustomerSystem.VisitingCustomer customer)
+    private List<Candidate> BuildFlowerCandidates(CustomerSystem.VisitingCustomer customer, bool compromise)
     {
         List<Candidate> candidates = new();
 
@@ -285,28 +357,37 @@ public class CustomerPurchaseSystem : MonoBehaviour
         {
             int rarity = flower.GetRarity(shopManager.CurrentSeason);
             int price = pricingSystem.GetSalePrice(flower);
-            if (!MatchesAttractivenessRange(customer, flower.basePopularity, rarity)) continue;
+            bool matches = compromise
+                ? MatchesCompromiseRange(customer, flower.basePopularity, rarity)
+                : MatchesAttractivenessRange(customer, flower.basePopularity, rarity);
+
+            if (!matches) continue;
             if (price <= 0) continue;
 
             float favoriteColorWeight = ColorsEqual(flower.color, customer.favoriteColor) ? 1.6f : 1f;
+            float weight = CalculateAttractivenessWeight(
+                customer,
+                flower.basePopularity,
+                rarity,
+                favoriteColorWeight,
+                1f);
+
+            if (compromise)
+                weight *= CalculateCompromiseClosenessWeight(customer, flower.basePopularity, rarity);
+
             candidates.Add(new Candidate
             {
                 flower = flower,
                 price = price,
                 recommendedPrice = pricingSystem.GetRecommendedPrice(flower),
-                weight = CalculateAttractivenessWeight(
-                    customer,
-                    flower.basePopularity,
-                    rarity,
-                    favoriteColorWeight,
-                    1f)
+                weight = weight
             });
         }
 
         return candidates;
     }
 
-    private List<Candidate> BuildBouquetCandidates(CustomerSystem.VisitingCustomer customer)
+    private List<Candidate> BuildBouquetCandidates(CustomerSystem.VisitingCustomer customer, bool compromise)
     {
         List<Candidate> candidates = new();
         if (bouquetSystem == null) return candidates;
@@ -318,11 +399,24 @@ public class CustomerPurchaseSystem : MonoBehaviour
 
             int popularity = GetBouquetAveragePopularity(bouquet);
             int rarity = GetBouquetAverageRarity(bouquet);
-            if (!MatchesAttractivenessRange(customer, popularity, rarity)) continue;
+            bool matches = compromise
+                ? MatchesCompromiseRange(customer, popularity, rarity)
+                : MatchesAttractivenessRange(customer, popularity, rarity);
+
+            if (!matches) continue;
 
             BouquetEvaluator.Evaluation evaluation = BouquetEvaluator.Evaluate(bouquet, shopManager.CurrentSeason);
             float favoriteColorWeight = IsFavoriteColorMain(customer, evaluation.mainColors) ? 1.6f : 1f;
             float qualityWeight = 0.75f + evaluation.totalScore * 0.075f;
+            float weight = CalculateAttractivenessWeight(
+                customer,
+                popularity,
+                rarity,
+                favoriteColorWeight,
+                qualityWeight);
+
+            if (compromise)
+                weight *= CalculateCompromiseClosenessWeight(customer, popularity, rarity);
 
             candidates.Add(new Candidate
             {
@@ -330,12 +424,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
                 price = bouquet.salePrice,
                 bouquetQualityScore = evaluation.totalScore,
                 recommendedPrice = bouquetSystem.GetRecommendedPrice(bouquet),
-                weight = CalculateAttractivenessWeight(
-                    customer,
-                    popularity,
-                    rarity,
-                    favoriteColorWeight,
-                    qualityWeight)
+                weight = weight
             });
         }
 
@@ -364,6 +453,38 @@ public class CustomerPurchaseSystem : MonoBehaviour
         if (popularity < customer.data.minPopularity || popularity > customer.data.maxPopularity) return false;
         if (rarity < customer.data.minRarity || rarity > customer.data.maxRarity) return false;
         return true;
+    }
+
+    private bool MatchesCompromiseRange(CustomerSystem.VisitingCustomer customer, int popularity, int rarity)
+    {
+        if (!CanCompromise(customer)) return false;
+
+        // 上側の上限は絶対に広げない。
+        if (popularity > customer.data.maxPopularity || rarity > customer.data.maxRarity)
+            return false;
+
+        int loweredMinPopularity = Mathf.Max(1, customer.data.minPopularity - compromisePopularityDrop);
+        int loweredMinRarity = Mathf.Max(1, customer.data.minRarity - compromiseRarityDrop);
+
+        if (popularity < loweredMinPopularity || rarity < loweredMinRarity)
+            return false;
+
+        // 妥協候補は、最低希望値を少なくとも片方で下回っている商品だけ。
+        // つまり本命範囲の商品と妥協商品の候補が混ざることはありません。
+        return popularity < customer.data.minPopularity || rarity < customer.data.minRarity;
+    }
+
+    private static float CalculateCompromiseClosenessWeight(
+        CustomerSystem.VisitingCustomer customer,
+        int popularity,
+        int rarity)
+    {
+        int popularityShortfall = Mathf.Max(0, customer.data.minPopularity - popularity);
+        int rarityShortfall = Mathf.Max(0, customer.data.minRarity - rarity);
+        int totalShortfall = popularityShortfall + rarityShortfall;
+
+        // 妥協するなら、希望条件により近い商品ほど選びやすくします。
+        return 1f / (1f + totalShortfall * 0.5f);
     }
 
     private static float CalculatePricePurchaseChance(int salePrice, int recommendedPrice)
@@ -420,8 +541,15 @@ public class CustomerPurchaseSystem : MonoBehaviour
         string purchasedItemText,
         BouquetSystem.BouquetData bouquet,
         FlowerData flower,
-        int bouquetQualityScore)
+        int bouquetQualityScore,
+        bool compromised)
     {
+        if (compromised)
+        {
+            satisfactionScore = Mathf.Max(0, satisfactionScore - compromiseSatisfactionPenalty);
+            satisfactionScore = Mathf.Min(satisfactionScore, CompromiseMaxSatisfactionScore);
+        }
+
         SatisfactionLevel satisfactionLevel = GetSatisfactionLevel(satisfactionScore);
         int ratingGain = GetRatingGain(satisfactionLevel);
         if (ratingGain > 0)
@@ -443,6 +571,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
         result.regularCount = regularResult.regularCount;
         result.becameRegular = regularResult.becameRegular;
         result.bouquetQualityScore = bouquetQualityScore;
+        result.compromised = compromised;
 
         string qualityText = bouquet != null ? $"　花束評価：{bouquetQualityScore}/10" : string.Empty;
         string regularText = string.Empty;
@@ -454,7 +583,8 @@ public class CustomerPurchaseSystem : MonoBehaviour
         }
 
         string purposeText = CustomerSystem.GetPurposeLabel(customer.purpose);
-        result.message = $"{customer.data.displayName}（{purposeText}）が{purchasedItemText}を購入　合計{totalSalePrice:N0}円　満足度：{GetSatisfactionLabel(satisfactionLevel)}　店評価+{ratingGain}{qualityText}{regularText}";
+        string compromiseText = compromised ? "　妥協購入" : string.Empty;
+        result.message = $"{customer.data.displayName}（{purposeText}）が{purchasedItemText}を購入　合計{totalSalePrice:N0}円　満足度：{GetSatisfactionLabel(satisfactionLevel)}　店評価+{ratingGain}{qualityText}{regularText}{compromiseText}";
         Debug.Log(result.message);
     }
 
