@@ -15,6 +15,18 @@ public class CheckoutItemSystem : MonoBehaviour
         FlowerOrBouquet
     }
 
+    public enum DebugForcedOffer
+    {
+        None,
+        KeepPower,
+        MiniFlowerBase,
+        Iinioi,
+        MiniKadomatsu,
+        TsukimiDango,
+        MiniPumpkin,
+        MiniTree
+    }
+
     [Serializable]
     public class CheckoutItemDefinition
     {
@@ -80,6 +92,8 @@ public class CheckoutItemSystem : MonoBehaviour
     [Range(0f, 1f)] [SerializeField] private float dailyOfferChance = 0.35f;
 
     [Header("デバッグ")]
+    [Tooltip("指定した商品を仕入先Lv・通常入荷確率を無視して、その日のレジ横商品として必ず入荷させます。Noneで通常仕様。")]
+    [SerializeField] private DebugForcedOffer forcedOffer = DebugForcedOffer.None;
     [Tooltip("ONの間だけ、1年目4月1日にキープパワーを必ず入荷させます。通常運用へ戻す時はOFFにしてください。")]
     [SerializeField] private bool forceKeepPowerOnFirstDay = true;
     [Tooltip("ONの間だけ、購入条件と残り予算を満たす花購入客はキープパワーを100%購入します。通常運用へ戻す時はOFFにしてください。")]
@@ -110,8 +124,17 @@ public class CheckoutItemSystem : MonoBehaviour
         todayOfferItemId = null;
         todayOfferPurchased = false;
 
-        // デバッグ用：1年目4月1日だけ、入荷確率と仕入先Lvを無視してキープパワーを確定入荷。
-        // Inspectorの Force Keep Power On First Day をOFFにすれば即座に通常仕様へ戻せます。
+        // デバッグ用：指定商品を最優先で確定入荷。
+        // Noneに戻せば、仕入先Lv・入荷確率を使う通常仕様へ即座に戻ります。
+        string forcedItemId = GetForcedOfferItemId(forcedOffer);
+        if (!string.IsNullOrEmpty(forcedItemId) && GetDefinition(forcedItemId) != null)
+        {
+            todayOfferItemId = forcedItemId;
+            OnChanged?.Invoke();
+            return;
+        }
+
+        // 旧デバッグ用：1年目4月1日だけキープパワーを確定入荷。
         if (forceKeepPowerOnFirstDay && shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear == 1)
         {
             todayOfferItemId = "keep_power";
@@ -272,6 +295,21 @@ public class CheckoutItemSystem : MonoBehaviour
         stock = new CheckoutItemStock { itemId = itemId, quantity = 0, installed = false };
         stocks.Add(stock);
         return stock;
+    }
+
+    private static string GetForcedOfferItemId(DebugForcedOffer offer)
+    {
+        return offer switch
+        {
+            DebugForcedOffer.KeepPower => "keep_power",
+            DebugForcedOffer.MiniFlowerBase => "mini_flower_base",
+            DebugForcedOffer.Iinioi => "iinioi",
+            DebugForcedOffer.MiniKadomatsu => "mini_kadomatsu",
+            DebugForcedOffer.TsukimiDango => "tsukimi_dango",
+            DebugForcedOffer.MiniPumpkin => "mini_pumpkin",
+            DebugForcedOffer.MiniTree => "mini_tree",
+            _ => null
+        };
     }
 
     private void NormalizeStocks()
