@@ -152,8 +152,24 @@ public class CustomerUI : MonoBehaviour
         if (!addon.purchased) return;
 
         result.salePrice += addon.price;
-        result.message += $"　＋{addon.itemName} ×1（{addon.price:N0}円）";
+        result.message = InsertCheckoutItemIntoPurchaseMessage(result.message, addon.itemName);
         Debug.Log($"レジ横追加購入：{customer.data.displayName} / {addon.itemName} / {addon.price:N0}円");
+    }
+
+    private static string InsertCheckoutItemIntoPurchaseMessage(string message, string checkoutItemName)
+    {
+        if (string.IsNullOrWhiteSpace(checkoutItemName))
+            return message;
+
+        string addonText = $" + {checkoutItemName}";
+        if (string.IsNullOrEmpty(message))
+            return addonText.TrimStart();
+
+        int purchaseIndex = message.IndexOf("を購入", StringComparison.Ordinal);
+        if (purchaseIndex >= 0)
+            return message.Insert(purchaseIndex, addonText);
+
+        return message + addonText;
     }
 
     public void ProcessNextCustomer()
