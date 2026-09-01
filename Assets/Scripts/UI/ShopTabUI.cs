@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
@@ -88,13 +89,19 @@ public class ShopTabUI : MonoBehaviour
             customerTabButton.onClick.AddListener(HandleBusinessButton);
     }
 
-    private void Start()
+    private IEnumerator Start()
     {
-        if (startWithHome)
-            ShowBusinessHome();
-        else
+        if (!startWithHome)
+        {
             ShowSupplierTab();
+            RefreshTabInteractable();
+            yield break;
+        }
 
+        // DailyResultUI / SalesVisualController など他UIのStart初期化が終わってから
+        // ホームを最終表示することで、起動時に後から非表示へ戻される競合を防ぎます。
+        yield return null;
+        ShowBusinessHome();
         RefreshTabInteractable();
     }
 
