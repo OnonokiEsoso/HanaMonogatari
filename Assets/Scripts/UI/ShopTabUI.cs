@@ -1,9 +1,10 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 /// <summary>
-/// 仕入れ・在庫・値付け・花束・営業画面のタブ切り替えを管理します。
-/// 「開店」タブを押すとDailyResultPanelへ移動し、吹き出し内の確認ボタンから実際の営業を開始します。
+/// 仕入れ・在庫・値付け・花束・開店画面のタブ切り替えを管理します。
+/// 開店前の「開店」タブはホーム画面として使い、HomeDashboardUIを表示します。
 /// </summary>
 public class ShopTabUI : MonoBehaviour
 {
@@ -21,14 +22,16 @@ public class ShopTabUI : MonoBehaviour
     [SerializeField] private GameObject inventoryPanel;
     [SerializeField] private GameObject pricingPanel;
     [SerializeField] private GameObject bouquetPanel;
-    [Tooltip("営業演出と営業結果を表示するDailyResultPanelを設定します。")]
+    [Tooltip("ホーム・営業演出・営業結果を表示するDailyResultPanelを設定します。")]
     [SerializeField] private GameObject dailyResultPanel;
 
-    [Header("営業")]
+    [Header("営業・ホーム")]
     [Tooltip("常駐GameObjectに置いたCustomerUIを設定します。")]
     [SerializeField] private CustomerUI customerUI;
     [Tooltip("DailyResultPanel内のSalesVisualControllerを設定します。")]
     [SerializeField] private SalesVisualController salesVisualController;
+    [Tooltip("DailyResultPanel内のホームUIを管理するHomeDashboardUIを設定します。")]
+    [SerializeField] private HomeDashboardUI homeDashboardUI;
 
     [Header("タブボタン")]
     [SerializeField] private Button supplierTabButton;
@@ -58,7 +61,9 @@ public class ShopTabUI : MonoBehaviour
     [SerializeField] private Color customerUnselectedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
 
     [Header("開始時")]
-    [SerializeField] private bool startWithSupplierTab = true;
+    [Tooltip("ONならゲーム開始時に開店タブのホーム画面を表示します。")]
+    [FormerlySerializedAs("startWithSupplierTab")]
+    [SerializeField] private bool startWithHome = true;
 
     private bool isBusinessOpen;
     private ShopTab currentTab;
@@ -85,10 +90,10 @@ public class ShopTabUI : MonoBehaviour
 
     private void Start()
     {
-        if (startWithSupplierTab)
-            ShowSupplierTab();
+        if (startWithHome)
+            ShowBusinessHome();
         else
-            ShowInventoryTab();
+            ShowSupplierTab();
 
         RefreshTabInteractable();
     }
@@ -135,9 +140,17 @@ public class ShopTabUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 開店タブを押すと、まずDailyResultPanelへ移動して「開店する？」を表示します。
-    /// 営業中・営業終了後は同じ営業画面へ戻るだけです。
+    /// 開店前なら「開店」タブをホームとして表示します。
+    /// 営業中・営業終了後は既存の営業画面をそのまま表示します。
     /// </summary>
+    public void ShowBusinessHome()
+    {
+        SetTab(ShopTab.Business);
+
+        if (customerUI != null && !customerUI.IsShopOpen && !customerUI.HasFinishedToday)
+            homeDashboardUI?.ShowHome();
+    }
+
     private void HandleBusinessButton()
     {
         if (customerUI == null)
@@ -148,13 +161,13 @@ public class ShopTabUI : MonoBehaviour
 
         SetTab(ShopTab.Business);
 
-        if (!customerUI.IsShopOpen && !customerUI.HasFinishedToday && salesVisualController != null)
-            salesVisualController.ShowOpenConfirmation();
+        if (!customerUI.IsShopOpen && !customerUI.HasFinishedToday)
+            homeDashboardUI?.ShowHome();
     }
 
     /// <summary>
     /// CustomerUIから営業状態を受け取ります。
-    /// 開店時はDailyResultPanelを維持し、編集系タブをロックします。
+    /// 開店時はDailyResultPanelを維持し、ホームを隠して編集系タブをロックします。
     /// </summary>
     public void SetBusinessOpen(bool open)
     {
@@ -162,6 +175,7 @@ public class ShopTabUI : MonoBehaviour
 
         if (isBusinessOpen)
         {
+            homeDashboardUI?.HideHome();
             SetTab(ShopTab.Business);
 
             if (salesVisualController != null)
@@ -189,6 +203,10 @@ public class ShopTabUI : MonoBehaviour
 
         if (dailyResultPanel != null)
             dailyResultPanel.SetActive(selectedTab == ShopTab.Business);
+
+        // ホーム以外のタブへ移動した時は、ホーム専用UIだけ隠します。
+        if (selectedTab != ShopTab.Business)
+            homeDashboardUI?.HideHome();
 
         UpdateTabColors(selectedTab);
     }
