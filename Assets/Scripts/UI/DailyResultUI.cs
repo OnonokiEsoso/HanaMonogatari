@@ -6,6 +6,7 @@ using UnityEngine.UI;
 /// 1日の営業結果表示と翌日への進行を管理します。
 /// 月末だけは通常の閉店処理の途中でMonthlyResultPanelを表示し、
 /// 維持費支払い後に翌月へ進みます。
+/// 翌日に進んだあとは「開店」タブのホーム画面へ戻します。
 /// </summary>
 public class DailyResultUI : MonoBehaviour
 {
@@ -160,7 +161,8 @@ public class DailyResultUI : MonoBehaviour
         if (resultPanel != null)
             resultPanel.SetActive(false);
 
+        // 翌日は仕入れ画面へ自動移動せず、開店タブのホーム画面から開始します。
         if (shopTabUI != null)
-            shopTabUI.ShowSupplierTab();
+            shopTabUI.ShowBusinessHome();
     }
 }
