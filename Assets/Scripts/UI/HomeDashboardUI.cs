@@ -12,6 +12,8 @@ public class HomeDashboardUI : MonoBehaviour
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private SalesVisualController salesVisualController;
+    [Tooltip("ホームの『開店する』から確認を挟まず直接営業開始するために設定します。")]
+    [SerializeField] private CustomerUI customerUI;
 
     [Header("ホーム表示")]
     [Tooltip("HomeUIRoot。ホーム専用UI全体の親を設定します。")]
@@ -112,7 +114,7 @@ public class HomeDashboardUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 営業確認・営業中・営業結果ではホーム専用UIを隠します。
+    /// 営業中・営業結果ではホーム専用UIを隠します。
     /// </summary>
     public void HideHome()
     {
@@ -149,15 +151,26 @@ public class HomeDashboardUI : MonoBehaviour
 
     private void HandleOpenShopClicked()
     {
+        if (customerUI == null)
+        {
+            Debug.LogWarning("HomeDashboardUI: CustomerUIが設定されていません。");
+            return;
+        }
+
+        if (customerUI.IsShopOpen || customerUI.HasFinishedToday)
+            return;
+
+        // ホームのボタン自体を最終確認として扱う。
+        // 既存SpeechBubbleの『開店する？』確認は挟まず、そのまま営業開始する。
         HideHome();
 
         if (standardSpeechBubble != null)
             standardSpeechBubble.SetActive(true);
 
         if (salesVisualController != null)
-            salesVisualController.ShowOpenConfirmation();
-        else
-            Debug.LogWarning("HomeDashboardUI: SalesVisualControllerが設定されていません。");
+            salesVisualController.PrepareForBusiness();
+
+        customerUI.OpenShop();
     }
 
     private static void HandleRequestClicked()
