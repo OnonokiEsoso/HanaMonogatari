@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -42,6 +43,12 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private Button furnitureButton;
     [SerializeField] private Button checkoutButton;
     [SerializeField] private Button openShopButton;
+
+    [Header("開店演出")]
+    [Tooltip("ホームの『開店する』を押してから、お客が来始めるまで開店メッセージを表示する時間。")]
+    [Min(0f)] [SerializeField] private float openingAnnouncementDuration = 1.4f;
+
+    private bool isOpening;
 
     public bool IsHomeVisible => homeUIRoot != null && homeUIRoot.activeSelf;
 
@@ -92,6 +99,8 @@ public class HomeDashboardUI : MonoBehaviour
     /// </summary>
     public void ShowHome()
     {
+        isOpening = false;
+
         if (homeUIRoot != null)
             homeUIRoot.SetActive(true);
 
@@ -141,7 +150,7 @@ public class HomeDashboardUI : MonoBehaviour
                 ? "今日のトレンド：特になし"
                 : $"今日のトレンド：{trendMessage}";
 
-        if (homeMessageText != null)
+        if (homeMessageText != null && !isOpening)
         {
             homeMessageText.text = string.IsNullOrWhiteSpace(trendMessage)
                 ? "今日も一日がんばろう！ 開店前に準備を確認しておこう。"
@@ -157,13 +166,46 @@ public class HomeDashboardUI : MonoBehaviour
             return;
         }
 
-        if (customerUI.IsShopOpen || customerUI.HasFinishedToday)
+        if (customerUI.IsShopOpen || customerUI.HasFinishedToday || isOpening)
             return;
 
-        // ホームのボタン自体を最終確認として扱う。
-        // 既存SpeechBubbleの『開店する？』確認は挟まず、そのまま営業開始する。
-        HideHome();
+        StartCoroutine(OpenShopRoutine());
+    }
 
+    private IEnumerator OpenShopRoutine()
+    {
+        isOpening = true;
+
+        if (openShopButton != null)
+            openShopButton.interactable = false;
+
+        // ダッシュボードだけ隠し、背景・主人公・ホーム吹き出しは残して開店演出に使う。
+        if (homeDashboard != null)
+            homeDashboard.SetActive(false);
+
+        if (standardSpeechBubble != null)
+            standardSpeechBubble.SetActive(false);
+
+        if (homeSpeechBubble != null)
+            homeSpeechBubble.SetActive(true);
+
+        if (homePurchaseText != null)
+            homePurchaseText.text = string.Empty;
+
+        if (homePriceText != null)
+            homePriceText.text = string.Empty;
+
+        if (homeMessageText != null)
+        {
+            int month = shopManager != null ? shopManager.CurrentMonth : 0;
+            int day = shopManager != null ? shopManager.CurrentDay : 0;
+            homeMessageText.text = $"～～～　{month}月{day}/{ShopManager.DaysPerMonth}日、開店　～～～";
+        }
+
+        if (openingAnnouncementDuration > 0f)
+            yield return new WaitForSeconds(openingAnnouncementDuration);
+
+        // ホームのボタン自体を最終確認として扱うので、ここからそのまま営業開始。
         if (standardSpeechBubble != null)
             standardSpeechBubble.SetActive(true);
 
@@ -171,6 +213,14 @@ public class HomeDashboardUI : MonoBehaviour
             salesVisualController.PrepareForBusiness();
 
         customerUI.OpenShop();
+
+        // OpenShop() 後にホームを隠す。先に親をOFFにすると、このCoroutine自体が止まるため順番が重要。
+        HideHome();
+
+        if (openShopButton != null)
+            openShopButton.interactable = true;
+
+        isOpening = false;
     }
 
     private static void HandleRequestClicked()
