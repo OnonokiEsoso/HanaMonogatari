@@ -79,6 +79,10 @@ public class CheckoutItemSystem : MonoBehaviour
     [Tooltip("花・ラッピングとは別枠で、1日0～1種類のレジ横商品が出る確率。仮初期値35%。")]
     [Range(0f, 1f)] [SerializeField] private float dailyOfferChance = 0.35f;
 
+    [Header("デバッグ")]
+    [Tooltip("ONの間だけ、1年目4月1日にキープパワーを必ず入荷させます。通常運用へ戻す時はOFFにしてください。")]
+    [SerializeField] private bool forceKeepPowerOnFirstDay = true;
+
     [Header("状態")]
     [SerializeField] private List<CheckoutItemStock> stocks = new();
     [SerializeField] private string todayOfferItemId;
@@ -103,6 +107,15 @@ public class CheckoutItemSystem : MonoBehaviour
     {
         todayOfferItemId = null;
         todayOfferPurchased = false;
+
+        // デバッグ用：1年目4月1日だけ、入荷確率と仕入先Lvを無視してキープパワーを確定入荷。
+        // Inspectorの Force Keep Power On First Day をOFFにすれば即座に通常仕様へ戻せます。
+        if (forceKeepPowerOnFirstDay && shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear == 1)
+        {
+            todayOfferItemId = "keep_power";
+            OnChanged?.Invoke();
+            return;
+        }
 
         if (shopManager == null || UnityEngine.Random.value > dailyOfferChance)
         {
