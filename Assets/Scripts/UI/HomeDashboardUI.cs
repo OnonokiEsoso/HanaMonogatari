@@ -179,42 +179,29 @@ public class HomeDashboardUI : MonoBehaviour
         if (openShopButton != null)
             openShopButton.interactable = false;
 
-        // ダッシュボードだけ隠し、背景・主人公・ホーム吹き出しは残して開店演出に使う。
         if (homeDashboard != null)
             homeDashboard.SetActive(false);
 
-        if (standardSpeechBubble != null)
-            standardSpeechBubble.SetActive(false);
-
         if (homeSpeechBubble != null)
-            homeSpeechBubble.SetActive(true);
+            homeSpeechBubble.SetActive(false);
 
-        if (homePurchaseText != null)
-            homePurchaseText.text = string.Empty;
+        if (standardSpeechBubble != null)
+            standardSpeechBubble.SetActive(true);
 
-        if (homePriceText != null)
-            homePriceText.text = string.Empty;
+        int month = shopManager != null ? shopManager.CurrentMonth : 0;
+        int day = shopManager != null ? shopManager.CurrentDay : 0;
 
-        if (homeMessageText != null)
-        {
-            int month = shopManager != null ? shopManager.CurrentMonth : 0;
-            int day = shopManager != null ? shopManager.CurrentDay : 0;
-            homeMessageText.text = $"～～～　{month}月{day}/{ShopManager.DaysPerMonth}日、開店　～～～";
-        }
+        if (salesVisualController != null)
+            salesVisualController.ShowOpeningAnnouncement($"～～～　{month}月{day}/{ShopManager.DaysPerMonth}日、開店　～～～");
 
         if (openingAnnouncementDuration > 0f)
             yield return new WaitForSeconds(openingAnnouncementDuration);
-
-        // ホームのボタン自体を最終確認として扱うので、ここからそのまま営業開始。
-        if (standardSpeechBubble != null)
-            standardSpeechBubble.SetActive(true);
 
         if (salesVisualController != null)
             salesVisualController.PrepareForBusiness();
 
         customerUI.OpenShop();
 
-        // OpenShop() 後にホームを隠す。先に親をOFFにすると、このCoroutine自体が止まるため順番が重要。
         HideHome();
 
         if (openShopButton != null)
