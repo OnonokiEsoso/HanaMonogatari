@@ -50,13 +50,13 @@ public class CheckoutInventoryItemUI : MonoBehaviour
             nameText.text = definition.displayName;
 
         if (stockText != null)
-            stockText.text = $"在庫：{quantity}個";
+            stockText.text = $"{quantity}個";
 
         if (priceText != null)
-            priceText.text = $"販売価格：{salePrice:N0}円";
+            priceText.text = $"{salePrice:N0}円";
 
         if (installedStateText != null)
-            installedStateText.text = installed ? "レジ横：設置中" : "レジ横：未設置";
+            installedStateText.text = installed ? "設置中" : "未設置";
 
         if (installButtonText != null)
             installButtonText.text = installed ? "撤去" : "設置";
