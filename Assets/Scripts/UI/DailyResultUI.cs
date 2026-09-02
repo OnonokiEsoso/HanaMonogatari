@@ -19,6 +19,7 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private ShopTabUI shopTabUI;
     [SerializeField] private SalesVisualController salesVisualController;
     [SerializeField] private MonthlyResultUI monthlyResultUI;
+    [SerializeField] private RequestSystem requestSystem;
 
     [Header("旧結果表示（任意・未使用でもOK）")]
     [SerializeField] private GameObject resultPanel;
@@ -157,6 +158,10 @@ public class DailyResultUI : MonoBehaviour
             supplierUI.RegenerateTodayArrivals();
 
         customerUI.PrepareNextDay();
+
+        // 日付が進んだ直後を「朝」として、依頼の期限処理と新規依頼抽選を行います。
+        if (requestSystem != null)
+            requestSystem.ProcessNewDay();
 
         if (resultPanel != null)
             resultPanel.SetActive(false);
