@@ -15,6 +15,8 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private SalesVisualController salesVisualController;
     [Tooltip("ホームの『開店する』から確認を挟まず直接営業開始するために設定します。")]
     [SerializeField] private CustomerUI customerUI;
+    [Tooltip("ホームの各ボタンから既存タブへ移動するために設定します。")]
+    [SerializeField] private ShopTabUI shopTabUI;
 
     [Header("ホーム表示")]
     [Tooltip("HomeUIRoot。ホーム専用UI全体の親を設定します。")]
@@ -228,8 +230,14 @@ public class HomeDashboardUI : MonoBehaviour
         Debug.Log("家具画面は今後のアップデートで実装予定です。");
     }
 
-    private static void HandleCheckoutClicked()
+    private void HandleCheckoutClicked()
     {
-        Debug.Log("レジ横商品の管理は現在、在庫画面から行えます。");
+        if (shopTabUI == null)
+        {
+            Debug.LogWarning("HomeDashboardUI: ShopTabUIが設定されていません。");
+            return;
+        }
+
+        shopTabUI.ShowInventoryTab();
     }
 }
