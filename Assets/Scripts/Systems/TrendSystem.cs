@@ -89,9 +89,13 @@ public static class TrendSystem
         return new MonthlyTrend(color, visitorsUp, budgetUp);
     }
 
-    public static float GetVisitorMultiplier(ShopManager shopManager)
+    /// <summary>
+    /// 今日のトレンドによる来客率補正を「加算用の割合」で返します。
+    /// 例：+30%なら0.30。月間+10%とデイリー+30%が同時なら0.40です。
+    /// </summary>
+    public static float GetVisitorBonusPercent(ShopManager shopManager)
     {
-        if (shopManager == null) return 1f;
+        if (shopManager == null) return 0f;
 
         MonthlyTrend monthly = GetMonthlyTrend(shopManager.GameYear, shopManager.CurrentMonth);
         DailyTrendType daily = GetDailyTrend(shopManager.GameYear, shopManager.CurrentMonth, shopManager.CurrentDay);
@@ -99,7 +103,12 @@ public static class TrendSystem
         float bonus = 0f;
         if (monthly.visitorsUp) bonus += MonthlyVisitorBonus;
         if (daily == DailyTrendType.VisitorsUp) bonus += DailyVisitorBonus;
-        return 1f + bonus;
+        return bonus;
+    }
+
+    public static float GetVisitorMultiplier(ShopManager shopManager)
+    {
+        return 1f + GetVisitorBonusPercent(shopManager);
     }
 
     public static float GetBudgetMultiplier(ShopManager shopManager)
