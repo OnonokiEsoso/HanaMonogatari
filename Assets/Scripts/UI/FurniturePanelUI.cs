@@ -8,6 +8,7 @@ using UnityEngine.UI;
 /// ホーム画面の家具パネルを管理します。
 /// 購入済み家具を一覧表示し、家具専用Prefabから設置/撤去を切り替えます。
 /// 現在設置中の家具数と、設置家具から発動している効果合計も表示します。
+/// パネルの初期表示/非表示はHierarchy側のActive状態で管理します。
 /// </summary>
 public class FurniturePanelUI : MonoBehaviour
 {
@@ -43,9 +44,9 @@ public class FurniturePanelUI : MonoBehaviour
         if (closeButton != null)
             closeButton.onClick.AddListener(HidePanel);
 
-        GameObject root = GetPanelRoot();
-        if (root != null)
-            root.SetActive(false);
+        // ここでパネルを非表示にしない。
+        // Hierarchyで非アクティブ開始の場合、初回ShowPanel()のSetActive(true)でAwakeが走り、
+        // その中で再びSetActive(false)すると「最初の1回だけ開かない」ため。
     }
 
     private void OnEnable()
