@@ -93,10 +93,9 @@ public class RequestSystem : MonoBehaviour
         if (HasActiveRequest)
             return;
 
-        // 既存バランスを維持し、花束系50% / 謎のお通げ50%。
-        // 花束系が選ばれた場合は、現在登録されている6種類から等確率で1件選びます。
+        // 発生自体は1日15%。当選したら登録済み7依頼から等確率で1件を選びます。
         if (UnityEngine.Random.value < dailyOfferChance)
-            OfferRequest(UnityEngine.Random.value < 0.5f ? RequestType.BouquetOrder : RequestType.MysteryMessage);
+            OfferRandomRequest();
     }
 
     public bool AcceptCurrentRequest()
@@ -349,6 +348,31 @@ public class RequestSystem : MonoBehaviour
             .FirstOrDefault(flower =>
                 string.Equals(flower.flowerName, request.targetFlowerName, StringComparison.Ordinal) &&
                 string.Equals(flower.color, request.targetFlowerColor, StringComparison.Ordinal));
+    }
+
+    private void OfferRandomRequest()
+    {
+        if (shopManager == null || HasActiveRequest)
+            return;
+
+        int today = GetCurrentAbsoluteDay();
+        currentRequest = UnityEngine.Random.Range(0, 7) switch
+        {
+            0 => CreateBouquetRequest01(today),
+            1 => CreateMysteryRequest(today),
+            2 => CreateBouquetRequest03(today),
+            3 => CreateBouquetRequest04(today),
+            4 => CreateBouquetRequest05(today),
+            5 => CreateBouquetRequest06(today),
+            _ => CreateBouquetRequest07(today)
+        };
+
+        if (currentRequest == null)
+            return;
+
+        Debug.Log($"新しい依頼：{currentRequest.title} / {currentRequest.requesterName} / {currentRequest.requestId}");
+        OnRequestOffered?.Invoke(currentRequest);
+        OnRequestChanged?.Invoke(currentRequest);
     }
 
     private void OfferRequest(RequestType type)
