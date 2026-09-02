@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -6,7 +7,7 @@ using UnityEngine.UI;
 /// 1日の営業結果表示と翌日への進行を管理します。
 /// 月末だけは通常の閉店処理の途中でMonthlyResultPanelを表示し、
 /// 維持費支払い後に翌月へ進みます。
-/// 翌日に進んだあとは「開店」タブのホーム画面へ戻します。
+/// 翌日に進む時は黒幕演出で画面を覆い、その裏で日付/UIを更新します。
 /// </summary>
 public class DailyResultUI : MonoBehaviour
 {
@@ -20,6 +21,7 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private SalesVisualController salesVisualController;
     [SerializeField] private MonthlyResultUI monthlyResultUI;
     [SerializeField] private RequestSystem requestSystem;
+    [SerializeField] private DayTransitionCurtainUI dayTransitionCurtainUI;
 
     [Header("旧結果表示（任意・未使用でもOK）")]
     [SerializeField] private GameObject resultPanel;
@@ -30,6 +32,7 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private Button nextDayButton;
 
     private bool waitingForMonthlyResult;
+    private bool isDayTransitioning;
 
     private void Awake()
     {
@@ -106,7 +109,7 @@ public class DailyResultUI : MonoBehaviour
     public void GoToNextDay()
     {
         if (shopManager == null || customerUI == null) return;
-        if (!customerUI.HasFinishedToday || waitingForMonthlyResult) return;
+        if (!customerUI.HasFinishedToday || waitingForMonthlyResult || isDayTransitioning) return;
 
         shopManager.RecordDailyBusinessResult(
             customerUI.TotalSales,
@@ -134,7 +137,7 @@ public class DailyResultUI : MonoBehaviour
             return;
         }
 
-        CompleteDayTransition();
+        BeginDayTransition();
     }
 
     /// <summary>
@@ -143,11 +146,38 @@ public class DailyResultUI : MonoBehaviour
     /// </summary>
     public void CompleteDayAfterMonthlyResult()
     {
-        if (!waitingForMonthlyResult) return;
+        if (!waitingForMonthlyResult || isDayTransitioning) return;
         waitingForMonthlyResult = false;
-        CompleteDayTransition();
+        BeginDayTransition();
     }
 
+    private void BeginDayTransition()
+    {
+        if (isDayTransitioning) return;
+
+        if (dayTransitionCurtainUI == null)
+        {
+            // 黒幕が未設定でも従来どおり進行できるようにする。
+            CompleteDayTransition();
+            return;
+        }
+
+        StartCoroutine(DayTransitionRoutine());
+    }
+
+    private IEnumerator DayTransitionRoutine()
+    {
+        isDayTransitioning = true;
+
+        yield return dayTransitionCurtainUI.PlayTransition(CompleteDayTransition);
+
+        isDayTransitioning = false;
+    }
+
+    /// <summary>
+    /// 黒幕が画面全体を覆っている間に呼ばれます。
+    /// 日付・仕入れ・客・依頼・ホーム表示をここで翌日状態へ更新します。
+    /// </summary>
     private void CompleteDayTransition()
     {
         if (shopManager == null || customerUI == null) return;
@@ -159,14 +189,12 @@ public class DailyResultUI : MonoBehaviour
 
         customerUI.PrepareNextDay();
 
-        // 日付が進んだ直後を「朝」として、依頼の期限処理と新規依頼抽選を行います。
         if (requestSystem != null)
             requestSystem.ProcessNewDay();
 
         if (resultPanel != null)
             resultPanel.SetActive(false);
 
-        // 翌日は仕入れ画面へ自動移動せず、開店タブのホーム画面から開始します。
         if (shopTabUI != null)
             shopTabUI.ShowBusinessHome();
     }
