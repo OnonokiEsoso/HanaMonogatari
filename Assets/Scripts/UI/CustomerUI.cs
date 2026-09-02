@@ -7,6 +7,7 @@ using UnityEngine;
 /// <summary>
 /// 開店から、その日の客を先客順に自動処理する営業UIです。
 /// 花/花束購入後、残り予算があれば設置中のレジ横商品を最大1個だけ追加購入判定します。
+/// 謎のお通げ成功日は、通常購入とは別枠で指定花を1個・777円で追加購入します。
 /// </summary>
 public class CustomerUI : MonoBehaviour
 {
@@ -14,6 +15,7 @@ public class CustomerUI : MonoBehaviour
     [SerializeField] private CustomerSystem customerSystem;
     [SerializeField] private CustomerPurchaseSystem purchaseSystem;
     [SerializeField] private CheckoutItemSystem checkoutItemSystem;
+    [SerializeField] private RequestSystem requestSystem;
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private ShopTabUI shopTabUI;
     [SerializeField] private SalesVisualController salesVisualController;
@@ -119,10 +121,18 @@ public class CustomerUI : MonoBehaviour
         CustomerPurchaseSystem.PurchaseResult result = null;
         if (purchaseSystem != null)
         {
+            // まず従来どおり、好み・予算・確率を使った通常購入を処理する。
             result = purchaseSystem.TryPurchase(customer);
+
+            // レジ横商品は従来の通常購入が成立した場合だけ判定する。
+            if (result != null && result.purchased)
+                TryAddCheckoutPurchase(customer, result);
+
+            // その後に「謎のお通げ」の777円購入を完全な別枠として足す。
+            result = TryAddMysteryRequestPurchase(customer, result);
+
             if (result != null && result.purchased)
             {
-                TryAddCheckoutPurchase(customer, result);
                 purchaseCount++;
                 totalSales += result.salePrice;
             }
@@ -136,6 +146,48 @@ public class CustomerUI : MonoBehaviour
 
         isProcessingCustomer = false;
         RefreshState();
+    }
+
+    private CustomerPurchaseSystem.PurchaseResult TryAddMysteryRequestPurchase(
+        CustomerSystem.VisitingCustomer customer,
+        CustomerPurchaseSystem.PurchaseResult result)
+    {
+        if (requestSystem == null || customer == null)
+            return result;
+
+        if (!requestSystem.TrySellMysteryBonusFlower(out FlowerData flower, out int price))
+            return result;
+
+        string itemText = $"{flower.flowerName}（{flower.color}）×1";
+
+        if (result == null)
+        {
+            result = new CustomerPurchaseSystem.PurchaseResult
+            {
+                customer = customer,
+                purchased = true,
+                flower = flower,
+                bouquet = null,
+                salePrice = price,
+                message = $"{customer.data?.displayName ?? "お客"}：{itemText}を購入（謎のお通げ）"
+            };
+        }
+        else if (!result.purchased)
+        {
+            result.purchased = true;
+            result.flower = flower;
+            result.bouquet = null;
+            result.salePrice = price;
+            result.message = $"{customer.data?.displayName ?? "お客"}：{itemText}を購入（謎のお通げ）";
+        }
+        else
+        {
+            result.salePrice += price;
+            result.message = InsertMysteryItemIntoPurchaseMessage(result.message, itemText);
+        }
+
+        Debug.Log($"謎のお通げ追加購入：{customer.data?.displayName ?? "お客"} / {itemText} / +{price:N0}円");
+        return result;
     }
 
     private void TryAddCheckoutPurchase(CustomerSystem.VisitingCustomer customer, CustomerPurchaseSystem.PurchaseResult result)
@@ -170,6 +222,19 @@ public class CustomerUI : MonoBehaviour
             return message.Insert(purchaseIndex, addonText);
 
         return message + addonText;
+    }
+
+    private static string InsertMysteryItemIntoPurchaseMessage(string message, string itemText)
+    {
+        string addonText = $" + {itemText}";
+        if (string.IsNullOrEmpty(message))
+            return $"{itemText}を購入（謎のお通げ）";
+
+        int purchaseIndex = message.IndexOf("を購入", StringComparison.Ordinal);
+        if (purchaseIndex >= 0)
+            return message.Insert(purchaseIndex, addonText);
+
+        return message + addonText + "（謎のお通げ）";
     }
 
     public void ProcessNextCustomer()
