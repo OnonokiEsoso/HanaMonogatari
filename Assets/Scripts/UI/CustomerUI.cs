@@ -8,6 +8,7 @@ using UnityEngine;
 /// 開店から、その日の客を先客順に自動処理する営業UIです。
 /// 花/花束購入後、残り予算があれば設置中のレジ横商品を最大1個だけ追加購入判定します。
 /// 謎のお通げ成功日は、通常購入とは別枠で指定花を1個・777円で追加購入します。
+/// 花束依頼を開店時に達成していた日は、通常客全員の退店後に依頼主が最後に来店して予約花束を受け取ります。
 /// </summary>
 public class CustomerUI : MonoBehaviour
 {
@@ -28,7 +29,7 @@ public class CustomerUI : MonoBehaviour
     [Header("自動営業")]
     [Tooltip("開店してから最初のお客が入ってくるまでの待ち時間。")]
     [Min(0f)] [SerializeField] private float firstCustomerDelay = 0.5f;
-    [Tooltip("1人の退店演出が終わってから次のお客が入ってくるまでの待ち時間。")]
+    [Tooltip("1人の退店演出が終わってから次のお客が入ってくるまでの待ち時間。依頼主の受取前にも使用します。")]
     [Min(0f)] [SerializeField] private float nextCustomerDelay = 1.0f;
 
     private readonly Queue<CustomerSystem.VisitingCustomer> waitingCustomers = new();
@@ -39,6 +40,7 @@ public class CustomerUI : MonoBehaviour
     private bool isShopOpen;
     private bool hasFinishedToday;
     private bool isProcessingCustomer;
+    private bool isProcessingRequestPickup;
     private Coroutine businessRoutine;
 
     public bool IsShopOpen => isShopOpen;
@@ -71,6 +73,7 @@ public class CustomerUI : MonoBehaviour
         processedVisitors = 0;
         purchaseCount = 0;
         totalSales = 0;
+        isProcessingRequestPickup = false;
 
         SetShopOpen(true);
 
@@ -79,7 +82,8 @@ public class CustomerUI : MonoBehaviour
 
         RefreshState();
 
-        if (waitingCustomers.Count == 0)
+        // 通常客が0人でも依頼主の受取がある日は営業ルーチンを続ける。
+        if (waitingCustomers.Count == 0 && (requestSystem == null || !requestSystem.HasPendingBouquetPickup))
         {
             FinishBusinessDay();
             return;
@@ -90,7 +94,7 @@ public class CustomerUI : MonoBehaviour
 
     private IEnumerator ProcessAllCustomersRoutine()
     {
-        if (firstCustomerDelay > 0f)
+        if (firstCustomerDelay > 0f && waitingCustomers.Count > 0)
             yield return new WaitForSeconds(firstCustomerDelay);
 
         while (isShopOpen && waitingCustomers.Count > 0)
@@ -99,6 +103,15 @@ public class CustomerUI : MonoBehaviour
 
             if (waitingCustomers.Count > 0 && nextCustomerDelay > 0f)
                 yield return new WaitForSeconds(nextCustomerDelay);
+        }
+
+        // 開店時に条件達成済みの花束依頼がある場合、通常客の最後の退店後に依頼主が来店する。
+        if (isShopOpen && requestSystem != null && requestSystem.HasPendingBouquetPickup)
+        {
+            if (nextCustomerDelay > 0f)
+                yield return new WaitForSeconds(nextCustomerDelay);
+
+            yield return ProcessRequestPickupRoutine();
         }
 
         businessRoutine = null;
@@ -144,6 +157,54 @@ public class CustomerUI : MonoBehaviour
         if (salesVisualController != null)
             yield return salesVisualController.PlayCustomerSequence(customer, result);
 
+        isProcessingCustomer = false;
+        RefreshState();
+    }
+
+    /// <summary>
+    /// 通常客が全員帰ったあと、依頼主が予約花束を購入して退店する特別シーケンスです。
+    /// 依頼主もその日の来客・購入者・売上へ加算し、その退店後は通常の営業終了処理へ戻ります。
+    /// </summary>
+    private IEnumerator ProcessRequestPickupRoutine()
+    {
+        if (requestSystem == null || !requestSystem.HasPendingBouquetPickup)
+            yield break;
+
+        isProcessingCustomer = true;
+        isProcessingRequestPickup = true;
+
+        if (!requestSystem.TryCompletePendingBouquetPickup(
+                out RequestData request,
+                out BouquetSystem.BouquetData bouquet,
+                out int salePrice,
+                out string successMessage))
+        {
+            isProcessingRequestPickup = false;
+            isProcessingCustomer = false;
+            RefreshState();
+            yield break;
+        }
+
+        totalVisitors++;
+        processedVisitors++;
+        purchaseCount++;
+        totalSales += salePrice;
+
+        if (resultText != null)
+            resultText.text = $"{request.requesterName}：{bouquet.bouquetName}を依頼品として受け取りました";
+
+        RefreshState();
+
+        if (salesVisualController != null)
+        {
+            yield return salesVisualController.PlayRequestPickupSequence(
+                request,
+                bouquet,
+                salePrice,
+                successMessage);
+        }
+
+        isProcessingRequestPickup = false;
         isProcessingCustomer = false;
         RefreshState();
     }
@@ -252,6 +313,7 @@ public class CustomerUI : MonoBehaviour
         SetShopOpen(false);
         hasFinishedToday = true;
         isProcessingCustomer = false;
+        isProcessingRequestPickup = false;
 
         if (resultText != null)
             resultText.text = "本日の営業が終了しました";
@@ -265,6 +327,7 @@ public class CustomerUI : MonoBehaviour
         StopAllCoroutines();
         businessRoutine = null;
         isProcessingCustomer = false;
+        isProcessingRequestPickup = false;
         waitingCustomers.Clear();
         totalVisitors = 0;
         processedVisitors = 0;
@@ -297,7 +360,11 @@ public class CustomerUI : MonoBehaviour
 
         if (currentCustomerText != null)
         {
-            if (isProcessingCustomer)
+            if (isProcessingRequestPickup)
+            {
+                currentCustomerText.text = "依頼主が受け取りに来ています";
+            }
+            else if (isProcessingCustomer)
             {
                 currentCustomerText.text = "ただいま会計中です";
             }
@@ -310,6 +377,10 @@ public class CustomerUI : MonoBehaviour
                 currentCustomerText.text = next?.data != null
                     ? $"次のお客：{next.data.displayName}　目的 {CustomerSystem.GetPurposeLabel(next.purpose)}　予算 {budget:N0}円"
                     : "次のお客：不明";
+            }
+            else if (requestSystem != null && requestSystem.HasPendingBouquetPickup)
+            {
+                currentCustomerText.text = "通常のお客が帰ったあと、依頼主が受け取りに来ます";
             }
             else
             {
