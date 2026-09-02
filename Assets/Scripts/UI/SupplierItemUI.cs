@@ -6,6 +6,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 仕入れ画面の商品1種類分を表示する共通UI。
 /// 花・レジ横商品BOX・家具を同じPrefabで表示します。
+/// 家具では通常の「5本購入」ボタンを「効果説明」に切り替え、購入とは別操作にします。
 /// </summary>
 public class SupplierItemUI : MonoBehaviour
 {
@@ -34,6 +35,7 @@ public class SupplierItemUI : MonoBehaviour
     private Action<SupplierSystem.ArrivalItem, int> onBuyMultipleRequested;
     private Action<CheckoutItemSystem.CheckoutItemDefinition> onBuyCheckoutRequested;
     private Action<FurnitureData> onBuyFurnitureRequested;
+    private Action<FurnitureData> onExplainFurnitureRequested;
 
     private bool IsCheckoutItem => checkoutItem != null;
     private bool IsFurnitureItem => furnitureItem != null;
@@ -72,6 +74,7 @@ public class SupplierItemUI : MonoBehaviour
         onBuyMultipleRequested = buyMultipleCallback;
         onBuyCheckoutRequested = null;
         onBuyFurnitureRequested = null;
+        onExplainFurnitureRequested = null;
         Refresh();
     }
 
@@ -91,6 +94,7 @@ public class SupplierItemUI : MonoBehaviour
         onBuyMultipleRequested = null;
         onBuyCheckoutRequested = buyCallback;
         onBuyFurnitureRequested = null;
+        onExplainFurnitureRequested = null;
         Refresh();
     }
 
@@ -98,6 +102,7 @@ public class SupplierItemUI : MonoBehaviour
         FurnitureSystem system,
         FurnitureData item,
         Action<FurnitureData> buyCallback,
+        Action<FurnitureData> explainCallback,
         bool isNew)
     {
         arrivalItem = null;
@@ -110,6 +115,7 @@ public class SupplierItemUI : MonoBehaviour
         onBuyMultipleRequested = null;
         onBuyCheckoutRequested = null;
         onBuyFurnitureRequested = buyCallback;
+        onExplainFurnitureRequested = explainCallback;
         Refresh();
     }
 
@@ -226,7 +232,9 @@ public class SupplierItemUI : MonoBehaviour
         if (colorText != null) colorText.text = "家具";
         if (priceText != null) priceText.text = $"{furnitureItem.purchasePrice:N0}円";
         if (remainingText != null) remainingText.text = owned ? "購入済み" : "1点限り";
-        if (saleText != null) saleText.text = BuildFurnitureEffectText(furnitureItem);
+
+        // 家具の効果は一覧上へ直接書かず、「効果説明」ボタンから仕入先キャラに説明してもらう。
+        if (saleText != null) saleText.text = string.Empty;
 
         if (buyButton != null)
         {
@@ -235,43 +243,13 @@ public class SupplierItemUI : MonoBehaviour
         }
 
         if (buyFiveButton != null)
-            buyFiveButton.gameObject.SetActive(false);
-    }
+        {
+            buyFiveButton.gameObject.SetActive(true);
+            buyFiveButton.interactable = true;
+        }
 
-    private static string BuildFurnitureEffectText(FurnitureData item)
-    {
-        if (item == null) return string.Empty;
-
-        string text = string.Empty;
-        AppendEffect(ref text, item.visitorBonusPercent, "来客率");
-        AppendEffect(ref text, item.budgetBonusPercent, "予算");
-
-        if (item.summerVisitorBonusPercent != 0f)
-            AppendRaw(ref text, $"夏 来客率+{item.summerVisitorBonusPercent * 100f:0.#}%");
-
-        if (item.rainyVisitorBonusPercent != 0f)
-            AppendRaw(ref text, $"雨 来客率+{item.rainyVisitorBonusPercent * 100f:0.#}%");
-
-        if (item.rainyBudgetBonusPercent != 0f)
-            AppendRaw(ref text, $"雨 予算+{item.rainyBudgetBonusPercent * 100f:0.#}%");
-
-        if (item.rainyVisitorPenaltyFloorPercent < 0f)
-            AppendRaw(ref text, $"雨ペナルティ{item.rainyVisitorPenaltyFloorPercent * 100f:0.#}%まで軽減");
-
-        return text;
-    }
-
-    private static void AppendEffect(ref string text, float value, string label)
-    {
-        if (value == 0f) return;
-        AppendRaw(ref text, $"{label}+{value * 100f:0.#}%");
-    }
-
-    private static void AppendRaw(ref string text, string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return;
-        if (!string.IsNullOrEmpty(text)) text += " / ";
-        text += value;
+        if (buyFiveButtonText != null)
+            buyFiveButtonText.text = "効果説明";
     }
 
     private void ClearDisplay()
@@ -324,7 +302,14 @@ public class SupplierItemUI : MonoBehaviour
 
     private void HandleBuyFiveClicked()
     {
-        if (IsCheckoutItem || IsFurnitureItem) return;
+        if (IsFurnitureItem)
+        {
+            if (furnitureItem == null) return;
+            onExplainFurnitureRequested?.Invoke(furnitureItem);
+            return;
+        }
+
+        if (IsCheckoutItem) return;
 
         int quantity = GetBulkPurchaseQuantity();
         if (arrivalItem == null || quantity <= 0) return;
