@@ -19,6 +19,8 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private ShopTabUI shopTabUI;
     [Tooltip("ホームの依頼ボタンから依頼パネルを開くために設定します。")]
     [SerializeField] private RequestPanelUI requestPanelUI;
+    [Tooltip("依頼の有無を監視してビックリマーク表示を切り替えるために設定します。")]
+    [SerializeField] private RequestSystem requestSystem;
 
     [Header("ホーム表示")]
     [Tooltip("HomeUIRoot。ホーム専用UI全体の親を設定します。")]
@@ -53,6 +55,8 @@ public class HomeDashboardUI : MonoBehaviour
 
     [Header("ホームボタン")]
     [SerializeField] private Button requestButton;
+    [Tooltip("依頼が存在する時だけ表示するビックリマーク等のTMPテキスト。")]
+    [SerializeField] private TMP_Text requestAlertText;
     [SerializeField] private Button furnitureButton;
     [SerializeField] private Button checkoutButton;
     [SerializeField] private Button openShopButton;
@@ -78,18 +82,36 @@ public class HomeDashboardUI : MonoBehaviour
 
         if (checkoutButton != null)
             checkoutButton.onClick.AddListener(HandleCheckoutClicked);
+
+        RefreshRequestAlert();
     }
 
     private void OnEnable()
     {
         if (shopManager != null)
             shopManager.OnStateChanged += Refresh;
+
+        if (requestSystem != null)
+        {
+            requestSystem.OnRequestOffered += HandleRequestStateChanged;
+            requestSystem.OnRequestChanged += HandleRequestStateChanged;
+            requestSystem.OnRequestResolved += HandleRequestStateChanged;
+        }
+
+        RefreshRequestAlert();
     }
 
     private void OnDisable()
     {
         if (shopManager != null)
             shopManager.OnStateChanged -= Refresh;
+
+        if (requestSystem != null)
+        {
+            requestSystem.OnRequestOffered -= HandleRequestStateChanged;
+            requestSystem.OnRequestChanged -= HandleRequestStateChanged;
+            requestSystem.OnRequestResolved -= HandleRequestStateChanged;
+        }
     }
 
     private void OnDestroy()
@@ -133,6 +155,7 @@ public class HomeDashboardUI : MonoBehaviour
             homePriceText.text = string.Empty;
 
         Refresh();
+        RefreshRequestAlert();
     }
 
     public void HideHome()
@@ -230,6 +253,20 @@ public class HomeDashboardUI : MonoBehaviour
         }
 
         requestPanelUI.ShowPanel();
+    }
+
+    private void HandleRequestStateChanged(RequestData request)
+    {
+        RefreshRequestAlert();
+    }
+
+    private void RefreshRequestAlert()
+    {
+        if (requestAlertText == null)
+            return;
+
+        bool shouldShow = requestSystem != null && requestSystem.HasActiveRequest;
+        requestAlertText.gameObject.SetActive(shouldShow);
     }
 
     private static void HandleFurnitureClicked()
