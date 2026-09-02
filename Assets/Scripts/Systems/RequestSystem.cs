@@ -361,62 +361,156 @@ public class RequestSystem : MonoBehaviour
     /// </summary>
     private bool TryReserveBouquetRequest(RequestData request)
     {
-        if (bouquetSystem == null || request == null)
+        if (request == null)
             return false;
+
+        if (bouquetSystem == null)
+        {
+            Debug.LogError("RequestSystem: BouquetSystemが設定されていないため、花束依頼を判定できません。InspectorのBouquet Systemを確認してください。");
+            return false;
+        }
 
         if (HasPendingBouquetPickup)
             return pendingBouquetRequest == request;
 
-        BouquetSystem.BouquetData matchingBouquet = bouquetSystem.Bouquets.FirstOrDefault(bouquet =>
-            BouquetMatchesRequest(bouquet, request));
+        if (bouquetSystem.Bouquets == null || bouquetSystem.Bouquets.Count == 0)
+        {
+            Debug.LogWarning($"依頼判定：作成済み花束が0個です。依頼={request.requestId}");
+            return false;
+        }
+
+        BouquetSystem.BouquetData matchingBouquet = null;
+
+        foreach (BouquetSystem.BouquetData bouquet in bouquetSystem.Bouquets)
+        {
+            if (BouquetMatchesRequest(bouquet, request, out string mismatchReason))
+            {
+                matchingBouquet = bouquet;
+                break;
+            }
+
+            if (bouquet != null)
+            {
+                Debug.Log(
+                    $"依頼判定NG：花束『{bouquet.bouquetName}』 / " +
+                    $"価格{bouquet.salePrice:N0}円 / 本数{bouquet.TotalQuantity} / 理由：{mismatchReason}");
+            }
+        }
 
         if (matchingBouquet == null)
+        {
+            Debug.LogWarning(
+                $"依頼判定：条件に合う花束が見つかりませんでした。" +
+                $"依頼名={NormalizeBouquetName(request.requiredBouquetName)} / " +
+                $"上限={request.bouquetMaxPrice}円 / " +
+                $"本数={request.bouquetMinFlowerCount}～{request.bouquetMaxFlowerCount} / " +
+                $"色={request.requiredColor}");
             return false;
+        }
 
         if (!bouquetSystem.RemoveBouquet(matchingBouquet))
+        {
+            Debug.LogError($"依頼判定：一致した花束『{matchingBouquet.bouquetName}』の予約処理に失敗しました。");
             return false;
+        }
 
         pendingBouquetRequest = request;
         pendingBouquetPickup = matchingBouquet;
 
-        Debug.Log($"依頼用花束を確保：{matchingBouquet.bouquetName}。通常客の購入候補から除外しました。");
+        Debug.Log(
+            $"依頼判定OK：『{matchingBouquet.bouquetName}』 " +
+            $"{matchingBouquet.salePrice:N0}円 / {matchingBouquet.TotalQuantity}本 を依頼用に確保しました。");
         return true;
     }
 
-    private static bool BouquetMatchesRequest(BouquetSystem.BouquetData bouquet, RequestData request)
+    private static bool BouquetMatchesRequest(
+        BouquetSystem.BouquetData bouquet,
+        RequestData request,
+        out string mismatchReason)
     {
-        if (bouquet?.components == null || request == null)
-            return false;
+        mismatchReason = string.Empty;
 
-        if (!string.IsNullOrWhiteSpace(request.requiredBouquetName) &&
-            !string.Equals(
-                bouquet.bouquetName?.Trim(),
-                request.requiredBouquetName.Trim(),
-                StringComparison.Ordinal))
+        if (bouquet == null)
+        {
+            mismatchReason = "花束データがnull";
             return false;
+        }
 
-        if (request.bouquetMaxPrice > 0 &&
-            (bouquet.salePrice <= 0 || bouquet.salePrice > request.bouquetMaxPrice))
+        if (request == null)
+        {
+            mismatchReason = "依頼データがnull";
             return false;
+        }
 
-        if (request.bouquetMinFlowerCount > 0 && bouquet.TotalQuantity < request.bouquetMinFlowerCount)
+        if (bouquet.components == null || bouquet.components.Count == 0)
+        {
+            mismatchReason = "花束の中身が空";
             return false;
+        }
 
-        if (request.bouquetMaxFlowerCount > 0 && bouquet.TotalQuantity > request.bouquetMaxFlowerCount)
+        if (!string.IsNullOrWhiteSpace(request.requiredBouquetName))
+        {
+            string actualName = NormalizeBouquetName(bouquet.bouquetName);
+            string requiredName = NormalizeBouquetName(request.requiredBouquetName);
+
+            if (!string.Equals(actualName, requiredName, StringComparison.OrdinalIgnoreCase))
+            {
+                mismatchReason = $"名前不一致（実際『{actualName}』 / 必要『{requiredName}』）";
+                return false;
+            }
+        }
+
+        if (request.bouquetMaxPrice > 0)
+        {
+            if (bouquet.salePrice <= 0)
+            {
+                mismatchReason = "販売価格が0円以下";
+                return false;
+            }
+
+            if (bouquet.salePrice > request.bouquetMaxPrice)
+            {
+                mismatchReason = $"価格超過（{bouquet.salePrice:N0}円 > {request.bouquetMaxPrice:N0}円）";
+                return false;
+            }
+        }
+
+        int totalQuantity = bouquet.TotalQuantity;
+
+        if (request.bouquetMinFlowerCount > 0 && totalQuantity < request.bouquetMinFlowerCount)
+        {
+            mismatchReason = $"本数不足（{totalQuantity}本 < {request.bouquetMinFlowerCount}本）";
             return false;
+        }
+
+        if (request.bouquetMaxFlowerCount > 0 && totalQuantity > request.bouquetMaxFlowerCount)
+        {
+            mismatchReason = $"本数超過（{totalQuantity}本 > {request.bouquetMaxFlowerCount}本）";
+            return false;
+        }
 
         if (!string.IsNullOrWhiteSpace(request.requiredColor))
         {
+            string requiredColor = NormalizeColor(request.requiredColor);
             bool hasRequiredColor = bouquet.components.Any(component =>
                 component?.flower != null &&
                 component.quantity > 0 &&
                 string.Equals(
                     NormalizeColor(component.flower.color),
-                    NormalizeColor(request.requiredColor),
+                    requiredColor,
                     StringComparison.OrdinalIgnoreCase));
 
             if (!hasRequiredColor)
+            {
+                string bouquetColors = string.Join("・", bouquet.components
+                    .Where(component => component?.flower != null && component.quantity > 0)
+                    .Select(component => NormalizeColor(component.flower.color))
+                    .Where(color => !string.IsNullOrWhiteSpace(color))
+                    .Distinct());
+
+                mismatchReason = $"指定色なし（必要『{requiredColor}』 / 花束『{bouquetColors}』）";
                 return false;
+            }
         }
 
         return true;
@@ -722,7 +816,7 @@ public class RequestSystem : MonoBehaviour
             offeredAbsoluteDay = offeredDay,
             durationDays = 1,
             targetFlowerName = target.flowerName,
-            targetFlowerColor = target.color,
+            targetFlowerColor = target.flowerName,
             targetSalePrice = 777,
             rewardShopRating = 0,
             rewardVisitorBonusPercent = 0f,
@@ -757,6 +851,22 @@ public class RequestSystem : MonoBehaviour
             return 0;
 
         return (shopManager.GameYear - 1) * ShopManager.DaysPerYear + shopManager.DayOfYear;
+    }
+
+    private static string NormalizeBouquetName(string bouquetName)
+    {
+        if (string.IsNullOrWhiteSpace(bouquetName))
+            return string.Empty;
+
+        string normalized = bouquetName.Trim();
+
+        // 依頼文を見ながら「」や引用符ごと入力しても同じ名前として扱います。
+        char[] removable = { '「', '」', '『', '』', '"', '\'', '“', '”', '‘', '’' };
+        normalized = new string(normalized.Where(c => !removable.Contains(c)).ToArray());
+
+        // 半角/全角スペースの入力揺れも無視します。
+        normalized = normalized.Replace(" ", string.Empty).Replace("　", string.Empty);
+        return normalized;
     }
 
     private static string NormalizeColor(string color)
