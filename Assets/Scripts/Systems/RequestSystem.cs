@@ -1,13 +1,24 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
 /// <summary>
 /// 依頼の発生・受注・辞退・期限・達成判定を管理します。
-/// 受注した依頼の成功確認は「開店する」を押した瞬間に行います。
+/// 受注した依頼の条件確認は「開店する」を押した瞬間に行います。
+/// 花束依頼は開店時に条件を満たす花束を確保し、通常客の営業終了後に依頼主へ販売して完了します。
 /// </summary>
 public class RequestSystem : MonoBehaviour
 {
+    [Serializable]
+    private class TimedVisitorBonus
+    {
+        public string sourceKey;
+        [Min(0f)] public float percentBonus;
+        public int startAbsoluteDay;
+        public int endAbsoluteDay;
+    }
+
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private InventorySystem inventorySystem;
@@ -25,9 +36,12 @@ public class RequestSystem : MonoBehaviour
     [SerializeField] private string lastOpeningRequestMessage;
 
     [Header("依頼報酬：来客率ボーナス（確認用）")]
-    [SerializeField] private float activeVisitorBonusPercent;
-    [SerializeField] private int visitorBonusStartAbsoluteDay = -1;
-    [SerializeField] private int visitorBonusEndAbsoluteDay = -1;
+    [Tooltip("複数の依頼報酬が重なった場合も上書きせず、それぞれの有効期間中は加算します。")]
+    [SerializeField] private List<TimedVisitorBonus> activeVisitorBonuses = new();
+
+    [Header("花束依頼：本日受取予定（確認用）")]
+    [SerializeField] private RequestData pendingBouquetRequest;
+    [SerializeField] private BouquetSystem.BouquetData pendingBouquetPickup;
 
     [Header("謎のお通げ：当日限定効果（確認用）")]
     [SerializeField] private FlowerData activeMysterySaleFlower;
@@ -39,6 +53,7 @@ public class RequestSystem : MonoBehaviour
     public bool HasOfferedRequest => currentRequest != null && currentRequest.state == RequestState.Offered;
     public bool HasAcceptedRequest => currentRequest != null && currentRequest.state == RequestState.Accepted;
     public bool HasActiveRequest => HasOfferedRequest || HasAcceptedRequest;
+    public bool HasPendingBouquetPickup => pendingBouquetRequest != null && pendingBouquetPickup != null;
     public bool IsMysterySaleActiveToday =>
         activeMysterySaleFlower != null && activeMysterySaleAbsoluteDay == GetCurrentAbsoluteDay();
 
@@ -75,11 +90,17 @@ public class RequestSystem : MonoBehaviour
             activeMysterySaleAbsoluteDay = -1;
         }
 
-        if (visitorBonusEndAbsoluteDay >= 0 && today > visitorBonusEndAbsoluteDay)
+        activeVisitorBonuses ??= new List<TimedVisitorBonus>();
+        activeVisitorBonuses.RemoveAll(bonus =>
+            bonus == null || bonus.percentBonus <= 0f || today > bonus.endAbsoluteDay);
+
+        // 通常は前日の営業中に必ず受取が完了します。
+        // 何らかの中断で残っていた場合は、新しい日に持ち越さないよう解除します。
+        if (pendingBouquetPickup != null || pendingBouquetRequest != null)
         {
-            activeVisitorBonusPercent = 0f;
-            visitorBonusStartAbsoluteDay = -1;
-            visitorBonusEndAbsoluteDay = -1;
+            Debug.LogWarning("RequestSystem: 前日の依頼用花束予約が残っていたため解除しました。");
+            pendingBouquetPickup = null;
+            pendingBouquetRequest = null;
         }
 
         if (currentRequest != null)
@@ -124,7 +145,9 @@ public class RequestSystem : MonoBehaviour
 
     /// <summary>
     /// 「開店する」を押した時に呼びます。
-    /// 条件達成ならその場で成功。未達成でも期限前なら依頼は継続し、期限最終日の開店時だけ失敗にします。
+    /// 花束依頼は条件達成なら対象花束を通常販売リストから取り除いて予約します。
+    /// 実際の販売・報酬付与・成功確定は通常客が全員退店した後の依頼主受取時に行います。
+    /// 謎のお通げは従来どおり開店時に成功確定します。
     /// </summary>
     public void ResolveAcceptedRequestAtOpening()
     {
@@ -134,14 +157,14 @@ public class RequestSystem : MonoBehaviour
             return;
 
         RequestData request = currentRequest;
-        bool completed = request.requestType switch
+        bool conditionMet = request.requestType switch
         {
-            RequestType.BouquetOrder => TryCompleteBouquetRequest(request),
+            RequestType.BouquetOrder => TryReserveBouquetRequest(request),
             RequestType.MysteryMessage => TryCompleteMysteryRequest(request),
             _ => false
         };
 
-        if (completed)
+        if (conditionMet)
             return;
 
         int today = GetCurrentAbsoluteDay();
@@ -159,20 +182,67 @@ public class RequestSystem : MonoBehaviour
 
     /// <summary>
     /// 今日有効な依頼報酬の来客率倍率を返します。
-    /// 例：+25%なら1.25。成功当日は含めず、翌日から指定日数だけ有効です。
+    /// 複数報酬が重なった場合は加算します。
+    /// 例：+25% と +15% が重なれば 1.40 を返します。
     /// </summary>
     public float GetVisitorMultiplierForToday()
     {
-        if (shopManager == null || activeVisitorBonusPercent <= 0f)
+        if (shopManager == null)
             return 1f;
 
         int today = GetCurrentAbsoluteDay();
-        bool active = visitorBonusStartAbsoluteDay >= 0 &&
-                      visitorBonusEndAbsoluteDay >= visitorBonusStartAbsoluteDay &&
-                      today >= visitorBonusStartAbsoluteDay &&
-                      today <= visitorBonusEndAbsoluteDay;
+        activeVisitorBonuses ??= new List<TimedVisitorBonus>();
 
-        return active ? 1f + activeVisitorBonusPercent : 1f;
+        float totalPercent = activeVisitorBonuses
+            .Where(bonus => bonus != null &&
+                            bonus.percentBonus > 0f &&
+                            today >= bonus.startAbsoluteDay &&
+                            today <= bonus.endAbsoluteDay)
+            .Sum(bonus => bonus.percentBonus);
+
+        return 1f + Mathf.Max(0f, totalPercent);
+    }
+
+    /// <summary>
+    /// 開店時に予約した花束を、通常客全員の退店後に依頼主へ販売します。
+    /// ここで初めて売上・依頼報酬・成功状態を確定します。
+    /// </summary>
+    public bool TryCompletePendingBouquetPickup(
+        out RequestData request,
+        out BouquetSystem.BouquetData bouquet,
+        out int salePrice,
+        out string successMessage)
+    {
+        request = pendingBouquetRequest;
+        bouquet = pendingBouquetPickup;
+        salePrice = 0;
+        successMessage = string.Empty;
+
+        if (request == null || bouquet == null || shopManager == null)
+            return false;
+
+        if (currentRequest != request || currentRequest.state != RequestState.Accepted)
+        {
+            pendingBouquetRequest = null;
+            pendingBouquetPickup = null;
+            return false;
+        }
+
+        salePrice = Mathf.Max(0, bouquet.salePrice);
+        if (salePrice > 0)
+            shopManager.AddMoney(salePrice);
+
+        string rawSuccessMessage = request.successMessage;
+
+        if (!CompleteCurrentRequest())
+            return false;
+
+        successMessage = rawSuccessMessage;
+        pendingBouquetRequest = null;
+        pendingBouquetPickup = null;
+
+        Debug.Log($"依頼受取完了：{request.requesterName} / {bouquet.bouquetName} / {salePrice:N0}円");
+        return true;
     }
 
     /// <summary>
@@ -211,7 +281,10 @@ public class RequestSystem : MonoBehaviour
             shopManager.AddShopRating(completed.rewardShopRating);
 
         if (completed.rewardVisitorBonusPercent > 0f && completed.rewardVisitorBonusDays > 0)
-            ActivateVisitorBonus(completed.rewardVisitorBonusPercent, completed.rewardVisitorBonusDays);
+            ActivateVisitorBonus(
+                completed.requestId,
+                completed.rewardVisitorBonusPercent,
+                completed.rewardVisitorBonusDays);
 
         if (!string.IsNullOrWhiteSpace(completed.successMessage))
         {
@@ -242,23 +315,57 @@ public class RequestSystem : MonoBehaviour
         return currentRequest.GetRemainingDays(GetCurrentAbsoluteDay());
     }
 
-    private void ActivateVisitorBonus(float bonusPercent, int days)
+    private void ActivateVisitorBonus(string sourceKey, float bonusPercent, int days)
     {
         if (shopManager == null || bonusPercent <= 0f || days <= 0)
             return;
 
         int today = GetCurrentAbsoluteDay();
-        activeVisitorBonusPercent = bonusPercent;
-        visitorBonusStartAbsoluteDay = today + 1;
-        visitorBonusEndAbsoluteDay = visitorBonusStartAbsoluteDay + days - 1;
+        int startDay = today + 1;
+        int endDay = startDay + days - 1;
 
-        Debug.Log($"依頼報酬：翌日から{days}日間、来客率+{bonusPercent * 100f:0.#}%");
+        activeVisitorBonuses ??= new List<TimedVisitorBonus>();
+
+        // 同一依頼から重複登録された場合だけ置き換えます。
+        // 別依頼の報酬は別要素として残るので、期間が重なれば加算されます。
+        string key = string.IsNullOrWhiteSpace(sourceKey)
+            ? $"request_bonus_{today}_{activeVisitorBonuses.Count}"
+            : sourceKey;
+
+        TimedVisitorBonus existing = activeVisitorBonuses.FirstOrDefault(bonus =>
+            bonus != null && string.Equals(bonus.sourceKey, key, StringComparison.Ordinal));
+
+        if (existing == null)
+        {
+            activeVisitorBonuses.Add(new TimedVisitorBonus
+            {
+                sourceKey = key,
+                percentBonus = bonusPercent,
+                startAbsoluteDay = startDay,
+                endAbsoluteDay = endDay
+            });
+        }
+        else
+        {
+            existing.percentBonus = bonusPercent;
+            existing.startAbsoluteDay = startDay;
+            existing.endAbsoluteDay = endDay;
+        }
+
+        Debug.Log($"依頼報酬：翌日から{days}日間、来客率+{bonusPercent * 100f:0.#}%（他の依頼報酬と加算）");
     }
 
-    private bool TryCompleteBouquetRequest(RequestData request)
+    /// <summary>
+    /// 条件を満たす花束を1個だけ通常販売リストから外し、依頼主用に予約します。
+    /// これにより営業中の通常客は対象花束を購入候補にできません。
+    /// </summary>
+    private bool TryReserveBouquetRequest(RequestData request)
     {
         if (bouquetSystem == null || request == null)
             return false;
+
+        if (HasPendingBouquetPickup)
+            return pendingBouquetRequest == request;
 
         BouquetSystem.BouquetData matchingBouquet = bouquetSystem.Bouquets.FirstOrDefault(bouquet =>
             BouquetMatchesRequest(bouquet, request));
@@ -266,12 +373,13 @@ public class RequestSystem : MonoBehaviour
         if (matchingBouquet == null)
             return false;
 
-        string bouquetName = matchingBouquet.bouquetName;
         if (!bouquetSystem.RemoveBouquet(matchingBouquet))
             return false;
 
-        Debug.Log($"依頼納品：{bouquetName}を渡しました。");
-        CompleteCurrentRequest();
+        pendingBouquetRequest = request;
+        pendingBouquetPickup = matchingBouquet;
+
+        Debug.Log($"依頼用花束を確保：{matchingBouquet.bouquetName}。通常客の購入候補から除外しました。");
         return true;
     }
 
@@ -635,6 +743,12 @@ public class RequestSystem : MonoBehaviour
         OnRequestChanged?.Invoke(lastResolvedRequest);
 
         currentRequest = null;
+
+        if (resultState != RequestState.Completed)
+        {
+            pendingBouquetRequest = null;
+            pendingBouquetPickup = null;
+        }
     }
 
     private int GetCurrentAbsoluteDay()
