@@ -43,7 +43,7 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private TMP_Text standardPurchaseText;
     [Tooltip("既存SpeechBubble内のPriceText。任意。開店演出中は空文字にします。")]
     [SerializeField] private TMP_Text standardPriceText;
-    [Tooltip("既存SpeechBubble内のCommentText。任意。開店演出中は空文字にします。")]
+    [Tooltip("既存SpeechBubble内のCommentText。依頼成功時はここに成功セリフを表示します。")]
     [SerializeField] private TMP_Text standardCommentText;
 
     [Header("今日の情報")]
@@ -212,6 +212,10 @@ public class HomeDashboardUI : MonoBehaviour
         if (requestSystem != null)
             requestSystem.ResolveAcceptedRequestAtOpening();
 
+        string requestOpeningMessage = requestSystem != null
+            ? requestSystem.LastOpeningRequestMessage
+            : string.Empty;
+
         if (homeDashboard != null)
             homeDashboard.SetActive(false);
 
@@ -231,7 +235,7 @@ public class HomeDashboardUI : MonoBehaviour
             standardPriceText.text = string.Empty;
 
         if (standardCommentText != null)
-            standardCommentText.text = string.Empty;
+            standardCommentText.text = requestOpeningMessage;
 
         if (openingAnnouncementDuration > 0f)
             yield return new WaitForSeconds(openingAnnouncementDuration);
