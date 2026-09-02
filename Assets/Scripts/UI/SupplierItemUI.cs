@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 仕入れ画面の商品1種類分を表示する共通UI。
-/// 花とレジ横商品BOXの両方を同じPrefabで表示します。
+/// 花・レジ横商品BOX・家具を同じPrefabで表示します。
 /// </summary>
 public class SupplierItemUI : MonoBehaviour
 {
@@ -26,13 +26,17 @@ public class SupplierItemUI : MonoBehaviour
     private SupplierSystem.ArrivalItem arrivalItem;
     private CheckoutItemSystem checkoutItemSystem;
     private CheckoutItemSystem.CheckoutItemDefinition checkoutItem;
+    private FurnitureSystem furnitureSystem;
+    private FurnitureData furnitureItem;
     private bool showNewMarker;
 
     private Action<SupplierSystem.ArrivalItem> onBuyOneRequested;
     private Action<SupplierSystem.ArrivalItem, int> onBuyMultipleRequested;
     private Action<CheckoutItemSystem.CheckoutItemDefinition> onBuyCheckoutRequested;
+    private Action<FurnitureData> onBuyFurnitureRequested;
 
     private bool IsCheckoutItem => checkoutItem != null;
+    private bool IsFurnitureItem => furnitureItem != null;
 
     private void Awake()
     {
@@ -61,17 +65,16 @@ public class SupplierItemUI : MonoBehaviour
         arrivalItem = item;
         checkoutItemSystem = null;
         checkoutItem = null;
+        furnitureSystem = null;
+        furnitureItem = null;
         showNewMarker = isNew;
         onBuyOneRequested = buyOneCallback;
         onBuyMultipleRequested = buyMultipleCallback;
         onBuyCheckoutRequested = null;
+        onBuyFurnitureRequested = null;
         Refresh();
     }
 
-    /// <summary>
-    /// レジ横商品のBOXを、花と同じ仕入れPrefabへ表示します。
-    /// 1クリックで1BOXだけ購入するため、まとめ買いボタンは非表示にします。
-    /// </summary>
     public void BindCheckout(
         CheckoutItemSystem system,
         CheckoutItemSystem.CheckoutItemDefinition item,
@@ -81,16 +84,44 @@ public class SupplierItemUI : MonoBehaviour
         arrivalItem = null;
         checkoutItemSystem = system;
         checkoutItem = item;
+        furnitureSystem = null;
+        furnitureItem = null;
         showNewMarker = isNew;
         onBuyOneRequested = null;
         onBuyMultipleRequested = null;
         onBuyCheckoutRequested = buyCallback;
+        onBuyFurnitureRequested = null;
+        Refresh();
+    }
+
+    public void BindFurniture(
+        FurnitureSystem system,
+        FurnitureData item,
+        Action<FurnitureData> buyCallback,
+        bool isNew)
+    {
+        arrivalItem = null;
+        checkoutItemSystem = null;
+        checkoutItem = null;
+        furnitureSystem = system;
+        furnitureItem = item;
+        showNewMarker = isNew;
+        onBuyOneRequested = null;
+        onBuyMultipleRequested = null;
+        onBuyCheckoutRequested = null;
+        onBuyFurnitureRequested = buyCallback;
         Refresh();
     }
 
     public void Refresh()
     {
         RefreshNewMarker();
+
+        if (IsFurnitureItem)
+        {
+            RefreshFurnitureItem();
+            return;
+        }
 
         if (IsCheckoutItem)
         {
@@ -124,8 +155,7 @@ public class SupplierItemUI : MonoBehaviour
             return;
         }
 
-        Sprite sprite = FlowerSpriteLoader.GetSprite(arrivalItem.flower);
-        SetImage(sprite);
+        SetImage(FlowerSpriteLoader.GetSprite(arrivalItem.flower));
 
         if (nameText != null) nameText.text = arrivalItem.flower.flowerName;
         if (colorText != null) colorText.text = $"色：{arrivalItem.flower.color}";
@@ -176,9 +206,72 @@ public class SupplierItemUI : MonoBehaviour
             buyButton.interactable = available;
         }
 
-        // レジ横商品は1BOXが最小単位なので花の「5本購入」は使いません。
         if (buyFiveButton != null)
             buyFiveButton.gameObject.SetActive(false);
+    }
+
+    private void RefreshFurnitureItem()
+    {
+        bool valid = furnitureSystem != null && furnitureItem != null;
+        if (!valid)
+        {
+            ClearDisplay();
+            return;
+        }
+
+        bool owned = furnitureSystem.IsOwned(furnitureItem.id);
+        SetImage(furnitureSystem.LoadSprite(furnitureItem));
+
+        if (nameText != null) nameText.text = furnitureItem.displayName;
+        if (colorText != null) colorText.text = "家具";
+        if (priceText != null) priceText.text = $"{furnitureItem.purchasePrice:N0}円";
+        if (remainingText != null) remainingText.text = owned ? "購入済み" : "1点限り";
+        if (saleText != null) saleText.text = BuildFurnitureEffectText(furnitureItem);
+
+        if (buyButton != null)
+        {
+            buyButton.gameObject.SetActive(true);
+            buyButton.interactable = !owned;
+        }
+
+        if (buyFiveButton != null)
+            buyFiveButton.gameObject.SetActive(false);
+    }
+
+    private static string BuildFurnitureEffectText(FurnitureData item)
+    {
+        if (item == null) return string.Empty;
+
+        string text = string.Empty;
+        AppendEffect(ref text, item.visitorBonusPercent, "来客率");
+        AppendEffect(ref text, item.budgetBonusPercent, "予算");
+
+        if (item.summerVisitorBonusPercent != 0f)
+            AppendRaw(ref text, $"夏 来客率+{item.summerVisitorBonusPercent * 100f:0.#}%");
+
+        if (item.rainyVisitorBonusPercent != 0f)
+            AppendRaw(ref text, $"雨 来客率+{item.rainyVisitorBonusPercent * 100f:0.#}%");
+
+        if (item.rainyBudgetBonusPercent != 0f)
+            AppendRaw(ref text, $"雨 予算+{item.rainyBudgetBonusPercent * 100f:0.#}%");
+
+        if (item.rainyVisitorPenaltyFloorPercent < 0f)
+            AppendRaw(ref text, $"雨ペナルティ{item.rainyVisitorPenaltyFloorPercent * 100f:0.#}%まで軽減");
+
+        return text;
+    }
+
+    private static void AppendEffect(ref string text, float value, string label)
+    {
+        if (value == 0f) return;
+        AppendRaw(ref text, $"{label}+{value * 100f:0.#}%");
+    }
+
+    private static void AppendRaw(ref string text, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        if (!string.IsNullOrEmpty(text)) text += " / ";
+        text += value;
     }
 
     private void ClearDisplay()
@@ -211,6 +304,13 @@ public class SupplierItemUI : MonoBehaviour
 
     private void HandleBuyClicked()
     {
+        if (IsFurnitureItem)
+        {
+            if (furnitureSystem == null || furnitureItem == null || furnitureSystem.IsOwned(furnitureItem.id)) return;
+            onBuyFurnitureRequested?.Invoke(furnitureItem);
+            return;
+        }
+
         if (IsCheckoutItem)
         {
             if (checkoutItemSystem == null || checkoutItem == null || !checkoutItemSystem.HasTodayOffer) return;
@@ -224,7 +324,7 @@ public class SupplierItemUI : MonoBehaviour
 
     private void HandleBuyFiveClicked()
     {
-        if (IsCheckoutItem) return;
+        if (IsCheckoutItem || IsFurnitureItem) return;
 
         int quantity = GetBulkPurchaseQuantity();
         if (arrivalItem == null || quantity <= 0) return;
