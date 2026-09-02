@@ -82,7 +82,6 @@ public class CustomerUI : MonoBehaviour
 
         RefreshState();
 
-        // 通常客が0人でも依頼主の受取がある日は営業ルーチンを続ける。
         if (waitingCustomers.Count == 0 && (requestSystem == null || !requestSystem.HasPendingBouquetPickup))
         {
             FinishBusinessDay();
@@ -105,7 +104,6 @@ public class CustomerUI : MonoBehaviour
                 yield return new WaitForSeconds(nextCustomerDelay);
         }
 
-        // 開店時に条件達成済みの花束依頼がある場合、通常客の最後の退店後に依頼主が来店する。
         if (isShopOpen && requestSystem != null && requestSystem.HasPendingBouquetPickup)
         {
             if (nextCustomerDelay > 0f)
@@ -134,14 +132,11 @@ public class CustomerUI : MonoBehaviour
         CustomerPurchaseSystem.PurchaseResult result = null;
         if (purchaseSystem != null)
         {
-            // まず従来どおり、好み・予算・確率を使った通常購入を処理する。
             result = purchaseSystem.TryPurchase(customer);
 
-            // レジ横商品は従来の通常購入が成立した場合だけ判定する。
             if (result != null && result.purchased)
                 TryAddCheckoutPurchase(customer, result);
 
-            // その後に「謎のお通げ」の777円購入を完全な別枠として足す。
             result = TryAddMysteryRequestPurchase(customer, result);
 
             if (result != null && result.purchased)
@@ -161,10 +156,6 @@ public class CustomerUI : MonoBehaviour
         RefreshState();
     }
 
-    /// <summary>
-    /// 通常客が全員帰ったあと、依頼主が予約花束を購入して退店する特別シーケンスです。
-    /// 依頼主もその日の来客・購入者・売上へ加算し、その退店後は通常の営業終了処理へ戻ります。
-    /// </summary>
     private IEnumerator ProcessRequestPickupRoutine()
     {
         if (requestSystem == null || !requestSystem.HasPendingBouquetPickup)
@@ -256,8 +247,7 @@ public class CustomerUI : MonoBehaviour
         if (checkoutItemSystem == null || customer?.data == null || result == null || !result.purchased)
             return;
 
-        float budgetMultiplier = TrendSystem.GetBudgetMultiplier(shopManager);
-        int effectiveBudget = Mathf.Max(0, Mathf.RoundToInt(customer.data.budget * budgetMultiplier));
+        int effectiveBudget = Mathf.Max(0, customer.budget);
         int remainingBudget = Mathf.Max(0, effectiveBudget - result.salePrice);
         bool boughtBouquet = result.bouquet != null;
 
@@ -371,9 +361,7 @@ public class CustomerUI : MonoBehaviour
             else if (waitingCustomers.Count > 0)
             {
                 CustomerSystem.VisitingCustomer next = waitingCustomers.Peek();
-                int budget = next?.data != null
-                    ? Mathf.RoundToInt(next.data.budget * TrendSystem.GetBudgetMultiplier(shopManager))
-                    : 0;
+                int budget = next != null ? Mathf.Max(0, next.budget) : 0;
                 currentCustomerText.text = next?.data != null
                     ? $"次のお客：{next.data.displayName}　目的 {CustomerSystem.GetPurposeLabel(next.purpose)}　予算 {budget:N0}円"
                     : "次のお客：不明";
