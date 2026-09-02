@@ -54,6 +54,7 @@ public class FurnitureInventoryItemUI : MonoBehaviour
             return;
 
         bool installed = furnitureSystem.IsInstalled(furniture.id);
+        bool canInstall = installed || furnitureSystem.CanInstall(furniture.id);
 
         if (itemImage != null)
         {
@@ -74,13 +75,22 @@ public class FurnitureInventoryItemUI : MonoBehaviour
             quantityText.text = "所持中";
 
         if (installedStateText != null)
-            installedStateText.text = installed ? "設置中" : "未設置";
+        {
+            if (installed)
+                installedStateText.text = "設置中";
+            else if (furnitureSystem.InstalledCount >= furnitureSystem.MaxInstalledCount)
+                installedStateText.text = $"設置上限 {furnitureSystem.InstalledCount}/{furnitureSystem.MaxInstalledCount}";
+            else if (!canInstall)
+                installedStateText.text = "同系統の家具を設置中";
+            else
+                installedStateText.text = "未設置";
+        }
 
         if (installButtonText != null)
             installButtonText.text = installed ? "撤去" : "設置";
 
         if (installButton != null)
-            installButton.interactable = true;
+            installButton.interactable = installed || canInstall;
 
         if (expandedContainer != null)
             expandedContainer.SetActive(false);
