@@ -18,7 +18,7 @@ public enum RequestState
 
 /// <summary>
 /// 依頼1件ぶんの実行時データです。
-/// ver0.0.4では「花束のお願い」「謎のお通げ」の2種類から始めます。
+/// 依頼者の要望文・達成条件・期限・報酬・成功時セリフをまとめて保持します。
 /// </summary>
 [Serializable]
 public class RequestData
@@ -29,7 +29,10 @@ public class RequestData
 
     public string title;
     public string requesterName;
+    public string requesterMessage;
     public string description;
+    public string deadlineLabel;
+    public string successMessage;
 
     public int offeredAbsoluteDay;
     public int acceptedAbsoluteDay = -1;
@@ -37,6 +40,7 @@ public class RequestData
     public int durationDays = 1;
 
     // 花束依頼
+    // 0 / 空文字は「その条件を指定しない」として扱います。
     public int bouquetMaxPrice;
     public string requiredColor;
     public int bouquetMinFlowerCount;
