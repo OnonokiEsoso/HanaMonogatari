@@ -66,10 +66,6 @@ public class RequestSystem : MonoBehaviour
         ProcessNewDay();
     }
 
-    /// <summary>
-    /// 朝に1回呼びます。
-    /// 前日の未受注依頼を流し、期限切れを失敗にしたあと、空きがあれば15%で新規依頼を抽選します。
-    /// </summary>
     public void ProcessNewDay()
     {
         if (shopManager == null)
@@ -94,8 +90,6 @@ public class RequestSystem : MonoBehaviour
         activeVisitorBonuses.RemoveAll(bonus =>
             bonus == null || bonus.percentBonus <= 0f || today > bonus.endAbsoluteDay);
 
-        // 通常は前日の営業中に必ず受取が完了します。
-        // 何らかの中断で残っていた場合は、新しい日に持ち越さないよう解除します。
         if (pendingBouquetPickup != null || pendingBouquetRequest != null)
         {
             Debug.LogWarning("RequestSystem: 前日の依頼用花束予約が残っていたため解除しました。");
@@ -114,7 +108,6 @@ public class RequestSystem : MonoBehaviour
         if (HasActiveRequest)
             return;
 
-        // 発生自体は1日15%。当選したら登録済み7依頼から等確率で1件を選びます。
         if (UnityEngine.Random.value < dailyOfferChance)
             OfferRandomRequest();
     }
@@ -143,12 +136,6 @@ public class RequestSystem : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 「開店する」を押した時に呼びます。
-    /// 花束依頼は条件達成なら対象花束を通常販売リストから取り除いて予約します。
-    /// 実際の販売・報酬付与・成功確定は通常客が全員退店した後の依頼主受取時に行います。
-    /// 謎のお通げは従来どおり開店時に成功確定します。
-    /// </summary>
     public void ResolveAcceptedRequestAtOpening()
     {
         lastOpeningRequestMessage = string.Empty;
@@ -180,11 +167,6 @@ public class RequestSystem : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 今日有効な依頼報酬の来客率倍率を返します。
-    /// 複数報酬が重なった場合は加算します。
-    /// 例：+25% と +15% が重なれば 1.40 を返します。
-    /// </summary>
     public float GetVisitorMultiplierForToday()
     {
         if (shopManager == null)
@@ -203,10 +185,6 @@ public class RequestSystem : MonoBehaviour
         return 1f + Mathf.Max(0f, totalPercent);
     }
 
-    /// <summary>
-    /// 開店時に予約した花束を、通常客全員の退店後に依頼主へ販売します。
-    /// ここで初めて売上・依頼報酬・成功状態を確定します。
-    /// </summary>
     public bool TryCompletePendingBouquetPickup(
         out RequestData request,
         out BouquetSystem.BouquetData bouquet,
@@ -245,11 +223,6 @@ public class RequestSystem : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 謎のお通げ成功日の各来客に対して呼びます。
-    /// 通常購入とは完全に別枠で指定花を1個・777円で追加購入します。
-    /// 予算や好み、購入確率は見ません。在庫が無ければ何も起きません。
-    /// </summary>
     public bool TrySellMysteryBonusFlower(out FlowerData flower, out int price)
     {
         flower = null;
@@ -326,8 +299,6 @@ public class RequestSystem : MonoBehaviour
 
         activeVisitorBonuses ??= new List<TimedVisitorBonus>();
 
-        // 同一依頼から重複登録された場合だけ置き換えます。
-        // 別依頼の報酬は別要素として残るので、期間が重なれば加算されます。
         string key = string.IsNullOrWhiteSpace(sourceKey)
             ? $"request_bonus_{today}_{activeVisitorBonuses.Count}"
             : sourceKey;
@@ -355,10 +326,6 @@ public class RequestSystem : MonoBehaviour
         Debug.Log($"依頼報酬：翌日から{days}日間、来客率+{bonusPercent * 100f:0.#}%（他の依頼報酬と加算）");
     }
 
-    /// <summary>
-    /// 条件を満たす花束を1個だけ通常販売リストから外し、依頼主用に予約します。
-    /// これにより営業中の通常客は対象花束を購入候補にできません。
-    /// </summary>
     private bool TryReserveBouquetRequest(RequestData request)
     {
         if (request == null)
@@ -816,7 +783,7 @@ public class RequestSystem : MonoBehaviour
             offeredAbsoluteDay = offeredDay,
             durationDays = 1,
             targetFlowerName = target.flowerName,
-            targetFlowerColor = target.flowerName,
+            targetFlowerColor = target.color,
             targetSalePrice = 777,
             rewardShopRating = 0,
             rewardVisitorBonusPercent = 0f,
@@ -859,12 +826,8 @@ public class RequestSystem : MonoBehaviour
             return string.Empty;
 
         string normalized = bouquetName.Trim();
-
-        // 依頼文を見ながら「」や引用符ごと入力しても同じ名前として扱います。
         char[] removable = { '「', '」', '『', '』', '"', '\'', '“', '”', '‘', '’' };
         normalized = new string(normalized.Where(c => !removable.Contains(c)).ToArray());
-
-        // 半角/全角スペースの入力揺れも無視します。
         normalized = normalized.Replace(" ", string.Empty).Replace("　", string.Empty);
         return normalized;
     }
