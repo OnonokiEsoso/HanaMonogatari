@@ -6,8 +6,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 仕入れ画面全体を管理します。
-/// 今日の花・ラッピング・レジ横商品の入荷を生成し、購入処理を各システムへつなぎます。
-/// 花とレジ横商品は同じItemContainer・同じSupplierItemUI Prefabに表示します。
+/// 今日の花・ラッピング・レジ横商品・未購入家具を生成し、購入処理を各システムへつなぎます。
+/// 花・レジ横商品・家具は同じItemContainer・同じSupplierItemUI Prefabに表示します。
 /// </summary>
 public class SupplierUI : MonoBehaviour
 {
@@ -17,6 +17,7 @@ public class SupplierUI : MonoBehaviour
     [SerializeField] private InventorySystem inventorySystem;
     [SerializeField] private BouquetSystem bouquetSystem;
     [SerializeField] private CheckoutItemSystem checkoutItemSystem;
+    [SerializeField] private FurnitureSystem furnitureSystem;
     [Tooltip("仕入先キャラクターの吹き出し表示を担当するControllerを設定します。")]
     [SerializeField] private SupplierCommentController supplierCommentController;
 
@@ -43,6 +44,9 @@ public class SupplierUI : MonoBehaviour
 
     private void Awake()
     {
+        if (furnitureSystem == null)
+            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+
         if (wrappingBuyButton != null)
             wrappingBuyButton.onClick.AddListener(TryBuyWrapping);
     }
@@ -54,6 +58,9 @@ public class SupplierUI : MonoBehaviour
 
         if (checkoutItemSystem != null)
             checkoutItemSystem.OnChanged += RefreshAll;
+
+        if (furnitureSystem != null)
+            furnitureSystem.OnChanged += RefreshAll;
     }
 
     private void OnDisable()
@@ -63,6 +70,9 @@ public class SupplierUI : MonoBehaviour
 
         if (checkoutItemSystem != null)
             checkoutItemSystem.OnChanged -= RefreshAll;
+
+        if (furnitureSystem != null)
+            furnitureSystem.OnChanged -= RefreshAll;
     }
 
     private void OnDestroy()
@@ -73,6 +83,9 @@ public class SupplierUI : MonoBehaviour
 
     private void Start()
     {
+        if (furnitureSystem == null)
+            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+
         if (shopManager != null)
             shopManager.SyncSupplierSystem();
 
@@ -156,7 +169,6 @@ public class SupplierUI : MonoBehaviour
             spawnedItems.Add(item);
         }
 
-        // レジ横商品も花と同じ一覧・同じPrefabに1商品として追加します。
         if (checkoutItemSystem != null && checkoutItemSystem.HasTodayOffer)
         {
             CheckoutItemSystem.CheckoutItemDefinition offer = checkoutItemSystem.TodayOffer;
@@ -167,6 +179,23 @@ public class SupplierUI : MonoBehaviour
 
                 SupplierItemUI item = Instantiate(itemPrefab, itemContainer);
                 item.BindCheckout(checkoutItemSystem, offer, TryBuyCheckoutOffer, isNew);
+                spawnedItems.Add(item);
+            }
+        }
+
+        // 家具は一度だけ購入できる恒久設備。未購入の家具を仕入れ一覧の末尾へ常時表示します。
+        if (furnitureSystem != null)
+        {
+            foreach (FurnitureData furniture in furnitureSystem.Definitions
+                         .Where(f => f != null && !furnitureSystem.IsOwned(f.id))
+                         .OrderBy(f => f.purchasePrice)
+                         .ThenBy(f => f.displayName))
+            {
+                string productKey = FurnitureSystem.GetProductKey(furniture);
+                bool isNew = shopManager == null || !shopManager.HasPurchasedSupplierProduct(productKey);
+
+                SupplierItemUI item = Instantiate(itemPrefab, itemContainer);
+                item.BindFurniture(furnitureSystem, furniture, TryBuyFurniture, isNew);
                 spawnedItems.Add(item);
             }
         }
@@ -225,6 +254,21 @@ public class SupplierUI : MonoBehaviour
             shopManager.RegisterSupplierProductPurchase(GetCheckoutProductKey(item));
 
         Debug.Log($"{item.displayName} ×{item.boxQuantity}を{item.boxPurchasePrice:N0}円で仕入れました。");
+        RefreshHeader();
+        RebuildItemList();
+    }
+
+    private void TryBuyFurniture(FurnitureData furniture)
+    {
+        if (furnitureSystem == null || furniture == null)
+            return;
+
+        if (!furnitureSystem.TryPurchase(furniture))
+            return;
+
+        if (supplierCommentController != null)
+            supplierCommentController.ShowDefaultMessage(shopManager);
+
         RefreshHeader();
         RebuildItemList();
     }
