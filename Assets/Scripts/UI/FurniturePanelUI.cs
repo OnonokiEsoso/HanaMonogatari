@@ -25,6 +25,8 @@ public class FurniturePanelUI : MonoBehaviour
     [SerializeField] private Transform furnitureListContent;
     [Tooltip("倉庫のレジ横Prefabを複製して作った FurnitureInventoryItemUI 付き家具Prefabを設定します。")]
     [SerializeField] private FurnitureInventoryItemUI furnitureItemPrefab;
+    [Tooltip("家具を1つも所持していない時だけ表示するテキスト。")]
+    [SerializeField] private TMP_Text emptyText;
 
     [Header("集計表示")]
     [Tooltip("設置中家具の現在効果合計を表示します。")]
@@ -43,10 +45,6 @@ public class FurniturePanelUI : MonoBehaviour
 
         if (closeButton != null)
             closeButton.onClick.AddListener(HidePanel);
-
-        // ここでパネルを非表示にしない。
-        // Hierarchyで非アクティブ開始の場合、初回ShowPanel()のSetActive(true)でAwakeが走り、
-        // その中で再びSetActive(false)すると「最初の1回だけ開かない」ため。
     }
 
     private void OnEnable()
@@ -101,6 +99,7 @@ public class FurniturePanelUI : MonoBehaviour
     {
         RebuildFurnitureList();
         RefreshSummary();
+        RefreshEmptyState();
     }
 
     private void HandleFurnitureChanged()
@@ -129,6 +128,18 @@ public class FurniturePanelUI : MonoBehaviour
             item.Bind(furnitureSystem, furniture);
             spawnedItems.Add(item);
         }
+    }
+
+    private void RefreshEmptyState()
+    {
+        if (emptyText == null)
+            return;
+
+        bool isEmpty = furnitureSystem == null || furnitureSystem.OwnedCount <= 0;
+        emptyText.gameObject.SetActive(isEmpty);
+
+        if (isEmpty && string.IsNullOrWhiteSpace(emptyText.text))
+            emptyText.text = "家具を仕入れると、ここから設置できます。";
     }
 
     private void RefreshSummary()
