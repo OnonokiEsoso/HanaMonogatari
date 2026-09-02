@@ -1,14 +1,18 @@
 using System;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
-/// 依頼の発生・受注・辞退・期限・完了/失敗状態を管理します。
-/// ver0.0.4の最初の段階では、依頼内容の判定処理は別実装に分離します。
+/// 依頼の発生・受注・辞退・期限・達成判定を管理します。
+/// 受注した依頼の成功確認は「開店する」を押した瞬間に行います。
 /// </summary>
 public class RequestSystem : MonoBehaviour
 {
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
+    [SerializeField] private InventorySystem inventorySystem;
+    [SerializeField] private PricingSystem pricingSystem;
+    [SerializeField] private BouquetSystem bouquetSystem;
 
     [Header("発生ルール")]
     [Range(0f, 1f)]
@@ -19,11 +23,17 @@ public class RequestSystem : MonoBehaviour
     [SerializeField] private RequestData lastResolvedRequest;
     [SerializeField] private int lastProcessedAbsoluteDay = -1;
 
+    [Header("謎のお通げ：当日限定効果（確認用）")]
+    [SerializeField] private FlowerData activeMysterySaleFlower;
+    [SerializeField] private int activeMysterySaleAbsoluteDay = -1;
+
     public RequestData CurrentRequest => currentRequest;
     public RequestData LastResolvedRequest => lastResolvedRequest;
     public bool HasOfferedRequest => currentRequest != null && currentRequest.state == RequestState.Offered;
     public bool HasAcceptedRequest => currentRequest != null && currentRequest.state == RequestState.Accepted;
     public bool HasActiveRequest => HasOfferedRequest || HasAcceptedRequest;
+    public bool IsMysterySaleActiveToday =>
+        activeMysterySaleFlower != null && activeMysterySaleAbsoluteDay == GetCurrentAbsoluteDay();
 
     public event Action<RequestData> OnRequestOffered;
     public event Action<RequestData> OnRequestChanged;
@@ -51,6 +61,12 @@ public class RequestSystem : MonoBehaviour
             return;
 
         lastProcessedAbsoluteDay = today;
+
+        if (activeMysterySaleAbsoluteDay != today)
+        {
+            activeMysterySaleFlower = null;
+            activeMysterySaleAbsoluteDay = -1;
+        }
 
         if (currentRequest != null)
         {
@@ -92,9 +108,63 @@ public class RequestSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// 条件判定側から成功時に呼びます。
-    /// 店評価報酬はここで即時付与します。来客数+25%の期間報酬は次段階で効果システムへ接続します。
+    /// 「開店する」を押した時に呼びます。
+    /// 条件達成ならその場で成功。未達成でも期限前なら依頼は継続し、期限最終日の開店時だけ失敗にします。
     /// </summary>
+    public void ResolveAcceptedRequestAtOpening()
+    {
+        if (!HasAcceptedRequest || shopManager == null)
+            return;
+
+        RequestData request = currentRequest;
+        bool completed = request.requestType switch
+        {
+            RequestType.BouquetOrder => TryCompleteBouquetRequest(request),
+            RequestType.MysteryMessage => TryCompleteMysteryRequest(request),
+            _ => false
+        };
+
+        if (completed)
+            return;
+
+        int today = GetCurrentAbsoluteDay();
+        if (today >= request.deadlineAbsoluteDay)
+        {
+            Debug.Log($"依頼失敗：{request.title} / 開店時に条件を満たしていませんでした。");
+            FailCurrentRequest();
+        }
+        else
+        {
+            int remaining = request.GetRemainingDays(today);
+            Debug.Log($"依頼未達成：{request.title} / まだ期限内です（残り{remaining}日）。");
+        }
+    }
+
+    /// <summary>
+    /// 謎のお通げ成功日の各来客に対して呼びます。
+    /// 通常購入とは完全に別枠で指定花を1個・777円で追加購入します。
+    /// 予算や好み、購入確率は見ません。在庫が無ければ何も起きません。
+    /// </summary>
+    public bool TrySellMysteryBonusFlower(out FlowerData flower, out int price)
+    {
+        flower = null;
+        price = 0;
+
+        if (!IsMysterySaleActiveToday || inventorySystem == null || shopManager == null)
+            return false;
+
+        if (inventorySystem.GetTotalQuantity(activeMysterySaleFlower) <= 0)
+            return false;
+
+        if (!inventorySystem.TryRemoveFlower(activeMysterySaleFlower, 1))
+            return false;
+
+        flower = activeMysterySaleFlower;
+        price = 777;
+        shopManager.AddMoney(price);
+        return true;
+    }
+
     public bool CompleteCurrentRequest()
     {
         if (!HasAcceptedRequest)
@@ -124,6 +194,90 @@ public class RequestSystem : MonoBehaviour
             return 0;
 
         return currentRequest.GetRemainingDays(GetCurrentAbsoluteDay());
+    }
+
+    private bool TryCompleteBouquetRequest(RequestData request)
+    {
+        if (bouquetSystem == null || request == null)
+            return false;
+
+        BouquetSystem.BouquetData matchingBouquet = bouquetSystem.Bouquets.FirstOrDefault(bouquet =>
+            BouquetMatchesRequest(bouquet, request));
+
+        if (matchingBouquet == null)
+            return false;
+
+        string bouquetName = matchingBouquet.bouquetName;
+        if (!bouquetSystem.RemoveBouquet(matchingBouquet))
+            return false;
+
+        Debug.Log($"依頼納品：{bouquetName}を渡しました。");
+        CompleteCurrentRequest();
+        return true;
+    }
+
+    private static bool BouquetMatchesRequest(BouquetSystem.BouquetData bouquet, RequestData request)
+    {
+        if (bouquet?.components == null || request == null)
+            return false;
+
+        if (!string.Equals(
+                bouquet.bouquetName?.Trim(),
+                request.requiredBouquetName?.Trim(),
+                StringComparison.Ordinal))
+            return false;
+
+        if (bouquet.salePrice <= 0 || bouquet.salePrice > request.bouquetMaxPrice)
+            return false;
+
+        if (bouquet.TotalQuantity < request.bouquetMinFlowerCount ||
+            bouquet.TotalQuantity > request.bouquetMaxFlowerCount)
+            return false;
+
+        return bouquet.components.Any(component =>
+            component?.flower != null &&
+            component.quantity > 0 &&
+            string.Equals(
+                component.flower.color?.Trim(),
+                request.requiredColor?.Trim(),
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool TryCompleteMysteryRequest(RequestData request)
+    {
+        if (request == null || inventorySystem == null || pricingSystem == null)
+            return false;
+
+        FlowerData target = FindMysteryTargetFlower(request);
+        if (target == null)
+            return false;
+
+        if (inventorySystem.GetTotalQuantity(target) <= 0)
+            return false;
+
+        if (pricingSystem.GetSalePrice(target) != request.targetSalePrice)
+            return false;
+
+        // CompleteCurrentRequestでcurrentRequestが消える前に、当日限定効果の対象を保存しておく。
+        activeMysterySaleFlower = target;
+        activeMysterySaleAbsoluteDay = GetCurrentAbsoluteDay();
+
+        Debug.Log($"謎のお通げ成功：{target.flowerName}（{target.color}）が本日、全来客の追加購入対象になりました。");
+        CompleteCurrentRequest();
+        return true;
+    }
+
+    private FlowerData FindMysteryTargetFlower(RequestData request)
+    {
+        if (request == null || inventorySystem == null)
+            return null;
+
+        return inventorySystem.Batches
+            .Where(batch => batch?.flower != null && batch.quantity > 0)
+            .Select(batch => batch.flower)
+            .FirstOrDefault(flower =>
+                string.Equals(flower.flowerName, request.targetFlowerName, StringComparison.Ordinal) &&
+                string.Equals(flower.color, request.targetFlowerColor, StringComparison.Ordinal));
     }
 
     private void OfferRequest(RequestType type)
@@ -170,8 +324,28 @@ public class RequestSystem : MonoBehaviour
         };
     }
 
-    private static RequestData CreateMysteryRequest(int offeredDay)
+    private RequestData CreateMysteryRequest(int offeredDay)
     {
+        if (inventorySystem == null)
+        {
+            Debug.LogWarning("RequestSystem: 謎のお通げを作るにはInventorySystemが必要です。");
+            return null;
+        }
+
+        FlowerData[] ownedFlowers = inventorySystem.Batches
+            .Where(batch => batch?.flower != null && batch.quantity > 0)
+            .Select(batch => batch.flower)
+            .Distinct()
+            .ToArray();
+
+        if (ownedFlowers.Length == 0)
+        {
+            Debug.Log("謎のお通げ：対象にできる所持花がないため、今回は発生しませんでした。");
+            return null;
+        }
+
+        FlowerData target = ownedFlowers[UnityEngine.Random.Range(0, ownedFlowers.Length)];
+
         return new RequestData
         {
             requestId = $"mystery_{offeredDay}",
@@ -179,9 +353,11 @@ public class RequestSystem : MonoBehaviour
             state = RequestState.Offered,
             title = "謎のお通げ",
             requesterName = "？？？",
-            description = "奇妙な依頼が届いている……。指定された花を777円にすると何かが起こるらしい。",
+            description = $"『{target.flowerName}（{target.color}）を777円にせよ……』",
             offeredAbsoluteDay = offeredDay,
             durationDays = 1,
+            targetFlowerName = target.flowerName,
+            targetFlowerColor = target.color,
             targetSalePrice = 777,
             rewardShopRating = 0,
             rewardVisitorBonusPercent = 0f,
