@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// ホーム画面の家具パネルを管理します。
-/// 購入済み家具を一覧表示し、レジ横在庫Prefabを流用して設置/撤去を切り替えます。
+/// 購入済み家具を一覧表示し、家具専用Prefabから設置/撤去を切り替えます。
 /// 現在設置中の家具数と、設置家具から発動している効果合計も表示します。
 /// </summary>
 public class FurniturePanelUI : MonoBehaviour
@@ -20,10 +20,10 @@ public class FurniturePanelUI : MonoBehaviour
     [SerializeField] private Button closeButton;
 
     [Header("家具一覧")]
-    [Tooltip("家具ScrollViewのContentを設定します。")]
+    [Tooltip("FurnitureScrollView / Viewport / FurnitureContent を設定します。")]
     [SerializeField] private Transform furnitureListContent;
-    [Tooltip("倉庫のレジ横商品一覧で使っているCheckoutInventoryItemUI Prefabをそのまま設定できます。")]
-    [SerializeField] private CheckoutInventoryItemUI furnitureItemPrefab;
+    [Tooltip("倉庫のレジ横Prefabを複製して作った FurnitureInventoryItemUI 付き家具Prefabを設定します。")]
+    [SerializeField] private FurnitureInventoryItemUI furnitureItemPrefab;
 
     [Header("集計表示")]
     [Tooltip("設置中家具の現在効果合計を表示します。")]
@@ -31,7 +31,7 @@ public class FurniturePanelUI : MonoBehaviour
     [Tooltip("設置中数と所持数を表示します。")]
     [SerializeField] private TMP_Text furnitureCountText;
 
-    private readonly List<CheckoutInventoryItemUI> spawnedItems = new();
+    private readonly List<FurnitureInventoryItemUI> spawnedItems = new();
 
     public bool IsVisible => GetPanelRoot() != null && GetPanelRoot().activeSelf;
 
@@ -110,7 +110,7 @@ public class FurniturePanelUI : MonoBehaviour
 
     private void RebuildFurnitureList()
     {
-        foreach (CheckoutInventoryItemUI item in spawnedItems)
+        foreach (FurnitureInventoryItemUI item in spawnedItems)
         {
             if (item != null)
                 Destroy(item.gameObject);
@@ -124,8 +124,8 @@ public class FurniturePanelUI : MonoBehaviour
                      .OrderBy(f => f.purchasePrice)
                      .ThenBy(f => f.displayName))
         {
-            CheckoutInventoryItemUI item = Instantiate(furnitureItemPrefab, furnitureListContent);
-            item.BindFurniture(furnitureSystem, furniture);
+            FurnitureInventoryItemUI item = Instantiate(furnitureItemPrefab, furnitureListContent);
+            item.Bind(furnitureSystem, furniture);
             spawnedItems.Add(item);
         }
     }
