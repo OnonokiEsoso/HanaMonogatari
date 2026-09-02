@@ -4,8 +4,8 @@ using System.Linq;
 using UnityEngine;
 
 /// <summary>
-/// 家具の定義・購入済み状態・効果を管理します。
-/// 家具は一度購入すると恒久的に有効です。
+/// 家具の定義・購入済み状態・設置状態・効果を管理します。
+/// 購入した家具はホームの家具画面から設置/撤去でき、設置中の家具だけ効果を発揮します。
 /// 来客率補正はVisitorModifierSystemへ登録し、予算補正はCustomerSystemから参照します。
 /// </summary>
 public class FurnitureSystem : MonoBehaviour
@@ -20,13 +20,19 @@ public class FurnitureSystem : MonoBehaviour
     [Header("購入済み家具")]
     [SerializeField] private List<FurnitureId> ownedFurniture = new();
 
+    [Header("設置中の家具")]
+    [SerializeField] private List<FurnitureId> installedFurniture = new();
+
     [Header("天候連携")]
     [Tooltip("天候システム実装前の仮フラグ。将来は天候側からSetRainyTodayを呼びます。")]
     [SerializeField] private bool isRainyToday;
 
     public IReadOnlyList<FurnitureData> Definitions => furnitureDefinitions;
     public IReadOnlyList<FurnitureId> OwnedFurniture => ownedFurniture;
+    public IReadOnlyList<FurnitureId> InstalledFurniture => installedFurniture;
     public bool IsRainyToday => isRainyToday;
+    public int OwnedCount => ownedFurniture?.Distinct().Count() ?? 0;
+    public int InstalledCount => installedFurniture?.Distinct().Count() ?? 0;
 
     public event Action OnChanged;
 
@@ -39,6 +45,8 @@ public class FurnitureSystem : MonoBehaviour
 
         EnsureDefinitions();
         ownedFurniture ??= new List<FurnitureId>();
+        installedFurniture ??= new List<FurnitureId>();
+        SanitizeInstalledFurniture();
     }
 
     private void OnEnable()
@@ -69,6 +77,23 @@ public class FurnitureSystem : MonoBehaviour
         return ownedFurniture != null && ownedFurniture.Contains(id);
     }
 
+    public bool IsInstalled(FurnitureId id)
+    {
+        return installedFurniture != null && installedFurniture.Contains(id);
+    }
+
+    public IEnumerable<FurnitureData> GetOwnedDefinitions()
+    {
+        EnsureDefinitions();
+        return furnitureDefinitions.Where(f => f != null && IsOwned(f.id));
+    }
+
+    public IEnumerable<FurnitureData> GetInstalledDefinitions()
+    {
+        EnsureDefinitions();
+        return furnitureDefinitions.Where(f => f != null && IsInstalled(f.id));
+    }
+
     public bool TryPurchase(FurnitureData furniture)
     {
         if (furniture == null || shopManager == null)
@@ -87,12 +112,54 @@ public class FurnitureSystem : MonoBehaviour
         }
 
         ownedFurniture ??= new List<FurnitureId>();
+        installedFurniture ??= new List<FurnitureId>();
         ownedFurniture.Add(furniture.id);
+
+        // 購入直後は従来仕様との互換性を保つため自動で設置します。
+        // ホームの家具画面からいつでも撤去できます。
+        if (!installedFurniture.Contains(furniture.id))
+            installedFurniture.Add(furniture.id);
+
         shopManager.RegisterSupplierProductPurchase(GetProductKey(furniture));
 
         RefreshEffects();
         OnChanged?.Invoke();
-        Debug.Log($"家具『{furniture.displayName}』を{furniture.purchasePrice:N0}円で購入しました。効果が有効になりました。");
+        Debug.Log($"家具『{furniture.displayName}』を{furniture.purchasePrice:N0}円で購入し、設置しました。");
+        return true;
+    }
+
+    public bool TryInstall(FurnitureId id)
+    {
+        if (!IsOwned(id))
+            return false;
+
+        installedFurniture ??= new List<FurnitureId>();
+        if (installedFurniture.Contains(id))
+            return true;
+
+        installedFurniture.Add(id);
+        RefreshEffects();
+        OnChanged?.Invoke();
+
+        FurnitureData furniture = GetDefinition(id);
+        Debug.Log($"家具『{furniture?.displayName ?? id.ToString()}』を設置しました。");
+        return true;
+    }
+
+    public bool Uninstall(FurnitureId id)
+    {
+        if (installedFurniture == null)
+            return false;
+
+        bool removed = installedFurniture.Remove(id);
+        if (!removed)
+            return false;
+
+        RefreshEffects();
+        OnChanged?.Invoke();
+
+        FurnitureData furniture = GetDefinition(id);
+        Debug.Log($"家具『{furniture?.displayName ?? id.ToString()}』を撤去しました。");
         return true;
     }
 
@@ -100,12 +167,11 @@ public class FurnitureSystem : MonoBehaviour
     {
         EnsureDefinitions();
 
-        bool summer = shopManager != null && shopManager.CurrentSeason == Season.Summer;
         float total = 0f;
 
         foreach (FurnitureData furniture in furnitureDefinitions)
         {
-            if (furniture == null || !IsOwned(furniture.id))
+            if (furniture == null || !IsInstalled(furniture.id))
                 continue;
 
             total += furniture.budgetBonusPercent;
@@ -126,7 +192,7 @@ public class FurnitureSystem : MonoBehaviour
 
         foreach (FurnitureData furniture in furnitureDefinitions)
         {
-            if (furniture == null || !IsOwned(furniture.id))
+            if (furniture == null || !IsInstalled(furniture.id))
                 continue;
 
             total += furniture.visitorBonusPercent;
@@ -143,7 +209,7 @@ public class FurnitureSystem : MonoBehaviour
 
     /// <summary>
     /// 雨による来客率減少ペナルティをどこまで軽減できるか返します。
-    /// 例：-50%の雨ペナルティに対し、傘立て所有なら最低-30%まで軽減できます。
+    /// 例：-50%の雨ペナルティに対し、傘立て設置中なら最低-30%まで軽減できます。
     /// 0は家具による下限指定なしです。
     /// </summary>
     public float GetRainVisitorPenaltyFloorPercent()
@@ -153,7 +219,7 @@ public class FurnitureSystem : MonoBehaviour
         float bestFloor = 0f;
         foreach (FurnitureData furniture in furnitureDefinitions)
         {
-            if (furniture == null || !IsOwned(furniture.id))
+            if (furniture == null || !IsInstalled(furniture.id))
                 continue;
 
             if (furniture.rainyVisitorPenaltyFloorPercent < 0f)
@@ -190,7 +256,7 @@ public class FurnitureSystem : MonoBehaviour
     private void DebugPrintFurnitureEffects()
     {
         Debug.Log(
-            $"家具効果 / 所持{ownedFurniture?.Count ?? 0}個 / " +
+            $"家具効果 / 所持{OwnedCount}個 / 設置{InstalledCount}個 / " +
             $"来客率+{GetVisitorBonusPercentToday() * 100f:0.#}% / " +
             $"予算+{GetBudgetBonusPercentToday() * 100f:0.#}% / " +
             $"雨ペナルティ下限{GetRainVisitorPenaltyFloorPercent() * 100f:0.#}%");
@@ -198,6 +264,8 @@ public class FurnitureSystem : MonoBehaviour
 
     private void RefreshEffects()
     {
+        SanitizeInstalledFurniture();
+
         if (visitorModifierSystem == null)
             visitorModifierSystem = FindFirstObjectByType<VisitorModifierSystem>();
 
@@ -209,6 +277,17 @@ public class FurnitureSystem : MonoBehaviour
                 0,
                 "家具");
         }
+    }
+
+    private void SanitizeInstalledFurniture()
+    {
+        ownedFurniture ??= new List<FurnitureId>();
+        installedFurniture ??= new List<FurnitureId>();
+
+        installedFurniture = installedFurniture
+            .Where(id => ownedFurniture.Contains(id))
+            .Distinct()
+            .ToList();
     }
 
     private void EnsureDefinitions()
