@@ -121,7 +121,12 @@ public static class TrendSystem
         float bonus = 0f;
         if (monthly.budgetUp) bonus += MonthlyBudgetBonus;
         if (daily == DailyTrendType.BudgetUp) bonus += DailyBudgetBonus;
-        return 1f + bonus;
+
+        // 天候の予算補正も同じ「加算してから一度だけ掛ける」ルールへ統合。
+        // 雨の日はWeatherSystemから-3%が入ります。
+        bonus += WeatherSystem.CurrentBudgetBonusPercent;
+
+        return Mathf.Max(0f, 1f + bonus);
     }
 
     public static float ApplyBouquetChanceBonus(float bouquetChance, ShopManager shopManager)
