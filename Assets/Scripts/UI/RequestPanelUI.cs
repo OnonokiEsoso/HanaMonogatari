@@ -99,7 +99,7 @@ public class RequestPanelUI : MonoBehaviour
             requesterText.text = $"依頼人：{request.requesterName}";
 
         if (descriptionText != null)
-            descriptionText.text = request.description;
+            descriptionText.text = BuildDescriptionText(request);
 
         if (deadlineText != null)
             deadlineText.text = BuildDeadlineText(request);
@@ -182,6 +182,23 @@ public class RequestPanelUI : MonoBehaviour
         return gameObject.activeInHierarchy;
     }
 
+    private static string BuildDescriptionText(RequestData request)
+    {
+        if (request == null)
+            return string.Empty;
+
+        bool hasMessage = !string.IsNullOrWhiteSpace(request.requesterMessage);
+        bool hasCondition = !string.IsNullOrWhiteSpace(request.description);
+
+        if (hasMessage && hasCondition)
+            return $"{request.requesterMessage}\n\n【条件】\n{request.description}";
+
+        if (hasMessage)
+            return request.requesterMessage;
+
+        return request.description ?? string.Empty;
+    }
+
     private string BuildDeadlineText(RequestData request)
     {
         if (request == null)
@@ -189,6 +206,9 @@ public class RequestPanelUI : MonoBehaviour
 
         if (request.state == RequestState.Offered)
         {
+            if (!string.IsNullOrWhiteSpace(request.deadlineLabel))
+                return $"期限：{request.deadlineLabel}";
+
             return request.durationDays <= 1
                 ? "期限：受注した当日中"
                 : $"期限：受注日を含めて{request.durationDays}日";
@@ -211,12 +231,15 @@ public class RequestPanelUI : MonoBehaviour
             return string.Empty;
 
         if (request.requestType == RequestType.MysteryMessage)
-            return "成功効果：本日、指定された花に特別な効果が発生";
+            return "報酬：当日限定／全来店客が指定花を1つ追加購入";
 
         if (request.rewardShopRating > 0 && request.rewardVisitorBonusPercent > 0f && request.rewardVisitorBonusDays > 0)
         {
             int visitorPercent = Mathf.RoundToInt(request.rewardVisitorBonusPercent * 100f);
-            return $"報酬：店評価 +{request.rewardShopRating} / {request.rewardVisitorBonusDays}日間 来客数 +{visitorPercent}%";
+            string daysText = request.rewardVisitorBonusDays == 1
+                ? "翌日"
+                : $"翌日から{request.rewardVisitorBonusDays}日間";
+            return $"報酬：店評価 +{request.rewardShopRating}、{daysText} 来客率 +{visitorPercent}%";
         }
 
         if (request.rewardShopRating > 0)
