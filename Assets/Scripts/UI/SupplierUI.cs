@@ -195,7 +195,12 @@ public class SupplierUI : MonoBehaviour
                 bool isNew = shopManager == null || !shopManager.HasPurchasedSupplierProduct(productKey);
 
                 SupplierItemUI item = Instantiate(itemPrefab, itemContainer);
-                item.BindFurniture(furnitureSystem, furniture, TryBuyFurniture, isNew);
+                item.BindFurniture(
+                    furnitureSystem,
+                    furniture,
+                    TryBuyFurniture,
+                    ShowFurnitureEffect,
+                    isNew);
                 spawnedItems.Add(item);
             }
         }
@@ -271,6 +276,15 @@ public class SupplierUI : MonoBehaviour
 
         RefreshHeader();
         RebuildItemList();
+    }
+
+    private void ShowFurnitureEffect(FurnitureData furniture)
+    {
+        if (furniture == null)
+            return;
+
+        if (supplierCommentController != null)
+            supplierCommentController.ShowFurnitureEffectComment(furniture);
     }
 
     private static string GetFlowerProductKey(FlowerData flower)
