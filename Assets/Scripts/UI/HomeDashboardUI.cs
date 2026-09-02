@@ -17,6 +17,8 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private CustomerUI customerUI;
     [Tooltip("ホームの各ボタンから既存タブへ移動するために設定します。")]
     [SerializeField] private ShopTabUI shopTabUI;
+    [Tooltip("ホームの依頼ボタンから依頼パネルを開くために設定します。")]
+    [SerializeField] private RequestPanelUI requestPanelUI;
 
     [Header("ホーム表示")]
     [Tooltip("HomeUIRoot。ホーム専用UI全体の親を設定します。")]
@@ -219,9 +221,15 @@ public class HomeDashboardUI : MonoBehaviour
         isOpening = false;
     }
 
-    private static void HandleRequestClicked()
+    private void HandleRequestClicked()
     {
-        Debug.Log("依頼画面はver0.0.4で実装予定です。");
+        if (requestPanelUI == null)
+        {
+            Debug.LogWarning("HomeDashboardUI: RequestPanelUIが設定されていません。");
+            return;
+        }
+
+        requestPanelUI.ShowPanel();
     }
 
     private static void HandleFurnitureClicked()
