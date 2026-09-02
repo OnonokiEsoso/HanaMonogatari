@@ -57,6 +57,7 @@ public class CustomerSystem : MonoBehaviour
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private InventorySystem inventorySystem;
     [SerializeField] private VisitorModifierSystem visitorModifierSystem;
+    [SerializeField] private FurnitureSystem furnitureSystem;
 
     [Header("客タイプ")]
     [SerializeField] private List<CustomerData> customerProfiles = new();
@@ -77,6 +78,9 @@ public class CustomerSystem : MonoBehaviour
 
     private void Awake()
     {
+        if (furnitureSystem == null)
+            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+
         EnsureDefaultProfiles();
         ApplyBaseSpawnWeights();
         EnsureRegularStatuses();
@@ -92,6 +96,10 @@ public class CustomerSystem : MonoBehaviour
 
         int visitorCount = CalculateTodayVisitorCount();
         float budgetMultiplier = TrendSystem.GetBudgetMultiplier(shopManager);
+        if (furnitureSystem == null)
+            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+        if (furnitureSystem != null)
+            budgetMultiplier += furnitureSystem.GetBudgetBonusPercentToday();
 
         for (int i = 0; i < visitorCount; i++)
         {
@@ -104,7 +112,7 @@ public class CustomerSystem : MonoBehaviour
             todayCustomers.Add(new VisitingCustomer(profile, favoriteColor, purpose, effectiveBudget));
         }
 
-        Debug.Log($"本日の来客を生成しました。{todayCustomers.Count}人");
+        Debug.Log($"本日の来客を生成しました。{todayCustomers.Count}人 / 予算倍率×{budgetMultiplier:0.###}");
     }
 
     public int CalculateTodayVisitorCount()
