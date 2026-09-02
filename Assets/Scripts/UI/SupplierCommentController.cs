@@ -4,7 +4,7 @@ using UnityEngine;
 
 /// <summary>
 /// 仕入先キャラクターの吹き出しテキストを管理します。
-/// 花を仕入れた時、その花に対応する短い豆知識・概要を表示します。
+/// 花を仕入れた時は花の短い豆知識、家具の「効果説明」を押した時は家具効果を表示します。
 /// デイリートレンド発生日は、朝の待機セリフでその日の傾向を示唆します。
 /// </summary>
 public class SupplierCommentController : MonoBehaviour
@@ -73,6 +73,50 @@ public class SupplierCommentController : MonoBehaviour
         }
 
         speechText.text = $"{flower.flowerName}だね！大事に扱ってあげてね。";
+    }
+
+    /// <summary>
+    /// 家具商品の「効果説明」ボタンから呼びます。
+    /// 一覧側には効果を直接書かず、仕入先キャラクターの吹き出しで説明します。
+    /// </summary>
+    public void ShowFurnitureEffectComment(FurnitureData furniture)
+    {
+        if (speechText == null || furniture == null)
+            return;
+
+        List<string> effects = new();
+
+        if (furniture.visitorBonusPercent != 0f)
+            effects.Add($"来客率が{FormatSignedPercent(furniture.visitorBonusPercent)}");
+
+        if (furniture.budgetBonusPercent != 0f)
+            effects.Add($"お客さんの予算が{FormatSignedPercent(furniture.budgetBonusPercent)}");
+
+        if (furniture.summerVisitorBonusPercent != 0f)
+            effects.Add($"夏はさらに来客率が{FormatSignedPercent(furniture.summerVisitorBonusPercent)}");
+
+        if (furniture.rainyVisitorBonusPercent != 0f)
+            effects.Add($"雨の日はさらに来客率が{FormatSignedPercent(furniture.rainyVisitorBonusPercent)}");
+
+        if (furniture.rainyBudgetBonusPercent != 0f)
+            effects.Add($"雨の日はお客さんの予算が{FormatSignedPercent(furniture.rainyBudgetBonusPercent)}");
+
+        if (furniture.rainyVisitorPenaltyFloorPercent < 0f)
+            effects.Add($"雨の日の来客率減少ペナルティを{furniture.rainyVisitorPenaltyFloorPercent * 100f:0.#}%まで軽減");
+
+        if (effects.Count == 0)
+        {
+            speechText.text = $"{furniture.displayName}は特別な効果はないみたい。";
+            return;
+        }
+
+        speechText.text = $"{furniture.displayName}は、{string.Join("、", effects)}するよ！";
+    }
+
+    private static string FormatSignedPercent(float value)
+    {
+        float percent = value * 100f;
+        return percent >= 0f ? $"+{percent:0.#}%" : $"{percent:0.#}%";
     }
 
     [ContextMenu("待機メッセージを表示")]
