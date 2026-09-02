@@ -2,10 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// VisitPurpose（ビジット・パーパス）＝来店目的。
-/// 客が何のために花屋へ来たかを表します。
-/// </summary>
 public enum VisitPurpose
 {
     SelfUse,
@@ -14,9 +10,6 @@ public enum VisitPurpose
     Anniversary
 }
 
-/// <summary>
-/// 1日の来客数・客タイプ抽選・来店目的・常連化の進行を担当します。
-/// </summary>
 public class CustomerSystem : MonoBehaviour
 {
     [Serializable]
@@ -63,13 +56,13 @@ public class CustomerSystem : MonoBehaviour
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private InventorySystem inventorySystem;
-    [SerializeField] private RequestSystem requestSystem;
+    [SerializeField] private VisitorModifierSystem visitorModifierSystem;
 
     [Header("客タイプ")]
     [SerializeField] private List<CustomerData> customerProfiles = new();
 
     [Header("来客数")]
-    [Tooltip("開店直後の来客ボーナス。ゲーム開始から2日間だけ加算します。")]
+    [Tooltip("ゲーム開始から2日間だけ、倍率計算後に固定人数として加算します。")]
     [SerializeField] private int openingBonusVisitors = 5;
 
     [Header("常連")]
@@ -118,17 +111,18 @@ public class CustomerSystem : MonoBehaviour
     {
         int rating = shopManager != null ? shopManager.ShopRating : 0;
         int baseVisitors = 2 + Mathf.FloorToInt(rating / 300f);
-
         float randomMultiplier = UnityEngine.Random.Range(0.8f, 1.2f);
-        float trendMultiplier = TrendSystem.GetVisitorMultiplier(shopManager);
-        float requestMultiplier = requestSystem != null ? requestSystem.GetVisitorMultiplierForToday() : 1f;
-        int visitors = Mathf.Max(1, Mathf.RoundToInt(baseVisitors * randomMultiplier * trendMultiplier * requestMultiplier));
+        int openingFlatBonus = shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear <= 2
+            ? openingBonusVisitors
+            : 0;
 
-        // 開店ボーナスは1年目の最初の2日間だけ。倍率計算のあとに固定人数として加算します。
-        if (shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear <= 2)
-            visitors += openingBonusVisitors;
+        if (visitorModifierSystem != null)
+            return visitorModifierSystem.CalculateVisitorCount(baseVisitors, randomMultiplier, openingFlatBonus);
 
-        return visitors;
+        Debug.LogWarning("CustomerSystem: VisitorModifierSystemが設定されていません。依頼・家具等の来客補正は反映されません。");
+        float trendMultiplier = 1f + TrendSystem.GetVisitorBonusPercent(shopManager);
+        int visitors = Mathf.RoundToInt(baseVisitors * randomMultiplier * trendMultiplier) + openingFlatBonus;
+        return Mathf.Max(1, visitors);
     }
 
     public RegularPointResult AddRegularPoint(CustomerType customerType)
@@ -166,27 +160,13 @@ public class CustomerSystem : MonoBehaviour
 
         switch (customerType)
         {
-            case CustomerType.Housewife:
-                selfUse = 50f; gift = 25f; offering = 20f;
-                break;
-            case CustomerType.Student:
-                selfUse = 45f; gift = 40f; offering = 5f;
-                break;
-            case CustomerType.Grandmother:
-                selfUse = 35f; gift = 20f; offering = 40f;
-                break;
-            case CustomerType.Wealthy:
-                selfUse = 15f; gift = 35f; offering = 10f;
-                break;
-            case CustomerType.Child:
-                selfUse = 70f; gift = 25f; offering = 5f;
-                break;
-            case CustomerType.OfficeWorker:
-                selfUse = 10f; gift = 55f; offering = 10f;
-                break;
-            default:
-                selfUse = 45f; gift = 30f; offering = 15f;
-                break;
+            case CustomerType.Housewife: selfUse = 50f; gift = 25f; offering = 20f; break;
+            case CustomerType.Student: selfUse = 45f; gift = 40f; offering = 5f; break;
+            case CustomerType.Grandmother: selfUse = 35f; gift = 20f; offering = 40f; break;
+            case CustomerType.Wealthy: selfUse = 15f; gift = 35f; offering = 10f; break;
+            case CustomerType.Child: selfUse = 70f; gift = 25f; offering = 5f; break;
+            case CustomerType.OfficeWorker: selfUse = 10f; gift = 55f; offering = 10f; break;
+            default: selfUse = 45f; gift = 30f; offering = 15f; break;
         }
 
         float roll = UnityEngine.Random.Range(0f, 100f);
@@ -214,10 +194,7 @@ public class CustomerSystem : MonoBehaviour
 
         float totalWeight = 0f;
         foreach (CustomerData profile in customerProfiles)
-        {
-            if (profile != null)
-                totalWeight += GetProfileSpawnWeight(profile);
-        }
+            if (profile != null) totalWeight += GetProfileSpawnWeight(profile);
 
         float roll = UnityEngine.Random.value * totalWeight;
         float cursor = 0f;
@@ -237,8 +214,7 @@ public class CustomerSystem : MonoBehaviour
         float baseWeight = Mathf.Max(0.01f, profile.spawnWeight);
         RegularStatus status = regularStatuses.Find(s => s != null && s.customerType == profile.customerType);
         int regularCount = status != null ? status.regularCount : 0;
-        float multiplier = 1f + regularCount * (regularSpawnBonusPercent / 100f);
-        return baseWeight * multiplier;
+        return baseWeight * (1f + regularCount * (regularSpawnBonusPercent / 100f));
     }
 
     private void ApplyBaseSpawnWeights()
@@ -248,7 +224,6 @@ public class CustomerSystem : MonoBehaviour
         foreach (CustomerData profile in customerProfiles)
         {
             if (profile == null) continue;
-
             profile.spawnWeight = profile.customerType switch
             {
                 CustomerType.Housewife => 42.5f,
@@ -295,14 +270,12 @@ public class CustomerSystem : MonoBehaviour
 
     private void EnsureRegularStatuses()
     {
-        if (regularStatuses == null)
-            regularStatuses = new List<RegularStatus>();
+        regularStatuses ??= new List<RegularStatus>();
 
         foreach (CustomerData profile in customerProfiles)
         {
             if (profile == null) continue;
-            bool exists = regularStatuses.Exists(s => s != null && s.customerType == profile.customerType);
-            if (!exists)
+            if (!regularStatuses.Exists(s => s != null && s.customerType == profile.customerType))
             {
                 regularStatuses.Add(new RegularStatus
                 {
