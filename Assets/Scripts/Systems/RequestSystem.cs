@@ -23,6 +23,11 @@ public class RequestSystem : MonoBehaviour
     [SerializeField] private RequestData lastResolvedRequest;
     [SerializeField] private int lastProcessedAbsoluteDay = -1;
 
+    [Header("依頼報酬：来客率ボーナス（確認用）")]
+    [SerializeField] private float activeVisitorBonusPercent;
+    [SerializeField] private int visitorBonusStartAbsoluteDay = -1;
+    [SerializeField] private int visitorBonusEndAbsoluteDay = -1;
+
     [Header("謎のお通げ：当日限定効果（確認用）")]
     [SerializeField] private FlowerData activeMysterySaleFlower;
     [SerializeField] private int activeMysterySaleAbsoluteDay = -1;
@@ -66,6 +71,13 @@ public class RequestSystem : MonoBehaviour
         {
             activeMysterySaleFlower = null;
             activeMysterySaleAbsoluteDay = -1;
+        }
+
+        if (visitorBonusEndAbsoluteDay >= 0 && today > visitorBonusEndAbsoluteDay)
+        {
+            activeVisitorBonusPercent = 0f;
+            visitorBonusStartAbsoluteDay = -1;
+            visitorBonusEndAbsoluteDay = -1;
         }
 
         if (currentRequest != null)
@@ -141,6 +153,24 @@ public class RequestSystem : MonoBehaviour
     }
 
     /// <summary>
+    /// 今日有効な依頼報酬の来客率倍率を返します。
+    /// 例：+25%なら1.25。成功当日は含めず、翌日から指定日数だけ有効です。
+    /// </summary>
+    public float GetVisitorMultiplierForToday()
+    {
+        if (shopManager == null || activeVisitorBonusPercent <= 0f)
+            return 1f;
+
+        int today = GetCurrentAbsoluteDay();
+        bool active = visitorBonusStartAbsoluteDay >= 0 &&
+                      visitorBonusEndAbsoluteDay >= visitorBonusStartAbsoluteDay &&
+                      today >= visitorBonusStartAbsoluteDay &&
+                      today <= visitorBonusEndAbsoluteDay;
+
+        return active ? 1f + activeVisitorBonusPercent : 1f;
+    }
+
+    /// <summary>
     /// 謎のお通げ成功日の各来客に対して呼びます。
     /// 通常購入とは完全に別枠で指定花を1個・777円で追加購入します。
     /// 予算や好み、購入確率は見ません。在庫が無ければ何も起きません。
@@ -175,6 +205,9 @@ public class RequestSystem : MonoBehaviour
         if (completed.rewardShopRating > 0 && shopManager != null)
             shopManager.AddShopRating(completed.rewardShopRating);
 
+        if (completed.rewardVisitorBonusPercent > 0f && completed.rewardVisitorBonusDays > 0)
+            ActivateVisitorBonus(completed.rewardVisitorBonusPercent, completed.rewardVisitorBonusDays);
+
         ResolveCurrentRequest(RequestState.Completed);
         return true;
     }
@@ -194,6 +227,19 @@ public class RequestSystem : MonoBehaviour
             return 0;
 
         return currentRequest.GetRemainingDays(GetCurrentAbsoluteDay());
+    }
+
+    private void ActivateVisitorBonus(float bonusPercent, int days)
+    {
+        if (shopManager == null || bonusPercent <= 0f || days <= 0)
+            return;
+
+        int today = GetCurrentAbsoluteDay();
+        activeVisitorBonusPercent = bonusPercent;
+        visitorBonusStartAbsoluteDay = today + 1;
+        visitorBonusEndAbsoluteDay = visitorBonusStartAbsoluteDay + days - 1;
+
+        Debug.Log($"依頼報酬：翌日から{days}日間、来客率+{bonusPercent * 100f:0.#}%");
     }
 
     private bool TryCompleteBouquetRequest(RequestData request)
@@ -258,7 +304,6 @@ public class RequestSystem : MonoBehaviour
         if (pricingSystem.GetSalePrice(target) != request.targetSalePrice)
             return false;
 
-        // CompleteCurrentRequestでcurrentRequestが消える前に、当日限定効果の対象を保存しておく。
         activeMysterySaleFlower = target;
         activeMysterySaleAbsoluteDay = GetCurrentAbsoluteDay();
 
