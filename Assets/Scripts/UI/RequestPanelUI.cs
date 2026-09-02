@@ -5,6 +5,7 @@ using UnityEngine.UI;
 /// <summary>
 /// ホームから開く依頼確認パネルです。
 /// 提示中は「受ける / 断る」を表示し、受注後は依頼内容の確認専用になります。
+/// パネルの初期表示/非表示はHierarchy側のActive状態で管理します。
 /// </summary>
 public class RequestPanelUI : MonoBehaviour
 {
@@ -37,7 +38,9 @@ public class RequestPanelUI : MonoBehaviour
         if (closeButton != null)
             closeButton.onClick.AddListener(HidePanel);
 
-        HidePanel();
+        // ここでHidePanel()は呼ばない。
+        // パネルがHierarchyで非アクティブ開始の場合、初回ShowPanel()でSetActive(true)になった瞬間に
+        // Awakeが走り、その中で再び非表示にすると「1回目だけ開かない」状態になるため。
     }
 
     private void OnEnable()
@@ -109,7 +112,6 @@ public class RequestPanelUI : MonoBehaviour
 
         bool isOffered = request.state == RequestState.Offered;
 
-        // 受ける / 断るの意思決定が済んだら、両ボタンは表示しません。
         if (acceptButton != null)
             acceptButton.gameObject.SetActive(isOffered);
 
@@ -162,10 +164,7 @@ public class RequestPanelUI : MonoBehaviour
             return;
 
         if (requestSystem.DeclineCurrentRequest())
-        {
-            // 辞退した依頼はその場で消えるため、依頼パネルも閉じます。
             HidePanel();
-        }
     }
 
     private void HandleRequestChanged(RequestData request)
