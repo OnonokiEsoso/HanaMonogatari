@@ -255,6 +255,58 @@ public class ShopManager : MonoBehaviour
     }
 
     /// <summary>
+    /// DebugManagerからゲーム開始時の状態を直接上書きします。
+    /// 通常ゲーム中からは使用しません。
+    /// </summary>
+    public void ApplyDebugStartupState(
+        bool overrideDate,
+        int debugYear,
+        int debugMonth,
+        int debugDay,
+        bool overrideMoney,
+        int debugMoney,
+        bool overrideShopRating,
+        int debugShopRating,
+        bool overrideSupplierLevel,
+        int debugSupplierLevel,
+        bool overrideCumulativePurchaseAmount,
+        int debugCumulativePurchaseAmount)
+    {
+        if (overrideDate)
+        {
+            gameYear = Mathf.Max(1, debugYear);
+            int month = Mathf.Clamp(debugMonth, 1, 12);
+            int day = Mathf.Clamp(debugDay, 1, DaysPerMonth);
+            dayOfYear = GetDayOfYear(month, day);
+        }
+
+        if (overrideMoney)
+            money = Mathf.Max(0, debugMoney);
+
+        if (overrideShopRating)
+        {
+            shopRating = Mathf.Clamp(debugShopRating, 0, 10000);
+            hasCleared = shopRating >= 10000;
+        }
+
+        if (overrideCumulativePurchaseAmount)
+            cumulativePurchaseAmount = Mathf.Max(0, debugCumulativePurchaseAmount);
+
+        if (overrideSupplierLevel)
+        {
+            supplierLevel = Mathf.Clamp(debugSupplierLevel, 1, 10);
+            pendingSupplierLevel = supplierLevel;
+        }
+        else
+        {
+            pendingSupplierLevel = Mathf.Max(supplierLevel, CalculateEligibleSupplierLevel());
+        }
+
+        SyncSupplierSystem();
+        NotifyStateChanged();
+    }
+
+    /// <summary>
     /// 1日進めます。
     /// 4月1日から始まり、各月10日。3月10日の翌日は翌年4月1日になります。
     /// </summary>
@@ -385,6 +437,14 @@ public class ShopManager : MonoBehaviour
             10 or 11 or 12 => Season.Autumn,
             _ => Season.Winter
         };
+    }
+
+    private static int GetDayOfYear(int month, int day)
+    {
+        int clampedMonth = Mathf.Clamp(month, 1, 12);
+        int clampedDay = Mathf.Clamp(day, 1, DaysPerMonth);
+        int monthIndexFromApril = (clampedMonth - 4 + 12) % 12;
+        return monthIndexFromApril * DaysPerMonth + clampedDay;
     }
 
     /// <summary>
