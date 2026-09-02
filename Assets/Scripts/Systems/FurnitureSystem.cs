@@ -6,6 +6,7 @@ using UnityEngine;
 /// <summary>
 /// 家具の定義・購入済み状態・設置状態・効果を管理します。
 /// 購入した家具はホームの家具画面から設置/撤去でき、設置中の家具だけ効果を発揮します。
+/// 設置上限は店評価に応じて増加し、照明A/B/Cは同時に1つだけ設置できます。
 /// 来客率補正はVisitorModifierSystemへ登録し、予算補正はCustomerSystemから参照します。
 /// </summary>
 public class FurnitureSystem : MonoBehaviour
@@ -33,6 +34,8 @@ public class FurnitureSystem : MonoBehaviour
     public bool IsRainyToday => isRainyToday;
     public int OwnedCount => ownedFurniture?.Distinct().Count() ?? 0;
     public int InstalledCount => installedFurniture?.Distinct().Count() ?? 0;
+    public int MaxInstalledCount => CalculateMaxInstalledCount(shopManager != null ? shopManager.ShopRating : 0);
+    public bool HasInstallableUninstalledFurniture => GetOwnedDefinitions().Any(f => f != null && !IsInstalled(f.id) && CanInstall(f.id));
 
     public event Action OnChanged;
 
@@ -52,13 +55,13 @@ public class FurnitureSystem : MonoBehaviour
     private void OnEnable()
     {
         if (shopManager != null)
-            shopManager.OnStateChanged += RefreshEffects;
+            shopManager.OnStateChanged += HandleShopStateChanged;
     }
 
     private void OnDisable()
     {
         if (shopManager != null)
-            shopManager.OnStateChanged -= RefreshEffects;
+            shopManager.OnStateChanged -= HandleShopStateChanged;
     }
 
     private void Start()
@@ -115,20 +118,42 @@ public class FurnitureSystem : MonoBehaviour
         installedFurniture ??= new List<FurnitureId>();
         ownedFurniture.Add(furniture.id);
 
-        // 購入直後は従来仕様との互換性を保つため自動で設置します。
-        // ホームの家具画面からいつでも撤去できます。
-        if (!installedFurniture.Contains(furniture.id))
-            installedFurniture.Add(furniture.id);
+        // 空きがあり、設置ルールにも抵触しない場合だけ購入直後に自動設置します。
+        bool autoInstalled = TryInstallInternal(furniture.id, false);
 
         shopManager.RegisterSupplierProductPurchase(GetProductKey(furniture));
 
         RefreshEffects();
         OnChanged?.Invoke();
-        Debug.Log($"家具『{furniture.displayName}』を{furniture.purchasePrice:N0}円で購入し、設置しました。");
+        Debug.Log(autoInstalled
+            ? $"家具『{furniture.displayName}』を{furniture.purchasePrice:N0}円で購入し、設置しました。"
+            : $"家具『{furniture.displayName}』を{furniture.purchasePrice:N0}円で購入しました。設置枠または設置条件の都合で未設置です。");
+        return true;
+    }
+
+    public bool CanInstall(FurnitureId id)
+    {
+        if (!IsOwned(id))
+            return false;
+
+        if (IsInstalled(id))
+            return true;
+
+        if (InstalledCount >= MaxInstalledCount)
+            return false;
+
+        if (IsLighting(id) && installedFurniture != null && installedFurniture.Any(other => IsLighting(other)))
+            return false;
+
         return true;
     }
 
     public bool TryInstall(FurnitureId id)
+    {
+        return TryInstallInternal(id, true);
+    }
+
+    private bool TryInstallInternal(FurnitureId id, bool notify)
     {
         if (!IsOwned(id))
             return false;
@@ -137,12 +162,30 @@ public class FurnitureSystem : MonoBehaviour
         if (installedFurniture.Contains(id))
             return true;
 
+        if (InstalledCount >= MaxInstalledCount)
+        {
+            if (notify)
+                Debug.Log($"家具の設置上限に達しています。現在 {InstalledCount}/{MaxInstalledCount} 個です。");
+            return false;
+        }
+
+        if (IsLighting(id) && installedFurniture.Any(other => IsLighting(other)))
+        {
+            if (notify)
+                Debug.Log("照明A・B・Cはいずれか1つだけ設置できます。別の照明を撤去してから設置してください。");
+            return false;
+        }
+
         installedFurniture.Add(id);
         RefreshEffects();
-        OnChanged?.Invoke();
 
-        FurnitureData furniture = GetDefinition(id);
-        Debug.Log($"家具『{furniture?.displayName ?? id.ToString()}』を設置しました。");
+        if (notify)
+        {
+            OnChanged?.Invoke();
+            FurnitureData furniture = GetDefinition(id);
+            Debug.Log($"家具『{furniture?.displayName ?? id.ToString()}』を設置しました。 ({InstalledCount}/{MaxInstalledCount})");
+        }
+
         return true;
     }
 
@@ -252,14 +295,42 @@ public class FurnitureSystem : MonoBehaviour
         return furniture != null ? $"furniture:{furniture.id}" : string.Empty;
     }
 
+    /// <summary>
+    /// 店評価による家具設置上限。
+    /// 序盤は1枠、中盤で5枠、終盤直前から7枠まで増えます。
+    /// </summary>
+    public static int CalculateMaxInstalledCount(int shopRating)
+    {
+        shopRating = Mathf.Clamp(shopRating, 0, 10000);
+
+        if (shopRating >= 9000) return 7;
+        if (shopRating >= 7500) return 6;
+        if (shopRating >= 5000) return 5;
+        if (shopRating >= 3000) return 4;
+        if (shopRating >= 1500) return 3;
+        if (shopRating >= 500) return 2;
+        return 1;
+    }
+
+    private static bool IsLighting(FurnitureId id)
+    {
+        return id == FurnitureId.LightA || id == FurnitureId.LightB || id == FurnitureId.LightC;
+    }
+
     [ContextMenu("DEBUG: 家具効果をログ表示")]
     private void DebugPrintFurnitureEffects()
     {
         Debug.Log(
-            $"家具効果 / 所持{OwnedCount}個 / 設置{InstalledCount}個 / " +
+            $"家具効果 / 所持{OwnedCount}個 / 設置{InstalledCount}/{MaxInstalledCount}個 / " +
             $"来客率+{GetVisitorBonusPercentToday() * 100f:0.#}% / " +
             $"予算+{GetBudgetBonusPercentToday() * 100f:0.#}% / " +
             $"雨ペナルティ下限{GetRainVisitorPenaltyFloorPercent() * 100f:0.#}%");
+    }
+
+    private void HandleShopStateChanged()
+    {
+        RefreshEffects();
+        OnChanged?.Invoke();
     }
 
     private void RefreshEffects()
@@ -284,10 +355,26 @@ public class FurnitureSystem : MonoBehaviour
         ownedFurniture ??= new List<FurnitureId>();
         installedFurniture ??= new List<FurnitureId>();
 
-        installedFurniture = installedFurniture
+        List<FurnitureId> sanitized = installedFurniture
             .Where(id => ownedFurniture.Contains(id))
             .Distinct()
             .ToList();
+
+        // 既存データに複数照明が設置されていた場合は最初の1つだけ残します。
+        bool keptLighting = false;
+        sanitized = sanitized.Where(id =>
+        {
+            if (!IsLighting(id)) return true;
+            if (keptLighting) return false;
+            keptLighting = true;
+            return true;
+        }).ToList();
+
+        int max = MaxInstalledCount;
+        if (sanitized.Count > max)
+            sanitized = sanitized.Take(max).ToList();
+
+        installedFurniture = sanitized;
     }
 
     private void EnsureDefinitions()
