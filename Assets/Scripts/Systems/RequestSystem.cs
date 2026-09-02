@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using UnityEngine;
 
 /// <summary>
@@ -368,7 +369,7 @@ public class RequestSystem : MonoBehaviour
         {
             Debug.LogWarning(
                 $"依頼判定：条件に合う花束が見つかりませんでした。" +
-                $"依頼名={NormalizeBouquetName(request.requiredBouquetName)} / " +
+                $"依頼名={NormalizeTextForComparison(request.requiredBouquetName)} / " +
                 $"上限={request.bouquetMaxPrice}円 / " +
                 $"本数={request.bouquetMinFlowerCount}～{request.bouquetMaxFlowerCount} / " +
                 $"色={request.requiredColor}");
@@ -417,12 +418,12 @@ public class RequestSystem : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(request.requiredBouquetName))
         {
-            string actualName = NormalizeBouquetName(bouquet.bouquetName);
-            string requiredName = NormalizeBouquetName(request.requiredBouquetName);
+            string actualName = NormalizeTextForComparison(bouquet.bouquetName);
+            string requiredName = NormalizeTextForComparison(request.requiredBouquetName);
 
             if (!string.Equals(actualName, requiredName, StringComparison.OrdinalIgnoreCase))
             {
-                mismatchReason = $"名前不一致（実際『{actualName}』 / 必要『{requiredName}』）";
+                mismatchReason = $"名前不一致（実際『{bouquet.bouquetName}』 / 必要『{request.requiredBouquetName}』）";
                 return false;
             }
         }
@@ -820,24 +821,32 @@ public class RequestSystem : MonoBehaviour
         return (shopManager.GameYear - 1) * ShopManager.DaysPerYear + shopManager.DayOfYear;
     }
 
-    private static string NormalizeBouquetName(string bouquetName)
+    private static string NormalizeTextForComparison(string value)
     {
-        if (string.IsNullOrWhiteSpace(bouquetName))
+        if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
 
-        string normalized = bouquetName.Trim();
+        string normalized = value.Normalize(NormalizationForm.FormKC);
         char[] removable = { '「', '」', '『', '』', '"', '\'', '“', '”', '‘', '’' };
-        normalized = new string(normalized.Where(c => !removable.Contains(c)).ToArray());
-        normalized = normalized.Replace(" ", string.Empty).Replace("　", string.Empty);
-        return normalized;
+        StringBuilder builder = new();
+
+        foreach (char c in normalized)
+        {
+            if (char.IsWhiteSpace(c) || removable.Contains(c))
+                continue;
+            builder.Append(c);
+        }
+
+        return builder.ToString();
     }
 
     private static string NormalizeColor(string color)
     {
-        if (string.IsNullOrWhiteSpace(color))
+        string normalized = NormalizeTextForComparison(color);
+        if (string.IsNullOrEmpty(normalized))
             return string.Empty;
 
-        return color.Trim() switch
+        return normalized switch
         {
             "桃" or "桃色" or "ピンク" => "ピンク",
             "橙" or "橙色" or "オレンジ" => "オレンジ",
@@ -847,7 +856,7 @@ public class RequestSystem : MonoBehaviour
             "紫色" => "紫",
             "白色" => "白",
             "緑色" => "緑",
-            _ => color.Trim()
+            _ => normalized
         };
     }
 
