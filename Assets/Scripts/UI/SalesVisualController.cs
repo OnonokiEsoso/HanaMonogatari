@@ -11,6 +11,7 @@ using UnityEngine.UI;
 /// 客を右側からレジ前へ移動させ、購入内容・金額・一言を表示したあと右側へ退店させます。
 /// 各客画像のInspector上の配置位置を、その客固有のレジ前停止位置として使用します。
 /// 吹き出し本体は常時表示し、話者に応じて主人公用・第三者用の吹き出しパーツを切り替えます。
+/// 花束依頼達成日は通常客のあとに依頼主の受取演出も行います。
 /// </summary>
 public class SalesVisualController : MonoBehaviour
 {
@@ -277,6 +278,74 @@ public class SalesVisualController : MonoBehaviour
         isPlaying = false;
     }
 
+    /// <summary>
+    /// 花束依頼の依頼主専用演出。
+    /// 通常客と同じように入店し、予約花束と価格を表示したあと、依頼固有の感謝の言葉を表示して退店します。
+    /// </summary>
+    public IEnumerator PlayRequestPickupSequence(
+        RequestData request,
+        BouquetSystem.BouquetData bouquet,
+        int salePrice,
+        string successMessage)
+    {
+        if (isPlaying || request == null || bouquet == null)
+            yield break;
+
+        isPlaying = true;
+        currentSpeaker = BubbleSpeaker.None;
+        ClearCheckoutText();
+        HideAllCustomers();
+
+        if (speechBubble != null)
+            speechBubble.SetActive(true);
+
+        HideActionButton();
+
+        CustomerType requesterType = GetRequesterCustomerType(request.requesterName);
+        activeCustomer = GetCustomerImage(requesterType);
+        if (activeCustomer == null)
+        {
+            Debug.LogWarning($"SalesVisualController: 依頼主『{request.requesterName}』に対応する客画像が設定されていません。");
+            isPlaying = false;
+            yield break;
+        }
+
+        Vector2 counterPosition = GetCounterPosition(activeCustomer);
+        float outsideX = counterPosition.x + Mathf.Abs(outsideRightOffset);
+
+        activeCustomer.anchoredPosition = new Vector2(outsideX, counterPosition.y);
+        activeCustomer.gameObject.SetActive(true);
+
+        yield return MoveX(activeCustomer, counterPosition.x, enterDuration);
+
+        currentSpeaker = BubbleSpeaker.ThirdParty;
+        SetPurchaseText($"{bouquet.bouquetName} ×1");
+
+        if (purchaseDisplayDelay > 0f)
+            yield return new WaitForSeconds(purchaseDisplayDelay);
+
+        SetPriceText(salePrice > 0 ? $"{salePrice:N0}円" : string.Empty);
+
+        if (priceDisplayDelay > 0f)
+            yield return new WaitForSeconds(priceDisplayDelay);
+
+        SetCommentText(string.IsNullOrWhiteSpace(successMessage)
+            ? "ありがとうございます！"
+            : successMessage);
+
+        if (commentDisplayDuration > 0f)
+            yield return new WaitForSeconds(commentDisplayDuration);
+
+        currentSpeaker = BubbleSpeaker.None;
+        ClearCheckoutText();
+        yield return MoveX(activeCustomer, outsideX, exitDuration);
+
+        activeCustomer.anchoredPosition = counterPosition;
+        activeCustomer.gameObject.SetActive(false);
+        activeCustomer = null;
+        isPlaying = false;
+    }
+
     private Vector2 GetCounterPosition(RectTransform target)
     {
         if (target != null && customerCounterPositions.TryGetValue(target, out Vector2 position))
@@ -321,6 +390,23 @@ public class SalesVisualController : MonoBehaviour
             CustomerType.Child => childImage,
             CustomerType.OfficeWorker => officeWorkerImage,
             _ => housewifeImage
+        };
+    }
+
+    private static CustomerType GetRequesterCustomerType(string requesterName)
+    {
+        if (string.IsNullOrWhiteSpace(requesterName))
+            return CustomerType.OfficeWorker;
+
+        return requesterName.Trim() switch
+        {
+            "子ども" or "ちびっこ" => CustomerType.Child,
+            "学生" => CustomerType.Student,
+            "おばあさん" => CustomerType.Grandmother,
+            "富豪" => CustomerType.Wealthy,
+            "主婦" => CustomerType.Housewife,
+            "サラリーマン" => CustomerType.OfficeWorker,
+            _ => CustomerType.OfficeWorker
         };
     }
 
