@@ -19,6 +19,8 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private ShopTabUI shopTabUI;
     [Tooltip("ホームの依頼ボタンから依頼パネルを開くために設定します。")]
     [SerializeField] private RequestPanelUI requestPanelUI;
+    [Tooltip("ホームの家具ボタンから家具パネルを開くために設定します。")]
+    [SerializeField] private FurniturePanelUI furniturePanelUI;
     [Tooltip("依頼の有無を監視し、開店時に依頼条件を判定するために設定します。")]
     [SerializeField] private RequestSystem requestSystem;
 
@@ -154,12 +156,18 @@ public class HomeDashboardUI : MonoBehaviour
         if (homePriceText != null)
             homePriceText.text = string.Empty;
 
+        if (furniturePanelUI != null)
+            furniturePanelUI.HidePanel();
+
         Refresh();
         RefreshRequestAlert();
     }
 
     public void HideHome()
     {
+        if (furniturePanelUI != null)
+            furniturePanelUI.HidePanel();
+
         if (homeUIRoot != null)
             homeUIRoot.SetActive(false);
     }
@@ -207,6 +215,9 @@ public class HomeDashboardUI : MonoBehaviour
 
         if (openShopButton != null)
             openShopButton.interactable = false;
+
+        if (furniturePanelUI != null)
+            furniturePanelUI.HidePanel();
 
         // 依頼の成功/失敗確認は「開店する」を押したこの瞬間に固定する。
         if (requestSystem != null)
@@ -277,9 +288,15 @@ public class HomeDashboardUI : MonoBehaviour
         requestAlertText.gameObject.SetActive(shouldShow);
     }
 
-    private static void HandleFurnitureClicked()
+    private void HandleFurnitureClicked()
     {
-        Debug.Log("家具画面は今後のアップデートで実装予定です。");
+        if (furniturePanelUI == null)
+        {
+            Debug.LogWarning("HomeDashboardUI: FurniturePanelUIが設定されていません。");
+            return;
+        }
+
+        furniturePanelUI.ShowPanel();
     }
 
     private void HandleCheckoutClicked()
