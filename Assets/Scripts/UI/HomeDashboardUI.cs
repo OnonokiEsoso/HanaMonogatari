@@ -46,6 +46,7 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private TMP_Text homeDateText;
     [SerializeField] private TMP_Text homeMoneyText;
     [SerializeField] private TMP_Text homeShopRatingText;
+    [Tooltip("旧『今日のトレンド』表示。吹き出しと内容が重複するためホームでは非表示にします。")]
     [SerializeField] private TMP_Text homeTrendText;
 
     [Header("ホームボタン")]
@@ -120,6 +121,9 @@ public class HomeDashboardUI : MonoBehaviour
         if (standardSpeechBubble != null)
             standardSpeechBubble.SetActive(false);
 
+        if (homeTrendText != null)
+            homeTrendText.gameObject.SetActive(false);
+
         if (homePurchaseText != null)
             homePurchaseText.text = string.Empty;
 
@@ -149,10 +153,6 @@ public class HomeDashboardUI : MonoBehaviour
             homeShopRatingText.text = $"店評価：{shopManager.ShopRating:N0} / 10,000";
 
         string trendMessage = TrendSystem.GetDailySupplierMessage(shopManager);
-        if (homeTrendText != null)
-            homeTrendText.text = string.IsNullOrWhiteSpace(trendMessage)
-                ? "今日のトレンド：特になし"
-                : $"今日のトレンド：{trendMessage}";
 
         if (homeMessageText != null && !isOpening)
         {
@@ -186,7 +186,6 @@ public class HomeDashboardUI : MonoBehaviour
         if (homeDashboard != null)
             homeDashboard.SetActive(false);
 
-        // 開店演出はHomeSpeechBubbleではなく、既存のSpeechBubbleに切り替えて表示する。
         if (homeSpeechBubble != null)
             homeSpeechBubble.SetActive(false);
 
