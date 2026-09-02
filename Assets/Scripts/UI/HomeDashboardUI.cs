@@ -23,6 +23,8 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private FurniturePanelUI furniturePanelUI;
     [Tooltip("依頼の有無を監視し、開店時に依頼条件を判定するために設定します。")]
     [SerializeField] private RequestSystem requestSystem;
+    [Tooltip("家具の設置状況と設置上限を監視するために設定します。")]
+    [SerializeField] private FurnitureSystem furnitureSystem;
 
     [Header("ホーム表示")]
     [Tooltip("HomeUIRoot。ホーム専用UI全体の親を設定します。")]
@@ -60,6 +62,8 @@ public class HomeDashboardUI : MonoBehaviour
     [Tooltip("依頼が存在する時だけ表示するビックリマーク等のTMPテキスト。")]
     [SerializeField] private TMP_Text requestAlertText;
     [SerializeField] private Button furnitureButton;
+    [Tooltip("設置可能な未設置家具があり、かつ設置枠が空いている時だけ表示するビックリマーク等のTMPテキスト。")]
+    [SerializeField] private TMP_Text furnitureAlertText;
     [SerializeField] private Button checkoutButton;
     [SerializeField] private Button openShopButton;
 
@@ -73,6 +77,9 @@ public class HomeDashboardUI : MonoBehaviour
 
     private void Awake()
     {
+        if (furnitureSystem == null)
+            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+
         if (openShopButton != null)
             openShopButton.onClick.AddListener(HandleOpenShopClicked);
 
@@ -86,6 +93,7 @@ public class HomeDashboardUI : MonoBehaviour
             checkoutButton.onClick.AddListener(HandleCheckoutClicked);
 
         RefreshRequestAlert();
+        RefreshFurnitureAlert();
     }
 
     private void OnEnable()
@@ -100,7 +108,13 @@ public class HomeDashboardUI : MonoBehaviour
             requestSystem.OnRequestResolved += HandleRequestStateChanged;
         }
 
+        if (furnitureSystem == null)
+            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+        if (furnitureSystem != null)
+            furnitureSystem.OnChanged += RefreshFurnitureAlert;
+
         RefreshRequestAlert();
+        RefreshFurnitureAlert();
     }
 
     private void OnDisable()
@@ -114,6 +128,9 @@ public class HomeDashboardUI : MonoBehaviour
             requestSystem.OnRequestChanged -= HandleRequestStateChanged;
             requestSystem.OnRequestResolved -= HandleRequestStateChanged;
         }
+
+        if (furnitureSystem != null)
+            furnitureSystem.OnChanged -= RefreshFurnitureAlert;
     }
 
     private void OnDestroy()
@@ -161,6 +178,7 @@ public class HomeDashboardUI : MonoBehaviour
 
         Refresh();
         RefreshRequestAlert();
+        RefreshFurnitureAlert();
     }
 
     public void HideHome()
@@ -193,6 +211,8 @@ public class HomeDashboardUI : MonoBehaviour
                 ? "今日も一日がんばろう！ 開店前に準備を確認しておこう。"
                 : trendMessage;
         }
+
+        RefreshFurnitureAlert();
     }
 
     private void HandleOpenShopClicked()
@@ -286,6 +306,19 @@ public class HomeDashboardUI : MonoBehaviour
 
         bool shouldShow = requestSystem != null && requestSystem.HasActiveRequest;
         requestAlertText.gameObject.SetActive(shouldShow);
+    }
+
+    private void RefreshFurnitureAlert()
+    {
+        if (furnitureAlertText == null)
+            return;
+
+        if (furnitureSystem == null)
+            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+
+        bool hasOpenSlot = furnitureSystem != null && furnitureSystem.InstalledCount < furnitureSystem.MaxInstalledCount;
+        bool hasInstallableFurniture = furnitureSystem != null && furnitureSystem.HasInstallableUninstalledFurniture;
+        furnitureAlertText.gameObject.SetActive(hasOpenSlot && hasInstallableFurniture);
     }
 
     private void HandleFurnitureClicked()
