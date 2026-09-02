@@ -63,6 +63,7 @@ public class CustomerSystem : MonoBehaviour
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private InventorySystem inventorySystem;
+    [SerializeField] private RequestSystem requestSystem;
 
     [Header("客タイプ")]
     [SerializeField] private List<CustomerData> customerProfiles = new();
@@ -120,9 +121,10 @@ public class CustomerSystem : MonoBehaviour
 
         float randomMultiplier = UnityEngine.Random.Range(0.8f, 1.2f);
         float trendMultiplier = TrendSystem.GetVisitorMultiplier(shopManager);
-        int visitors = Mathf.Max(1, Mathf.RoundToInt(baseVisitors * randomMultiplier * trendMultiplier));
+        float requestMultiplier = requestSystem != null ? requestSystem.GetVisitorMultiplierForToday() : 1f;
+        int visitors = Mathf.Max(1, Mathf.RoundToInt(baseVisitors * randomMultiplier * trendMultiplier * requestMultiplier));
 
-        // 開店ボーナスは1年目の最初の2日間だけ。
+        // 開店ボーナスは1年目の最初の2日間だけ。倍率計算のあとに固定人数として加算します。
         if (shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear <= 2)
             visitors += openingBonusVisitors;
 
