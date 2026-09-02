@@ -14,6 +14,7 @@ public class DebugManager : MonoBehaviour
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private FurnitureSystem furnitureSystem;
+    [SerializeField] private WeatherSystem weatherSystem;
 
     [Header("年月日を指定")]
     [SerializeField] private bool useDateOverride;
@@ -41,7 +42,7 @@ public class DebugManager : MonoBehaviour
     [Min(0)] [SerializeField] private int startCumulativePurchaseAmount;
 
     [Header("天候デバッグ")]
-    [Tooltip("ONにするとゲーム開始時の雨状態を下の値で固定します。")]
+    [Tooltip("ONにするとゲーム開始時から天候を下の値へ固定します。日送り後も固定されたままです。")]
     [SerializeField] private bool useRainOverride;
     [SerializeField] private bool startAsRainy;
 
@@ -57,6 +58,9 @@ public class DebugManager : MonoBehaviour
 
         if (furnitureSystem == null)
             furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+
+        if (weatherSystem == null)
+            weatherSystem = FindFirstObjectByType<WeatherSystem>();
 
         Debug.LogWarning("【デバッグモードを使用中】通常プレイ用の開始状態ではありません。");
 
@@ -83,10 +87,20 @@ public class DebugManager : MonoBehaviour
 
         if (useRainOverride)
         {
-            if (furnitureSystem != null)
+            if (weatherSystem != null)
+            {
+                weatherSystem.SetDebugRainOverride(true, startAsRainy);
+            }
+            else if (furnitureSystem != null)
+            {
+                // WeatherSystemをまだSceneへ置いていない時の互換用。
                 furnitureSystem.SetRainyToday(startAsRainy);
+                Debug.LogWarning("DebugManager: WeatherSystemが見つからないため、家具側の雨フラグだけを変更しました。");
+            }
             else
-                Debug.LogWarning("DebugManager: FurnitureSystemが見つからないため、雨状態を適用できませんでした。");
+            {
+                Debug.LogWarning("DebugManager: WeatherSystem / FurnitureSystemが見つからないため、雨状態を適用できませんでした。");
+            }
         }
 
         PrintAppliedSettings();
@@ -106,7 +120,7 @@ public class DebugManager : MonoBehaviour
         string ratingText = useShopRatingOverride ? startShopRating.ToString("N0") : "通常値";
         string supplierText = useSupplierLevelOverride ? $"Lv.{startSupplierLevel}" : "通常値";
         string cumulativeText = useCumulativePurchaseOverride ? $"{startCumulativePurchaseAmount:N0}円" : "通常値";
-        string rainText = useRainOverride ? (startAsRainy ? "雨" : "晴れ扱い") : "通常値";
+        string rainText = useRainOverride ? (startAsRainy ? "雨固定" : "晴れ固定") : "通常抽選";
 
         Debug.Log(
             $"DebugManager設定 / 日付:{dateText} / 所持金:{moneyText} / 店評価:{ratingText} / " +
