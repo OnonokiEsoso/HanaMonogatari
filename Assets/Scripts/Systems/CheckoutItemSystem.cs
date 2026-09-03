@@ -6,6 +6,7 @@ using UnityEngine;
 /// <summary>
 /// レジ横商品の仕入れ・在庫・設置・追加購入をまとめて管理します。
 /// 最大3種類まで設置でき、営業時は花/花束購入後の残り予算で最大1個だけ追加購入されます。
+/// ver0.0.6では開発材料（栄養剤・肥料）と、自社開発品の在庫/販売にも使用します。
 /// </summary>
 public class CheckoutItemSystem : MonoBehaviour
 {
@@ -42,6 +43,9 @@ public class CheckoutItemSystem : MonoBehaviour
         public int offSeasonSalePrice = 100;
         [Range(0f, 1f)] public float offSeasonPurchaseChance = 0.03f;
         public string resourceSpriteName;
+
+        [Tooltip("仕入先の日替わりレジ横商品候補に入るか。自社開発品はOFF。")]
+        public bool supplierOfferEnabled = true;
 
         public bool IsSeasonal => targetMonth >= 1 && targetMonth <= 12;
 
@@ -124,8 +128,6 @@ public class CheckoutItemSystem : MonoBehaviour
         todayOfferItemId = null;
         todayOfferPurchased = false;
 
-        // デバッグ用：指定商品を最優先で確定入荷。
-        // Noneに戻せば、仕入先Lv・入荷確率を使う通常仕様へ即座に戻ります。
         string forcedItemId = GetForcedOfferItemId(forcedOffer);
         if (!string.IsNullOrEmpty(forcedItemId) && GetDefinition(forcedItemId) != null)
         {
@@ -134,7 +136,6 @@ public class CheckoutItemSystem : MonoBehaviour
             return;
         }
 
-        // 旧デバッグ用：1年目4月1日だけキープパワーを確定入荷。
         if (forceKeepPowerOnFirstDay && shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear == 1)
         {
             todayOfferItemId = "keep_power";
@@ -150,7 +151,8 @@ public class CheckoutItemSystem : MonoBehaviour
 
         int level = shopManager.SupplierLevel;
         List<CheckoutItemDefinition> candidates = catalog
-            .Where(i => i != null && i.arrivalDifficulty >= 3 && i.arrivalDifficulty <= level)
+            .Where(i => i != null && i.supplierOfferEnabled)
+            .Where(i => i.arrivalDifficulty >= 3 && i.arrivalDifficulty <= level)
             .ToList();
 
         if (candidates.Count > 0)
@@ -164,7 +166,6 @@ public class CheckoutItemSystem : MonoBehaviour
         CheckoutItemDefinition item = TodayOffer;
         if (item == null || todayOfferPurchased || shopManager == null) return false;
 
-        // 仕入先から買う商品なので、月間仕入れ額と累計仕入額にも含めます。
         if (!shopManager.TryPurchaseFromSupplier(item.boxPurchasePrice)) return false;
 
         todayOfferPurchased = true;
@@ -184,6 +185,29 @@ public class CheckoutItemSystem : MonoBehaviour
             stock.installed = true;
 
         OnChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// 開発材料など、販売以外の用途でレジ横商品の在庫を消費します。
+    /// </summary>
+    public bool TryConsumeStock(string itemId, int quantity)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) || quantity <= 0)
+            return false;
+
+        CheckoutItemStock stock = GetStock(itemId);
+        if (stock == null || stock.quantity < quantity)
+            return false;
+
+        stock.quantity -= quantity;
+        if (stock.quantity <= 0)
+        {
+            stock.quantity = 0;
+            stock.installed = false;
+        }
+
+        OnChanged?.Invoke();
+        return true;
     }
 
     public bool TryInstall(string itemId)
@@ -224,10 +248,6 @@ public class CheckoutItemSystem : MonoBehaviour
         return stock != null ? Mathf.Max(0, stock.quantity) : 0;
     }
 
-    /// <summary>
-    /// 設置中の商品をランダム順に見て、条件・残り予算を満たすものだけ低確率で判定します。
-    /// 1人につき購入は最大1個です。
-    /// </summary>
     public AddonSaleResult TrySellAddon(bool boughtBouquet, int remainingBudget)
     {
         if (shopManager == null || remainingBudget <= 0)
@@ -339,11 +359,24 @@ public class CheckoutItemSystem : MonoBehaviour
     private void BuildDefaultCatalog()
     {
         catalog.Clear();
+
         catalog.Add(new CheckoutItemDefinition
         {
             id = "keep_power", displayName = "キープパワー", boxQuantity = 100, boxPurchasePrice = 2000,
             regularSalePrice = 50, arrivalDifficulty = 3, purchaseChance = 0.10f,
             purchaseCondition = PurchaseCondition.FlowerOnly, resourceSpriteName = "checkout_keep_power"
+        });
+        catalog.Add(new CheckoutItemDefinition
+        {
+            id = "nutrition_supplement", displayName = "栄養剤", boxQuantity = 10, boxPurchasePrice = 1500,
+            regularSalePrice = 300, arrivalDifficulty = 4, purchaseChance = 0.08f,
+            purchaseCondition = PurchaseCondition.FlowerOnly, resourceSpriteName = "checkout_nutrition_supplement"
+        });
+        catalog.Add(new CheckoutItemDefinition
+        {
+            id = "fertilizer", displayName = "肥料", boxQuantity = 10, boxPurchasePrice = 2000,
+            regularSalePrice = 400, arrivalDifficulty = 5, purchaseChance = 0.08f,
+            purchaseCondition = PurchaseCondition.FlowerOnly, resourceSpriteName = "checkout_fertilizer"
         });
         catalog.Add(new CheckoutItemDefinition
         {
@@ -362,6 +395,29 @@ public class CheckoutItemSystem : MonoBehaviour
         AddSeasonal("tsukimi_dango", "お月見団子フィギュア", 9, "checkout_tsukimi_dango");
         AddSeasonal("mini_pumpkin", "ミニカボチャ", 10, "checkout_mini_pumpkin");
         AddSeasonal("mini_tree", "ミニツリー", 12, "checkout_mini_tree");
+
+        AddSelfProduct("karasan", "枯ラサン", 900, 0.08f, "checkout_karasan");
+        AddSelfProduct("sodatsu_cho", "そだーつ長", 1300, 0.08f, "checkout_sodatsu_cho");
+        AddSelfProduct("sodatsu_tsubu", "そだーつ粒", 1800, 0.08f, "checkout_sodatsu_tsubu");
+        AddSelfProduct("sodatsu_eki", "そだーつ液", 1800, 0.08f, "checkout_sodatsu_eki");
+        AddSelfProduct("karasan_tsui", "枯ラサンつい", 5000, 0.08f, "checkout_karasan_tsui");
+    }
+
+    private void AddSelfProduct(string id, string name, int salePrice, float purchaseChance, string spriteName)
+    {
+        catalog.Add(new CheckoutItemDefinition
+        {
+            id = id,
+            displayName = name,
+            boxQuantity = 0,
+            boxPurchasePrice = 0,
+            regularSalePrice = salePrice,
+            arrivalDifficulty = 0,
+            purchaseChance = purchaseChance,
+            purchaseCondition = PurchaseCondition.FlowerOrBouquet,
+            resourceSpriteName = spriteName,
+            supplierOfferEnabled = false
+        });
     }
 
     private void AddSeasonal(string id, string name, int month, string spriteName)
