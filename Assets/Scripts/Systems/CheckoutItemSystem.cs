@@ -7,6 +7,7 @@ using UnityEngine;
 /// レジ横商品の仕入れ・在庫・設置・追加購入をまとめて管理します。
 /// 最大3種類まで設置でき、営業時は花/花束購入後の残り予算で最大1個だけ追加購入されます。
 /// ver0.0.6では開発材料（栄養剤・肥料）と、自社開発品の在庫/販売にも使用します。
+/// デバッグ設定はDebugManagerから受け取ります。
 /// </summary>
 public class CheckoutItemSystem : MonoBehaviour
 {
@@ -20,6 +21,8 @@ public class CheckoutItemSystem : MonoBehaviour
     {
         None,
         KeepPower,
+        NutritionSupplement,
+        Fertilizer,
         MiniFlowerBase,
         Iinioi,
         MiniKadomatsu,
@@ -95,18 +98,15 @@ public class CheckoutItemSystem : MonoBehaviour
     [Tooltip("花・ラッピングとは別枠で、1日0～1種類のレジ横商品が出る確率。仮初期値35%。")]
     [Range(0f, 1f)] [SerializeField] private float dailyOfferChance = 0.35f;
 
-    [Header("デバッグ")]
-    [Tooltip("指定した商品を仕入先Lv・通常入荷確率を無視して、その日のレジ横商品として必ず入荷させます。Noneで通常仕様。")]
-    [SerializeField] private DebugForcedOffer forcedOffer = DebugForcedOffer.None;
-    [Tooltip("ONの間だけ、1年目4月1日にキープパワーを必ず入荷させます。通常運用へ戻す時はOFFにしてください。")]
-    [SerializeField] private bool forceKeepPowerOnFirstDay = true;
-    [Tooltip("ONの間だけ、購入条件と残り予算を満たす花購入客はキープパワーを100%購入します。通常運用へ戻す時はOFFにしてください。")]
-    [SerializeField] private bool forceKeepPowerPurchaseChance = true;
-
     [Header("状態")]
     [SerializeField] private List<CheckoutItemStock> stocks = new();
     [SerializeField] private string todayOfferItemId;
     [SerializeField] private bool todayOfferPurchased;
+
+    // デバッグ値はInspectorに持たず、DebugManagerからのみ設定する。
+    private DebugForcedOffer forcedOffer = DebugForcedOffer.None;
+    private bool forceKeepPowerOnFirstDay;
+    private bool forceKeepPowerPurchaseChance;
 
     private readonly List<CheckoutItemDefinition> catalog = new();
 
@@ -121,6 +121,23 @@ public class CheckoutItemSystem : MonoBehaviour
     {
         BuildDefaultCatalog();
         NormalizeStocks();
+    }
+
+    /// <summary>
+    /// DebugManagerからレジ横商品のデバッグ挙動をまとめて適用します。
+    /// 通常プレイ時は呼ばれず、全項目OFFのままです。
+    /// </summary>
+    public void ApplyDebugSettings(
+        bool useOfferOverride,
+        DebugForcedOffer offer,
+        bool forceFirstDayKeepPower,
+        bool forceKeepPowerPurchase)
+    {
+        forcedOffer = useOfferOverride ? offer : DebugForcedOffer.None;
+        forceKeepPowerOnFirstDay = forceFirstDayKeepPower;
+        forceKeepPowerPurchaseChance = forceKeepPowerPurchase;
+
+        Debug.Log($"CheckoutItemSystemデバッグ / 強制入荷:{forcedOffer} / 初日キープパワー:{forceKeepPowerOnFirstDay} / キープパワー購入100%:{forceKeepPowerPurchaseChance}");
     }
 
     public void GenerateDailyOffer()
@@ -322,6 +339,8 @@ public class CheckoutItemSystem : MonoBehaviour
         return offer switch
         {
             DebugForcedOffer.KeepPower => "keep_power",
+            DebugForcedOffer.NutritionSupplement => "nutrition_supplement",
+            DebugForcedOffer.Fertilizer => "fertilizer",
             DebugForcedOffer.MiniFlowerBase => "mini_flower_base",
             DebugForcedOffer.Iinioi => "iinioi",
             DebugForcedOffer.MiniKadomatsu => "mini_kadomatsu",
