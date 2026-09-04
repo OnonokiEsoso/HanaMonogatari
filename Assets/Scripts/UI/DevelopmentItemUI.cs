@@ -97,7 +97,8 @@ public class DevelopmentItemUI : MonoBehaviour
         if (nameText != null)
             nameText.text = definition.displayName;
 
-        if (requirementText != null)
+        SetRequirementVisible(!completed);
+        if (!completed && requirementText != null)
             requirementText.text = BuildRequirementText(definition);
 
         if (costText != null)
@@ -258,10 +259,17 @@ public class DevelopmentItemUI : MonoBehaviour
     {
         if (nameText != null) nameText.text = "？？？";
         if (stateText != null) stateText.text = reason;
+        SetRequirementVisible(true);
         if (requirementText != null) requirementText.text = "？？？";
         if (costText != null) costText.text = "---";
         if (daysText != null) daysText.text = "---";
         SetButton("未解禁", false);
+    }
+
+    private void SetRequirementVisible(bool visible)
+    {
+        if (requirementText != null)
+            requirementText.gameObject.SetActive(visible);
     }
 
     private void SetButton(string label, bool interactable)
