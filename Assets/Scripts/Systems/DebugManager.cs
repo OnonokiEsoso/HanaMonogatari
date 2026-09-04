@@ -15,6 +15,7 @@ public class DebugManager : MonoBehaviour
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private FurnitureSystem furnitureSystem;
     [SerializeField] private WeatherSystem weatherSystem;
+    [SerializeField] private CheckoutItemSystem checkoutItemSystem;
 
     [Header("年月日を指定")]
     [SerializeField] private bool useDateOverride;
@@ -46,6 +47,17 @@ public class DebugManager : MonoBehaviour
     [SerializeField] private bool useRainOverride;
     [SerializeField] private bool startAsRainy;
 
+    [Header("レジ横商品デバッグ")]
+    [Tooltip("ONにすると、指定したレジ横商品を仕入先Lv・通常入荷確率を無視してその日の仕入れに必ず出します。")]
+    [SerializeField] private bool useCheckoutOfferOverride;
+    [SerializeField] private CheckoutItemSystem.DebugForcedOffer forcedCheckoutOffer = CheckoutItemSystem.DebugForcedOffer.None;
+
+    [Tooltip("ONにすると、1年目4月1日にキープパワーを必ず仕入れへ出します。通常テストではOFF推奨。")]
+    [SerializeField] private bool forceKeepPowerOnFirstDay;
+
+    [Tooltip("ONにすると、購入条件と残り予算を満たす客がキープパワーを100%購入します。")]
+    [SerializeField] private bool forceKeepPowerPurchaseChance;
+
     public bool IsDebugMode => debugMode;
 
     private void Awake()
@@ -61,6 +73,9 @@ public class DebugManager : MonoBehaviour
 
         if (weatherSystem == null)
             weatherSystem = FindFirstObjectByType<WeatherSystem>();
+
+        if (checkoutItemSystem == null)
+            checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
 
         Debug.LogWarning("【デバッグモードを使用中】通常プレイ用の開始状態ではありません。");
 
@@ -103,6 +118,19 @@ public class DebugManager : MonoBehaviour
             }
         }
 
+        if (checkoutItemSystem != null)
+        {
+            checkoutItemSystem.ApplyDebugSettings(
+                useCheckoutOfferOverride,
+                forcedCheckoutOffer,
+                forceKeepPowerOnFirstDay,
+                forceKeepPowerPurchaseChance);
+        }
+        else if (useCheckoutOfferOverride || forceKeepPowerOnFirstDay || forceKeepPowerPurchaseChance)
+        {
+            Debug.LogWarning("DebugManager: CheckoutItemSystemが見つからないため、レジ横商品デバッグを適用できませんでした。");
+        }
+
         PrintAppliedSettings();
     }
 
@@ -121,9 +149,13 @@ public class DebugManager : MonoBehaviour
         string supplierText = useSupplierLevelOverride ? $"Lv.{startSupplierLevel}" : "通常値";
         string cumulativeText = useCumulativePurchaseOverride ? $"{startCumulativePurchaseAmount:N0}円" : "通常値";
         string rainText = useRainOverride ? (startAsRainy ? "雨固定" : "晴れ固定") : "通常抽選";
+        string checkoutOfferText = useCheckoutOfferOverride ? forcedCheckoutOffer.ToString() : "通常抽選";
+        string firstDayKeepPowerText = forceKeepPowerOnFirstDay ? "ON" : "OFF";
+        string keepPowerPurchaseText = forceKeepPowerPurchaseChance ? "100%" : "通常確率";
 
         Debug.Log(
             $"DebugManager設定 / 日付:{dateText} / 所持金:{moneyText} / 店評価:{ratingText} / " +
-            $"仕入先:{supplierText} / 累計仕入額:{cumulativeText} / 天候:{rainText}");
+            $"仕入先:{supplierText} / 累計仕入額:{cumulativeText} / 天候:{rainText} / " +
+            $"レジ横強制入荷:{checkoutOfferText} / 初日キープパワー:{firstDayKeepPowerText} / キープパワー購入:{keepPowerPurchaseText}");
     }
 }
