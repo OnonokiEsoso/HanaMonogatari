@@ -4,14 +4,22 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 開発パネル内の「開発」カード1枚を担当します。
+/// 開発パネル内のカード1枚を担当します。
+/// 同じDevelopmentItemプレハブを「開発」と「作成」の両方で流用します。
 /// NameText / StateText / RequirementText / CostText / DaysText / DevelopmentButton という
 /// 子オブジェクト名なら、Inspector未設定でも自動で参照を探します。
 /// </summary>
 public class DevelopmentItemUI : MonoBehaviour
 {
-    [Header("開発対象")]
+    public enum DisplayMode
+    {
+        Development,
+        Production
+    }
+
+    [Header("対象")]
     [SerializeField] private DevelopmentId developmentId;
+    [SerializeField] private DisplayMode displayMode = DisplayMode.Development;
 
     [Header("表示")]
     [SerializeField] private TMP_Text nameText;
@@ -27,25 +35,27 @@ public class DevelopmentItemUI : MonoBehaviour
     private CheckoutItemSystem checkoutItemSystem;
 
     public DevelopmentId DevelopmentId => developmentId;
+    public DisplayMode Mode => displayMode;
 
     private void Awake()
     {
         AutoFindReferences();
 
         if (developmentButton != null)
-            developmentButton.onClick.AddListener(HandleDevelopmentClicked);
+            developmentButton.onClick.AddListener(HandleActionClicked);
     }
 
     private void OnDestroy()
     {
         if (developmentButton != null)
-            developmentButton.onClick.RemoveListener(HandleDevelopmentClicked);
+            developmentButton.onClick.RemoveListener(HandleActionClicked);
     }
 
-    public void Bind(DevelopmentSystem system, DevelopmentId id)
+    public void Bind(DevelopmentSystem system, DevelopmentId id, DisplayMode mode = DisplayMode.Development)
     {
         developmentSystem = system;
         developmentId = id;
+        displayMode = mode;
 
         if (inventorySystem == null)
             inventorySystem = FindFirstObjectByType<InventorySystem>();
@@ -75,6 +85,14 @@ public class DevelopmentItemUI : MonoBehaviour
         if (checkoutItemSystem == null)
             checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
 
+        if (displayMode == DisplayMode.Production)
+            RefreshProduction(definition);
+        else
+            RefreshDevelopment(definition);
+    }
+
+    private void RefreshDevelopment(DevelopmentDefinition definition)
+    {
         bool featureUnlocked = developmentSystem.IsDevelopmentFeatureUnlocked;
         bool prerequisitesDone = developmentSystem.ArePrerequisitesCompleted(definition);
         bool completed = developmentSystem.IsCompleted(developmentId);
@@ -141,10 +159,79 @@ public class DevelopmentItemUI : MonoBehaviour
         SetButton("開発開始", canStart);
     }
 
-    private void HandleDevelopmentClicked()
+    private void RefreshProduction(DevelopmentDefinition definition)
+    {
+        bool completed = developmentSystem.IsCompleted(developmentId);
+        bool isThisJob = developmentSystem.HasActiveJob &&
+                         developmentSystem.ActiveJob.jobType == DevelopmentJobType.Production &&
+                         developmentSystem.ActiveJob.targetId == developmentId;
+
+        if (!completed)
+        {
+            if (nameText != null) nameText.text = "？？？";
+            if (stateText != null) stateText.text = "未開発";
+            SetRequirementVisible(false);
+            if (costText != null) costText.text = "---";
+            if (daysText != null) daysText.text = "---";
+            SetButton("作成不可", false);
+            return;
+        }
+
+        if (nameText != null)
+            nameText.text = definition.displayName;
+
+        SetRequirementVisible(true);
+        if (requirementText != null)
+            requirementText.text = $"完成数：{definition.productionQuantity}個";
+
+        if (costText != null)
+            costText.text = $"{definition.productionCost:N0}円";
+
+        if (daysText != null)
+            daysText.text = $"{definition.productionDays}日";
+
+        if (isThisJob)
+        {
+            int remaining = developmentSystem.GetRemainingDays();
+            if (stateText != null)
+                stateText.text = $"作成中　残り{remaining}日";
+            SetButton("作成中", false);
+            return;
+        }
+
+        if (developmentSystem.HasActiveJob)
+        {
+            if (stateText != null)
+                stateText.text = "別の作業を進行中";
+            SetButton("作成開始", false);
+            return;
+        }
+
+        bool canStart = developmentSystem.CanStartProduction(developmentId);
+        if (stateText != null)
+        {
+            if (canStart)
+                stateText.text = "作成可能";
+            else if (shopManager != null && shopManager.Money < definition.productionCost)
+                stateText.text = "所持金不足";
+            else
+                stateText.text = "作成不可";
+        }
+
+        SetButton("作成開始", canStart);
+    }
+
+    private void HandleActionClicked()
     {
         if (developmentSystem == null)
             return;
+
+        if (displayMode == DisplayMode.Production)
+        {
+            if (developmentSystem.TryStartProduction(developmentId))
+                Refresh();
+            return;
+        }
 
         DevelopmentDefinition definition = developmentSystem.GetDefinition(developmentId);
         if (definition == null)
@@ -165,8 +252,6 @@ public class DevelopmentItemUI : MonoBehaviour
         if (inventorySystem == null)
             return null;
 
-        // 条件を満たす花のうち、まず鮮度が短いロットの花を自動選択します。
-        // 同じ鮮度なら入荷難易度が低い方を優先し、貴重な花を温存します。
         return inventorySystem.Batches
             .Where(b => b != null && b.flower != null && b.quantity > 0)
             .Where(b => b.flower.arrivalDifficulty >= Mathf.Max(1, definition.minimumFlowerArrivalDifficulty))
