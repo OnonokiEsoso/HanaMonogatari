@@ -6,7 +6,7 @@ using UnityEngine.UI;
 /// <summary>
 /// ホーム画面から開く「開発」パネルを管理します。
 /// ver0.0.6では「開発 / 作成 / 新種開発」の3タブを持ち、
-/// 開発タブではDevelopmentItemプレハブを5件生成してDevelopmentSystemへ接続します。
+/// 開発・作成の両タブで同じDevelopmentItemプレハブを自動生成して使います。
 /// </summary>
 public class DevelopmentPanelUI : MonoBehaviour
 {
@@ -41,15 +41,19 @@ public class DevelopmentPanelUI : MonoBehaviour
     [SerializeField] private GameObject productionTab;
     [SerializeField] private GameObject hybridTab;
 
-    [Header("開発カード生成")]
-    [Tooltip("DevelopmentItemプレハブを設定します。DevelopmentTab内にカードが無い場合、このプレハブから5枚自動生成します。")]
+    [Header("共通カードプレハブ")]
+    [Tooltip("開発・作成の両方で使うDevelopmentItemプレハブ。")]
     [SerializeField] private DevelopmentItemUI developmentItemPrefab;
-    [Tooltip("ScrollView/Viewport/Contentを設定します。未設定ならDevelopmentTab配下の『Content』を自動取得します。")]
-    [SerializeField] private Transform developmentContent;
 
-    [Header("開発カード")]
-    [Tooltip("通常は自動生成・自動取得されるため手動設定不要です。")]
+    [Header("開発カード生成")]
+    [Tooltip("DevelopmentTab側のScrollView/Viewport/Content。未設定ならDevelopmentTab配下の『Content』を自動取得します。")]
+    [SerializeField] private Transform developmentContent;
     [SerializeField] private DevelopmentItemUI[] developmentItems;
+
+    [Header("作成カード生成")]
+    [Tooltip("ProductionTab側のScrollView/Viewport/Content。未設定ならProductionTab配下の『Content』を自動取得します。")]
+    [SerializeField] private Transform productionContent;
+    [SerializeField] private DevelopmentItemUI[] productionItems;
 
     [Header("ボタン")]
     [Tooltip("パネルを閉じるボタン。任意。")]
@@ -66,9 +70,10 @@ public class DevelopmentPanelUI : MonoBehaviour
             developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
 
         AutoFindTabReferences();
-        AutoFindDevelopmentContent();
+        AutoFindContents();
         EnsureDevelopmentItems();
-        BindDevelopmentItems();
+        EnsureProductionItems();
+        BindAllItems();
 
         if (closeButton != null)
             closeButton.onClick.AddListener(HidePanel);
@@ -80,9 +85,6 @@ public class DevelopmentPanelUI : MonoBehaviour
             hybridTabButton.onClick.AddListener(ShowHybridTab);
 
         ApplyTabVisibility();
-
-        // 初期表示はHierarchy側のActive状態で管理します。
-        // AwakeでHidePanelを呼ぶと、初回クリック時に表示が打ち消されるため行いません。
     }
 
     private void OnEnable()
@@ -96,9 +98,10 @@ public class DevelopmentPanelUI : MonoBehaviour
             developmentSystem.OnJobCompleted += HandleJobCompleted;
         }
 
-        AutoFindDevelopmentContent();
+        AutoFindContents();
         EnsureDevelopmentItems();
-        BindDevelopmentItems();
+        EnsureProductionItems();
+        BindAllItems();
         Refresh();
     }
 
@@ -128,8 +131,9 @@ public class DevelopmentPanelUI : MonoBehaviour
         if (panelRoot != null)
             panelRoot.SetActive(true);
 
-        AutoFindDevelopmentContent();
+        AutoFindContents();
         EnsureDevelopmentItems();
+        EnsureProductionItems();
         Refresh();
     }
 
@@ -143,7 +147,6 @@ public class DevelopmentPanelUI : MonoBehaviour
     {
         currentTab = PanelTab.Development;
         ApplyTabVisibility();
-        AutoFindDevelopmentContent();
         EnsureDevelopmentItems();
         Refresh();
     }
@@ -152,6 +155,10 @@ public class DevelopmentPanelUI : MonoBehaviour
     {
         currentTab = PanelTab.Production;
         ApplyTabVisibility();
+        AutoFindContents();
+        EnsureProductionItems();
+        BindProductionItems();
+        Refresh();
     }
 
     public void ShowHybridTab()
@@ -165,11 +172,15 @@ public class DevelopmentPanelUI : MonoBehaviour
         if (developmentSystem == null)
             developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
 
-        AutoFindDevelopmentContent();
+        AutoFindContents();
         EnsureDevelopmentItems();
-        BindDevelopmentItems();
+        EnsureProductionItems();
+        BindAllItems();
 
         foreach (DevelopmentItemUI item in developmentItems ?? Array.Empty<DevelopmentItemUI>())
+            item?.Refresh();
+
+        foreach (DevelopmentItemUI item in productionItems ?? Array.Empty<DevelopmentItemUI>())
             item?.Refresh();
     }
 
@@ -188,6 +199,12 @@ public class DevelopmentPanelUI : MonoBehaviour
             hybridTab.SetActive(currentTab == PanelTab.Hybrid);
     }
 
+    private void BindAllItems()
+    {
+        BindDevelopmentItems();
+        BindProductionItems();
+    }
+
     private void BindDevelopmentItems()
     {
         if (developmentSystem == null || developmentItems == null)
@@ -196,74 +213,108 @@ public class DevelopmentPanelUI : MonoBehaviour
         for (int i = 0; i < developmentItems.Length && i < DefaultDevelopmentOrder.Length; i++)
         {
             if (developmentItems[i] != null)
-                developmentItems[i].Bind(developmentSystem, DefaultDevelopmentOrder[i]);
+                developmentItems[i].Bind(developmentSystem, DefaultDevelopmentOrder[i], DevelopmentItemUI.DisplayMode.Development);
         }
     }
 
-    /// <summary>
-    /// Content配下に開発カードが無い場合は、プレハブから5枚生成します。
-    /// すでに1～4枚置かれている場合は、その先頭カードをテンプレートとして不足分を複製します。
-    /// </summary>
+    private void BindProductionItems()
+    {
+        if (developmentSystem == null || productionItems == null)
+            return;
+
+        for (int i = 0; i < productionItems.Length && i < DefaultDevelopmentOrder.Length; i++)
+        {
+            if (productionItems[i] != null)
+                productionItems[i].Bind(developmentSystem, DefaultDevelopmentOrder[i], DevelopmentItemUI.DisplayMode.Production);
+        }
+    }
+
     private void EnsureDevelopmentItems()
     {
-        AutoFindDevelopmentItems();
+        developmentItems = EnsureItemsForContent(
+            developmentContent,
+            developmentItems,
+            DevelopmentItemUI.DisplayMode.Development,
+            "DevelopmentItem");
+    }
 
-        int currentCount = developmentItems?.Length ?? 0;
+    private void EnsureProductionItems()
+    {
+        productionItems = EnsureItemsForContent(
+            productionContent,
+            productionItems,
+            DevelopmentItemUI.DisplayMode.Production,
+            "ProductionItem");
+    }
+
+    private DevelopmentItemUI[] EnsureItemsForContent(
+        Transform content,
+        DevelopmentItemUI[] currentItems,
+        DevelopmentItemUI.DisplayMode mode,
+        string objectNamePrefix)
+    {
+        DevelopmentItemUI[] found = FindItems(content);
+        int currentCount = found.Length;
+
         if (currentCount >= DefaultDevelopmentOrder.Length)
-            return;
+            return found.Take(DefaultDevelopmentOrder.Length).ToArray();
 
-        if (developmentContent == null)
-        {
-            Debug.LogWarning("DevelopmentPanelUI: Development Content が見つかりません。ScrollView/Viewport/Content を設定してください。");
-            return;
-        }
+        if (content == null)
+            return found;
 
         DevelopmentItemUI template = developmentItemPrefab;
         if (template == null && currentCount > 0)
-            template = developmentItems[0];
+            template = found[0];
 
         if (template == null)
         {
-            Debug.LogWarning("DevelopmentPanelUI: Development Item Prefab が未設定です。DevelopmentItemプレハブをInspectorへ設定してください。");
-            return;
+            Debug.LogWarning("DevelopmentPanelUI: Development Item Prefab が未設定です。同じプレハブを開発・作成で共通利用します。");
+            return found;
         }
 
         for (int i = currentCount; i < DefaultDevelopmentOrder.Length; i++)
         {
-            DevelopmentItemUI created = Instantiate(template, developmentContent);
-            created.gameObject.name = $"DevelopmentItem_{DefaultDevelopmentOrder[i]}";
+            DevelopmentItemUI created = Instantiate(template, content);
+            created.gameObject.name = $"{objectNamePrefix}_{DefaultDevelopmentOrder[i]}";
             created.gameObject.SetActive(true);
+            created.Bind(developmentSystem, DefaultDevelopmentOrder[i], mode);
         }
 
-        AutoFindDevelopmentItems();
+        return FindItems(content).Take(DefaultDevelopmentOrder.Length).ToArray();
     }
 
-    private void AutoFindDevelopmentItems()
+    private DevelopmentItemUI[] FindItems(Transform content)
     {
-        Transform searchRoot = developmentContent != null
-            ? developmentContent
-            : developmentTab != null ? developmentTab.transform : transform;
+        if (content == null)
+            return Array.Empty<DevelopmentItemUI>();
 
-        developmentItems = searchRoot
+        return content
             .GetComponentsInChildren<DevelopmentItemUI>(true)
             .Where(item => item != null)
             .OrderBy(item => item.transform.GetSiblingIndex())
-            .Take(DefaultDevelopmentOrder.Length)
             .ToArray();
     }
 
-    private void AutoFindDevelopmentContent()
+    private void AutoFindContents()
     {
-        if (developmentContent != null)
-            return;
-
-        if (developmentTab == null)
+        if (developmentTab == null || productionTab == null)
             AutoFindTabReferences();
 
-        Transform[] transforms = (developmentTab != null ? developmentTab.transform : transform)
-            .GetComponentsInChildren<Transform>(true);
+        if (developmentContent == null && developmentTab != null)
+            developmentContent = FindNamedContent(developmentTab.transform);
 
-        developmentContent = transforms.FirstOrDefault(t => t != null && t.gameObject.name == "Content");
+        if (productionContent == null && productionTab != null)
+            productionContent = FindNamedContent(productionTab.transform);
+    }
+
+    private Transform FindNamedContent(Transform root)
+    {
+        if (root == null)
+            return null;
+
+        return root
+            .GetComponentsInChildren<Transform>(true)
+            .FirstOrDefault(t => t != null && t.gameObject.name == "Content");
     }
 
     private void AutoFindTabReferences()
