@@ -16,6 +16,7 @@ public class DebugManager : MonoBehaviour
     [SerializeField] private FurnitureSystem furnitureSystem;
     [SerializeField] private WeatherSystem weatherSystem;
     [SerializeField] private CheckoutItemSystem checkoutItemSystem;
+    [SerializeField] private DevelopmentSystem developmentSystem;
 
     [Header("年月日を指定")]
     [SerializeField] private bool useDateOverride;
@@ -58,6 +59,10 @@ public class DebugManager : MonoBehaviour
     [Tooltip("ONにすると、購入条件と残り予算を満たす客がキープパワーを100%購入します。")]
     [SerializeField] private bool forceKeepPowerPurchaseChance;
 
+    [Header("開発デバッグ")]
+    [Tooltip("ONにするとゲーム開始時に枯ラサン～枯ラサンついまで全て開発済みにします。作成と新種開発のテスト用です。")]
+    [SerializeField] private bool completeAllDevelopmentsOnStart;
+
     public bool IsDebugMode => debugMode;
 
     private void Awake()
@@ -76,6 +81,9 @@ public class DebugManager : MonoBehaviour
 
         if (checkoutItemSystem == null)
             checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
+
+        if (developmentSystem == null)
+            developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
 
         Debug.LogWarning("【デバッグモードを使用中】通常プレイ用の開始状態ではありません。");
 
@@ -108,7 +116,6 @@ public class DebugManager : MonoBehaviour
             }
             else if (furnitureSystem != null)
             {
-                // WeatherSystemをまだSceneへ置いていない時の互換用。
                 furnitureSystem.SetRainyToday(startAsRainy);
                 Debug.LogWarning("DebugManager: WeatherSystemが見つからないため、家具側の雨フラグだけを変更しました。");
             }
@@ -129,6 +136,18 @@ public class DebugManager : MonoBehaviour
         else if (useCheckoutOfferOverride || forceKeepPowerOnFirstDay || forceKeepPowerPurchaseChance)
         {
             Debug.LogWarning("DebugManager: CheckoutItemSystemが見つからないため、レジ横商品デバッグを適用できませんでした。");
+        }
+
+        if (completeAllDevelopmentsOnStart)
+        {
+            if (developmentSystem != null)
+            {
+                developmentSystem.ApplyDebugCompleteAllDevelopments();
+            }
+            else
+            {
+                Debug.LogWarning("DebugManager: DevelopmentSystemが見つからないため、全開発完了デバッグを適用できませんでした。");
+            }
         }
 
         PrintAppliedSettings();
@@ -152,10 +171,12 @@ public class DebugManager : MonoBehaviour
         string checkoutOfferText = useCheckoutOfferOverride ? forcedCheckoutOffer.ToString() : "通常抽選";
         string firstDayKeepPowerText = forceKeepPowerOnFirstDay ? "ON" : "OFF";
         string keepPowerPurchaseText = forceKeepPowerPurchaseChance ? "100%" : "通常確率";
+        string developmentText = completeAllDevelopmentsOnStart ? "全開発済み" : "通常進行";
 
         Debug.Log(
             $"DebugManager設定 / 日付:{dateText} / 所持金:{moneyText} / 店評価:{ratingText} / " +
             $"仕入先:{supplierText} / 累計仕入額:{cumulativeText} / 天候:{rainText} / " +
-            $"レジ横強制入荷:{checkoutOfferText} / 初日キープパワー:{firstDayKeepPowerText} / キープパワー購入:{keepPowerPurchaseText}");
+            $"レジ横強制入荷:{checkoutOfferText} / 初日キープパワー:{firstDayKeepPowerText} / " +
+            $"キープパワー購入:{keepPowerPurchaseText} / 開発:{developmentText}");
     }
 }
