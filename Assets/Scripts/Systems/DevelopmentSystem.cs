@@ -102,7 +102,6 @@ public class DevelopmentSystem : MonoBehaviour
         if (definition == null || !IsDevelopmentFeatureUnlocked)
             return false;
 
-        // 最初の枯ラサンは開発機能解禁時から表示。
         if (id == DevelopmentId.Karasan)
             return true;
 
@@ -219,6 +218,30 @@ public class DevelopmentSystem : MonoBehaviour
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// デバッグ用。通常の費用・材料・日数を無視して全開発を完了状態にします。
+    /// 枯ラサンついまで完了するため、新種開発も解禁されます。
+    /// </summary>
+    public void ApplyDebugCompleteAllDevelopments()
+    {
+        BuildDefaultDefinitions();
+        NormalizeProgressStates();
+        activeJob ??= new DevelopmentJobState();
+        activeJob.Clear();
+
+        foreach (DevelopmentDefinition definition in definitions)
+        {
+            if (definition == null)
+                continue;
+
+            GetOrCreateProgressState(definition.id).completed = true;
+        }
+
+        lastCompletionMessage = "【DEBUG】全ての通常開発を完了状態にしました。";
+        Debug.LogWarning(lastCompletionMessage);
+        OnChanged?.Invoke();
     }
 
     private void HandleShopStateChanged()
