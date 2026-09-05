@@ -20,6 +20,7 @@ public class HybridTabUI : MonoBehaviour
     [SerializeField] private HybridDevelopmentSystem hybridDevelopmentSystem;
     [SerializeField] private DevelopmentSystem developmentSystem;
     [SerializeField] private InventorySystem inventorySystem;
+    [SerializeField] private CheckoutItemSystem checkoutItemSystem;
 
     [Header("親花A")]
     [SerializeField] private Image flowerAImage;
@@ -32,7 +33,7 @@ public class HybridTabUI : MonoBehaviour
     [SerializeField] private Button selectFlowerBButton;
 
     [Header("交配情報")]
-    [Tooltip("必要素材と現在の状態をまとめて表示します。")]
+    [Tooltip("枯ラサンついの必要状態だけを簡潔に表示します。")]
     [SerializeField] private TMP_Text requirementText;
     [SerializeField] private TMP_Text costText;
     [SerializeField] private TMP_Text daysText;
@@ -121,25 +122,16 @@ public class HybridTabUI : MonoBehaviour
 
         bool active = hybridDevelopmentSystem != null && hybridDevelopmentSystem.HasActiveJob;
         bool canStart = false;
-        string reason = "新種開発システムが見つかりません";
         if (hybridDevelopmentSystem != null)
-            canStart = hybridDevelopmentSystem.CanStartHybrid(selectedFlowerA, selectedFlowerB, out reason);
+            canStart = hybridDevelopmentSystem.CanStartHybrid(selectedFlowerA, selectedFlowerB, out _);
 
         if (requirementText != null)
         {
-            string aName = selectedFlowerA != null ? selectedFlowerA.flowerName : "花A";
-            string bName = selectedFlowerB != null ? selectedFlowerB.flowerName : "花B";
-
-            string status;
-            if (active)
-                status = $"新種開発中　残り{hybridDevelopmentSystem.GetRemainingDays()}日";
-            else if (!string.IsNullOrWhiteSpace(hybridDevelopmentSystem?.LastResultMessage))
-                status = hybridDevelopmentSystem.LastResultMessage;
-            else
-                status = canStart ? "交配可能" : reason;
-
-            requirementText.text =
-                $"必要：\n{aName} ×1\n{bName} ×1\n枯ラサンつい ×1\n\n{status}";
+            bool hasKarasanTsui = checkoutItemSystem != null &&
+                                  checkoutItemSystem.GetStockQuantity(DevelopmentSystem.KarasanTsuiItemId) >= 1;
+            requirementText.text = hasKarasanTsui
+                ? "枯ラサンつい -1"
+                : "枯ラサンついが必要";
         }
 
         if (costText != null)
@@ -299,6 +291,8 @@ public class HybridTabUI : MonoBehaviour
             developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
         if (inventorySystem == null)
             inventorySystem = FindFirstObjectByType<InventorySystem>();
+        if (checkoutItemSystem == null)
+            checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
         if (hybridDevelopmentSystem == null)
             hybridDevelopmentSystem = FindFirstObjectByType<HybridDevelopmentSystem>();
 
