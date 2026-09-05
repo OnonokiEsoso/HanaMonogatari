@@ -76,14 +76,13 @@ public class HybridDevelopmentSystem : MonoBehaviour
 
     public int GetResearchCost(FlowerData a, FlowerData b)
     {
-        HybridRecipeDefinition recipe = FindRecipe(a, b);
-        return recipe != null ? Mathf.Max(0, recipe.researchCost) : DefaultResearchCost;
+        return DefaultResearchCost;
     }
 
     public int GetResearchDays(FlowerData a, FlowerData b)
     {
         HybridRecipeDefinition recipe = FindRecipe(a, b);
-        return recipe != null ? Mathf.Max(1, recipe.researchDays) : FailureDays;
+        return recipe != null ? DefaultSuccessDays : FailureDays;
     }
 
     public bool CanStartHybrid(FlowerData a, FlowerData b, out string reason)
@@ -133,8 +132,7 @@ public class HybridDevelopmentSystem : MonoBehaviour
             return false;
         }
 
-        int cost = GetResearchCost(a, b);
-        if (shopManager == null || shopManager.Money < cost)
+        if (shopManager == null || shopManager.Money < DefaultResearchCost)
         {
             reason = "所持金が足りません";
             return false;
@@ -153,7 +151,7 @@ public class HybridDevelopmentSystem : MonoBehaviour
         }
 
         HybridRecipeDefinition recipe = FindRecipe(a, b);
-        int cost = GetResearchCost(a, b);
+        int cost = DefaultResearchCost;
         if (!shopManager.TrySpendMoney(cost))
             return false;
 
@@ -183,7 +181,7 @@ public class HybridDevelopmentSystem : MonoBehaviour
         activeJob.parentB = b;
         activeJob.willSucceed = recipe != null;
         activeJob.resultHybridName = recipe?.hybridName ?? string.Empty;
-        activeJob.remainingDays = recipe != null ? Mathf.Max(1, recipe.researchDays) : FailureDays;
+        activeJob.remainingDays = recipe != null ? DefaultSuccessDays : FailureDays;
         activeJob.paidCost = cost;
         lastResultMessage = string.Empty;
 
@@ -295,19 +293,19 @@ public class HybridDevelopmentSystem : MonoBehaviour
             R("アジワリ", "アジサイ", "ヒマワリ"),
             R("スイートモス", "スイートピー", "コスモス"),
             R("パンスライス", "パンジー", "レモンスライス"),
-            R("紫バラ", "黒バラ", "青バラ", 50000, 15),
+            R("紫バラ", "黒バラ", "青バラ"),
             R("ユリップ", "ユリ", "チューリップ"),
             R("コスミソウ", "コスモス", "カスミソウ"),
             R("ダリネーション", "ダリア", "カーネーション"),
             R("スイーセンピー", "スイセン", "スイートピー"),
             R("シクラジサイ", "シクラメン", "アジサイ"),
             R("ヒマセチア", "ヒマワリ", "ポインセチア"),
-            R("サギュリ", "サギソウ", "ユリ", 45000, 15),
+            R("サギュリ", "サギソウ", "ユリ"),
             R("トロピカリア", "トロピカルフラワー", "ダリア"),
             R("ジギステラ", "オジギソウ", "モンステラ"),
-            R("ウツボキリン", "ウツボカズラ", "花麒麟", 40000, 15),
-            R("月下ユリ", "月下美人", "ユリ", 50000, 15),
-            R("ファイヤーコスモス", "ファイヤーワークスペラルゴニウム", "コスモス", 45000, 15),
+            R("ウツボキリン", "ウツボカズラ", "花麒麟"),
+            R("月下ユリ", "月下美人", "ユリ"),
+            R("ファイヤーコスモス", "ファイヤーワークスペラルゴニウム", "コスモス"),
             R("スイートサクラ", "スイートピー", "桜（枝）"),
             R("レモンセチア", "レモンスライス", "ポインセチア"),
             R("チューラメン", "チューリップ", "シクラメン"),
@@ -319,15 +317,15 @@ public class HybridDevelopmentSystem : MonoBehaviour
         };
     }
 
-    private static HybridRecipeDefinition R(string result, string a, string b, int cost = DefaultResearchCost, int days = DefaultSuccessDays)
+    private static HybridRecipeDefinition R(string result, string a, string b)
     {
         return new HybridRecipeDefinition
         {
             hybridName = result,
             parentAName = a,
             parentBName = b,
-            researchCost = cost,
-            researchDays = days
+            researchCost = DefaultResearchCost,
+            researchDays = DefaultSuccessDays
         };
     }
 }
