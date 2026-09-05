@@ -5,17 +5,11 @@ using UnityEngine.UI;
 
 /// <summary>
 /// ホーム画面から開く「開発」パネルを管理します。
-/// ver0.0.6では「開発 / 作成 / 新種開発」の3タブを持ち、
-/// 開発・作成の両タブで同じDevelopmentItemプレハブを自動生成して使います。
+/// 開発・作成では同じDevelopmentItemプレハブを使い、作成タブには解禁済み交配花も追加します。
 /// </summary>
 public class DevelopmentPanelUI : MonoBehaviour
 {
-    private enum PanelTab
-    {
-        Development,
-        Production,
-        Hybrid
-    }
+    private enum PanelTab { Development, Production, Hybrid }
 
     private static readonly DevelopmentId[] DefaultDevelopmentOrder =
     {
@@ -28,9 +22,9 @@ public class DevelopmentPanelUI : MonoBehaviour
 
     [Header("参照")]
     [SerializeField] private DevelopmentSystem developmentSystem;
+    [SerializeField] private HybridDevelopmentSystem hybridDevelopmentSystem;
 
     [Header("表示")]
-    [Tooltip("開発パネル全体のルート。未設定ならこのGameObjectを使用します。")]
     [SerializeField] private GameObject panelRoot;
 
     [Header("タブ")]
@@ -42,65 +36,58 @@ public class DevelopmentPanelUI : MonoBehaviour
     [SerializeField] private GameObject hybridTab;
 
     [Header("共通カードプレハブ")]
-    [Tooltip("開発・作成の両方で使うDevelopmentItemプレハブ。")]
     [SerializeField] private DevelopmentItemUI developmentItemPrefab;
 
     [Header("開発カード生成")]
-    [Tooltip("DevelopmentTab側のScrollView/Viewport/Content。未設定ならDevelopmentTab配下の『Content』を自動取得します。")]
     [SerializeField] private Transform developmentContent;
     [SerializeField] private DevelopmentItemUI[] developmentItems;
 
     [Header("作成カード生成")]
-    [Tooltip("ProductionTab側のScrollView/Viewport/Content。未設定ならProductionTab配下の『Content』を自動取得します。")]
     [SerializeField] private Transform productionContent;
     [SerializeField] private DevelopmentItemUI[] productionItems;
 
     [Header("ボタン")]
-    [Tooltip("パネルを閉じるボタン。任意。")]
     [SerializeField] private Button closeButton;
 
     private PanelTab currentTab = PanelTab.Development;
 
     private void Awake()
     {
-        if (panelRoot == null)
-            panelRoot = gameObject;
-
-        if (developmentSystem == null)
-            developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
-
+        if (panelRoot == null) panelRoot = gameObject;
+        ResolveSystems();
         AutoFindTabReferences();
         AutoFindContents();
         EnsureDevelopmentItems();
         EnsureProductionItems();
+        EnsureHybridProductionItems();
         BindAllItems();
 
-        if (closeButton != null)
-            closeButton.onClick.AddListener(HidePanel);
-        if (developmentTabButton != null)
-            developmentTabButton.onClick.AddListener(ShowDevelopmentTab);
-        if (productionTabButton != null)
-            productionTabButton.onClick.AddListener(ShowProductionTab);
-        if (hybridTabButton != null)
-            hybridTabButton.onClick.AddListener(ShowHybridTab);
-
+        if (closeButton != null) closeButton.onClick.AddListener(HidePanel);
+        if (developmentTabButton != null) developmentTabButton.onClick.AddListener(ShowDevelopmentTab);
+        if (productionTabButton != null) productionTabButton.onClick.AddListener(ShowProductionTab);
+        if (hybridTabButton != null) hybridTabButton.onClick.AddListener(ShowHybridTab);
         ApplyTabVisibility();
     }
 
     private void OnEnable()
     {
-        if (developmentSystem == null)
-            developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
-
+        ResolveSystems();
         if (developmentSystem != null)
         {
             developmentSystem.OnChanged += Refresh;
             developmentSystem.OnJobCompleted += HandleJobCompleted;
         }
+        if (hybridDevelopmentSystem != null)
+        {
+            hybridDevelopmentSystem.OnChanged += Refresh;
+            hybridDevelopmentSystem.OnResearchCompleted += HandleJobCompleted;
+            hybridDevelopmentSystem.OnProductionCompleted += HandleJobCompleted;
+        }
 
         AutoFindContents();
         EnsureDevelopmentItems();
         EnsureProductionItems();
+        EnsureHybridProductionItems();
         BindAllItems();
         Refresh();
     }
@@ -112,35 +99,35 @@ public class DevelopmentPanelUI : MonoBehaviour
             developmentSystem.OnChanged -= Refresh;
             developmentSystem.OnJobCompleted -= HandleJobCompleted;
         }
+        if (hybridDevelopmentSystem != null)
+        {
+            hybridDevelopmentSystem.OnChanged -= Refresh;
+            hybridDevelopmentSystem.OnResearchCompleted -= HandleJobCompleted;
+            hybridDevelopmentSystem.OnProductionCompleted -= HandleJobCompleted;
+        }
     }
 
     private void OnDestroy()
     {
-        if (closeButton != null)
-            closeButton.onClick.RemoveListener(HidePanel);
-        if (developmentTabButton != null)
-            developmentTabButton.onClick.RemoveListener(ShowDevelopmentTab);
-        if (productionTabButton != null)
-            productionTabButton.onClick.RemoveListener(ShowProductionTab);
-        if (hybridTabButton != null)
-            hybridTabButton.onClick.RemoveListener(ShowHybridTab);
+        if (closeButton != null) closeButton.onClick.RemoveListener(HidePanel);
+        if (developmentTabButton != null) developmentTabButton.onClick.RemoveListener(ShowDevelopmentTab);
+        if (productionTabButton != null) productionTabButton.onClick.RemoveListener(ShowProductionTab);
+        if (hybridTabButton != null) hybridTabButton.onClick.RemoveListener(ShowHybridTab);
     }
 
     public void ShowPanel()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(true);
-
+        if (panelRoot != null) panelRoot.SetActive(true);
         AutoFindContents();
         EnsureDevelopmentItems();
         EnsureProductionItems();
+        EnsureHybridProductionItems();
         Refresh();
     }
 
     public void HidePanel()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
+        if (panelRoot != null) panelRoot.SetActive(false);
     }
 
     public void ShowDevelopmentTab()
@@ -157,7 +144,8 @@ public class DevelopmentPanelUI : MonoBehaviour
         ApplyTabVisibility();
         AutoFindContents();
         EnsureProductionItems();
-        BindProductionItems();
+        EnsureHybridProductionItems();
+        BindAllItems();
         Refresh();
     }
 
@@ -169,181 +157,154 @@ public class DevelopmentPanelUI : MonoBehaviour
 
     public void Refresh()
     {
-        if (developmentSystem == null)
-            developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
-
+        ResolveSystems();
         AutoFindContents();
         EnsureDevelopmentItems();
         EnsureProductionItems();
+        EnsureHybridProductionItems();
         BindAllItems();
 
-        foreach (DevelopmentItemUI item in developmentItems ?? Array.Empty<DevelopmentItemUI>())
-            item?.Refresh();
+        foreach (DevelopmentItemUI item in developmentItems ?? Array.Empty<DevelopmentItemUI>()) item?.Refresh();
+        foreach (DevelopmentItemUI item in productionItems ?? Array.Empty<DevelopmentItemUI>()) item?.Refresh();
 
-        foreach (DevelopmentItemUI item in productionItems ?? Array.Empty<DevelopmentItemUI>())
-            item?.Refresh();
+        if (productionContent != null)
+        {
+            foreach (DevelopmentItemUI item in productionContent.GetComponentsInChildren<DevelopmentItemUI>(true)
+                         .Where(x => x != null && x.Mode == DevelopmentItemUI.DisplayMode.HybridProduction))
+                item.Refresh();
+        }
     }
 
-    private void HandleJobCompleted(string message)
-    {
-        Refresh();
-    }
+    private void HandleJobCompleted(string message) => Refresh();
 
     private void ApplyTabVisibility()
     {
-        if (developmentTab != null)
-            developmentTab.SetActive(currentTab == PanelTab.Development);
-        if (productionTab != null)
-            productionTab.SetActive(currentTab == PanelTab.Production);
-        if (hybridTab != null)
-            hybridTab.SetActive(currentTab == PanelTab.Hybrid);
+        if (developmentTab != null) developmentTab.SetActive(currentTab == PanelTab.Development);
+        if (productionTab != null) productionTab.SetActive(currentTab == PanelTab.Production);
+        if (hybridTab != null) hybridTab.SetActive(currentTab == PanelTab.Hybrid);
     }
 
     private void BindAllItems()
     {
         BindDevelopmentItems();
         BindProductionItems();
+        BindHybridProductionItems();
     }
 
     private void BindDevelopmentItems()
     {
-        if (developmentSystem == null || developmentItems == null)
-            return;
-
+        if (developmentSystem == null || developmentItems == null) return;
         for (int i = 0; i < developmentItems.Length && i < DefaultDevelopmentOrder.Length; i++)
-        {
-            if (developmentItems[i] != null)
-                developmentItems[i].Bind(developmentSystem, DefaultDevelopmentOrder[i], DevelopmentItemUI.DisplayMode.Development);
-        }
+            developmentItems[i]?.Bind(developmentSystem, DefaultDevelopmentOrder[i], DevelopmentItemUI.DisplayMode.Development);
     }
 
     private void BindProductionItems()
     {
-        if (developmentSystem == null || productionItems == null)
-            return;
-
+        if (developmentSystem == null || productionItems == null) return;
         for (int i = 0; i < productionItems.Length && i < DefaultDevelopmentOrder.Length; i++)
+            productionItems[i]?.Bind(developmentSystem, DefaultDevelopmentOrder[i], DevelopmentItemUI.DisplayMode.Production);
+    }
+
+    private void BindHybridProductionItems()
+    {
+        if (productionContent == null || hybridDevelopmentSystem == null) return;
+        foreach (HybridRecipeDefinition recipe in hybridDevelopmentSystem.GetUnlockedRecipes())
         {
-            if (productionItems[i] != null)
-                productionItems[i].Bind(developmentSystem, DefaultDevelopmentOrder[i], DevelopmentItemUI.DisplayMode.Production);
+            DevelopmentItemUI item = productionContent.GetComponentsInChildren<DevelopmentItemUI>(true)
+                .FirstOrDefault(x => x != null && x.gameObject.name == $"HybridProductionItem_{recipe.hybridName}");
+            item?.BindHybrid(developmentSystem, hybridDevelopmentSystem, recipe.hybridName);
         }
     }
 
     private void EnsureDevelopmentItems()
     {
-        developmentItems = EnsureItemsForContent(
-            developmentContent,
-            developmentItems,
-            DevelopmentItemUI.DisplayMode.Development,
-            "DevelopmentItem");
+        developmentItems = EnsureItemsForContent(developmentContent, DevelopmentItemUI.DisplayMode.Development, "DevelopmentItem");
     }
 
     private void EnsureProductionItems()
     {
-        productionItems = EnsureItemsForContent(
-            productionContent,
-            productionItems,
-            DevelopmentItemUI.DisplayMode.Production,
-            "ProductionItem");
+        productionItems = EnsureItemsForContent(productionContent, DevelopmentItemUI.DisplayMode.Production, "ProductionItem");
     }
 
-    private DevelopmentItemUI[] EnsureItemsForContent(
-        Transform content,
-        DevelopmentItemUI[] currentItems,
-        DevelopmentItemUI.DisplayMode mode,
-        string objectNamePrefix)
+    private DevelopmentItemUI[] EnsureItemsForContent(Transform content, DevelopmentItemUI.DisplayMode mode, string prefix)
     {
-        DevelopmentItemUI[] found = FindItems(content);
-        int currentCount = found.Length;
+        if (content == null) return Array.Empty<DevelopmentItemUI>();
 
-        if (currentCount >= DefaultDevelopmentOrder.Length)
-            return found.Take(DefaultDevelopmentOrder.Length).ToArray();
+        DevelopmentItemUI[] found = content.GetComponentsInChildren<DevelopmentItemUI>(true)
+            .Where(item => item != null && item.Mode != DevelopmentItemUI.DisplayMode.HybridProduction)
+            .OrderBy(item => item.transform.GetSiblingIndex())
+            .Take(DefaultDevelopmentOrder.Length)
+            .ToArray();
 
-        if (content == null)
-            return found;
+        DevelopmentItemUI template = developmentItemPrefab != null ? developmentItemPrefab : found.FirstOrDefault();
+        if (template == null) return found;
 
-        DevelopmentItemUI template = developmentItemPrefab;
-        if (template == null && currentCount > 0)
-            template = found[0];
-
-        if (template == null)
-        {
-            Debug.LogWarning("DevelopmentPanelUI: Development Item Prefab が未設定です。同じプレハブを開発・作成で共通利用します。");
-            return found;
-        }
-
-        for (int i = currentCount; i < DefaultDevelopmentOrder.Length; i++)
+        for (int i = found.Length; i < DefaultDevelopmentOrder.Length; i++)
         {
             DevelopmentItemUI created = Instantiate(template, content);
-            created.gameObject.name = $"{objectNamePrefix}_{DefaultDevelopmentOrder[i]}";
+            created.gameObject.name = $"{prefix}_{DefaultDevelopmentOrder[i]}";
             created.gameObject.SetActive(true);
             created.Bind(developmentSystem, DefaultDevelopmentOrder[i], mode);
         }
 
-        return FindItems(content).Take(DefaultDevelopmentOrder.Length).ToArray();
+        return content.GetComponentsInChildren<DevelopmentItemUI>(true)
+            .Where(item => item != null && item.Mode != DevelopmentItemUI.DisplayMode.HybridProduction)
+            .OrderBy(item => item.transform.GetSiblingIndex())
+            .Take(DefaultDevelopmentOrder.Length)
+            .ToArray();
     }
 
-    private DevelopmentItemUI[] FindItems(Transform content)
+    private void EnsureHybridProductionItems()
     {
-        if (content == null)
-            return Array.Empty<DevelopmentItemUI>();
+        if (productionContent == null || developmentItemPrefab == null || hybridDevelopmentSystem == null) return;
 
-        return content
-            .GetComponentsInChildren<DevelopmentItemUI>(true)
-            .Where(item => item != null)
-            .OrderBy(item => item.transform.GetSiblingIndex())
-            .ToArray();
+        foreach (HybridRecipeDefinition recipe in hybridDevelopmentSystem.GetUnlockedRecipes())
+        {
+            string objectName = $"HybridProductionItem_{recipe.hybridName}";
+            DevelopmentItemUI existing = productionContent.GetComponentsInChildren<DevelopmentItemUI>(true)
+                .FirstOrDefault(x => x != null && x.gameObject.name == objectName);
+            if (existing != null) continue;
+
+            DevelopmentItemUI created = Instantiate(developmentItemPrefab, productionContent);
+            created.gameObject.name = objectName;
+            created.gameObject.SetActive(true);
+            created.BindHybrid(developmentSystem, hybridDevelopmentSystem, recipe.hybridName);
+        }
     }
 
     private void AutoFindContents()
     {
-        if (developmentTab == null || productionTab == null)
-            AutoFindTabReferences();
-
-        // Inspectorで別タブのContentを誤って入れていても、自動的に正しいタブ配下へ戻す。
-        if (!IsChildOf(developmentContent, developmentTab))
-            developmentContent = developmentTab != null ? FindNamedContent(developmentTab.transform) : null;
-
-        if (!IsChildOf(productionContent, productionTab))
-            productionContent = productionTab != null ? FindNamedContent(productionTab.transform) : null;
-    }
-
-    private static bool IsChildOf(Transform candidate, GameObject expectedRoot)
-    {
-        return candidate != null && expectedRoot != null && candidate.IsChildOf(expectedRoot.transform);
+        if (developmentTab == null || productionTab == null) AutoFindTabReferences();
+        if (developmentContent == null || (developmentTab != null && !developmentContent.IsChildOf(developmentTab.transform)))
+            developmentContent = FindNamedContent(developmentTab?.transform);
+        if (productionContent == null || (productionTab != null && !productionContent.IsChildOf(productionTab.transform)))
+            productionContent = FindNamedContent(productionTab?.transform);
     }
 
     private Transform FindNamedContent(Transform root)
     {
-        if (root == null)
-            return null;
-
-        return root
-            .GetComponentsInChildren<Transform>(true)
-            .FirstOrDefault(t => t != null && t.gameObject.name == "Content");
+        return root?.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t != null && t.gameObject.name == "Content");
     }
 
     private void AutoFindTabReferences()
     {
         Button[] buttons = GetComponentsInChildren<Button>(true);
-        GameObject[] objects = GetComponentsInChildren<Transform>(true)
-            .Select(t => t.gameObject)
-            .ToArray();
+        GameObject[] objects = GetComponentsInChildren<Transform>(true).Select(t => t.gameObject).ToArray();
 
-        if (developmentTabButton == null)
-            developmentTabButton = buttons.FirstOrDefault(b => b.gameObject.name == "DevelopmentTabButton");
-        if (productionTabButton == null)
-            productionTabButton = buttons.FirstOrDefault(b => b.gameObject.name == "ProductionTabButton");
-        if (hybridTabButton == null)
-            hybridTabButton = buttons.FirstOrDefault(b => b.gameObject.name == "HybridTabButton");
-        if (closeButton == null)
-            closeButton = buttons.FirstOrDefault(b => b.gameObject.name == "CloseButton");
+        if (developmentTabButton == null) developmentTabButton = buttons.FirstOrDefault(b => b.gameObject.name == "DevelopmentTabButton");
+        if (productionTabButton == null) productionTabButton = buttons.FirstOrDefault(b => b.gameObject.name == "ProductionTabButton");
+        if (hybridTabButton == null) hybridTabButton = buttons.FirstOrDefault(b => b.gameObject.name == "HybridTabButton");
+        if (closeButton == null) closeButton = buttons.FirstOrDefault(b => b.gameObject.name == "CloseButton");
+        if (developmentTab == null) developmentTab = objects.FirstOrDefault(o => o.name == "DevelopmentTab");
+        if (productionTab == null) productionTab = objects.FirstOrDefault(o => o.name == "ProductionTab");
+        if (hybridTab == null) hybridTab = objects.FirstOrDefault(o => o.name == "HybridTab");
+    }
 
-        if (developmentTab == null)
-            developmentTab = objects.FirstOrDefault(o => o.name == "DevelopmentTab");
-        if (productionTab == null)
-            productionTab = objects.FirstOrDefault(o => o.name == "ProductionTab");
-        if (hybridTab == null)
-            hybridTab = objects.FirstOrDefault(o => o.name == "HybridTab");
+    private void ResolveSystems()
+    {
+        if (developmentSystem == null) developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
+        if (hybridDevelopmentSystem == null) hybridDevelopmentSystem = FindFirstObjectByType<HybridDevelopmentSystem>();
+        if (hybridDevelopmentSystem == null && developmentSystem != null)
+            hybridDevelopmentSystem = developmentSystem.gameObject.AddComponent<HybridDevelopmentSystem>();
     }
 }
