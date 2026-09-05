@@ -300,11 +300,17 @@ public class DevelopmentPanelUI : MonoBehaviour
         if (developmentTab == null || productionTab == null)
             AutoFindTabReferences();
 
-        if (developmentContent == null && developmentTab != null)
-            developmentContent = FindNamedContent(developmentTab.transform);
+        // Inspectorで別タブのContentを誤って入れていても、自動的に正しいタブ配下へ戻す。
+        if (!IsChildOf(developmentContent, developmentTab))
+            developmentContent = developmentTab != null ? FindNamedContent(developmentTab.transform) : null;
 
-        if (productionContent == null && productionTab != null)
-            productionContent = FindNamedContent(productionTab.transform);
+        if (!IsChildOf(productionContent, productionTab))
+            productionContent = productionTab != null ? FindNamedContent(productionTab.transform) : null;
+    }
+
+    private static bool IsChildOf(Transform candidate, GameObject expectedRoot)
+    {
+        return candidate != null && expectedRoot != null && candidate.IsChildOf(expectedRoot.transform);
     }
 
     private Transform FindNamedContent(Transform root)
