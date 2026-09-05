@@ -6,7 +6,7 @@ using UnityEngine;
 /// <summary>
 /// ver0.0.6 の開発・作成を管理します。
 /// 開発と作成は同じ1枠を共有し、日付が1日進むたびに残り日数が減ります。
-/// 開発済みの自社製品は、お金と時間だけで確実に作成できます。
+/// 新種開発も同じ作業枠を共有できるよう、外部作業フラグを持ちます。
 /// </summary>
 public class DevelopmentSystem : MonoBehaviour
 {
@@ -34,10 +34,13 @@ public class DevelopmentSystem : MonoBehaviour
     [SerializeField] private string lastCompletionMessage;
 
     private int observedAbsoluteDay = -1;
+    private bool externalJobActive;
 
     public IReadOnlyList<DevelopmentDefinition> Definitions => definitions;
     public DevelopmentJobState ActiveJob => activeJob;
     public bool HasActiveJob => activeJob != null && activeJob.IsActive;
+    public bool HasExternalJob => externalJobActive;
+    public bool HasAnyActiveWork => HasActiveJob || externalJobActive;
     public bool IsDevelopmentFeatureUnlocked => shopManager != null && shopManager.ShopRating >= DevelopmentUnlockShopRating;
     public bool IsNewSpeciesDevelopmentUnlocked => IsCompleted(DevelopmentId.KarasanTsui);
     public string LastCompletionMessage => lastCompletionMessage;
@@ -108,10 +111,19 @@ public class DevelopmentSystem : MonoBehaviour
         return ArePrerequisitesCompleted(definition);
     }
 
+    public void SetExternalJobActive(bool active)
+    {
+        if (externalJobActive == active)
+            return;
+
+        externalJobActive = active;
+        OnChanged?.Invoke();
+    }
+
     public bool CanStartDevelopment(DevelopmentId id, FlowerData materialFlower = null)
     {
         DevelopmentDefinition definition = GetDefinition(id);
-        if (definition == null || HasActiveJob || IsCompleted(id))
+        if (definition == null || HasAnyActiveWork || IsCompleted(id))
             return false;
 
         if (!IsDevelopmentFeatureUnlocked || shopManager == null || shopManager.ShopRating < definition.requiredShopRating)
@@ -134,7 +146,7 @@ public class DevelopmentSystem : MonoBehaviour
         DevelopmentDefinition definition = GetDefinition(id);
         if (!CanStartDevelopment(id, materialFlower))
         {
-            Debug.Log($"開発『{definition?.displayName ?? id.ToString()}』を開始できません。条件・材料・所持金を確認してください。");
+            Debug.Log($"開発『{definition?.displayName ?? id.ToString()}』を開始できません。条件・材料・所持金・進行中作業を確認してください。");
             return false;
         }
 
@@ -160,7 +172,7 @@ public class DevelopmentSystem : MonoBehaviour
     public bool CanStartProduction(DevelopmentId id)
     {
         DevelopmentDefinition definition = GetDefinition(id);
-        if (definition == null || HasActiveJob || !IsCompleted(id) || shopManager == null)
+        if (definition == null || HasAnyActiveWork || !IsCompleted(id) || shopManager == null)
             return false;
 
         return shopManager.Money >= definition.productionCost;
@@ -195,7 +207,7 @@ public class DevelopmentSystem : MonoBehaviour
 
     public bool HasAnyImmediatelyStartableDevelopment()
     {
-        if (!IsDevelopmentFeatureUnlocked || HasActiveJob)
+        if (!IsDevelopmentFeatureUnlocked || HasAnyActiveWork)
             return false;
 
         foreach (DevelopmentDefinition definition in definitions)
@@ -230,6 +242,7 @@ public class DevelopmentSystem : MonoBehaviour
         NormalizeProgressStates();
         activeJob ??= new DevelopmentJobState();
         activeJob.Clear();
+        externalJobActive = false;
 
         foreach (DevelopmentDefinition definition in definitions)
         {
@@ -493,7 +506,7 @@ public class DevelopmentSystem : MonoBehaviour
         string completed = string.Join(", ", definitions.Where(d => d != null && IsCompleted(d.id)).Select(d => d.displayName));
         string job = HasActiveJob
             ? $"{activeJob.jobType} / {GetDefinition(activeJob.targetId)?.displayName} / 残り{activeJob.remainingDays}日"
-            : "なし";
+            : externalJobActive ? "新種開発" : "なし";
         Debug.Log($"開発解禁:{IsDevelopmentFeatureUnlocked} / 完了:[{completed}] / 進行中:{job}");
     }
 }
