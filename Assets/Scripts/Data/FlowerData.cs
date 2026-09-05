@@ -40,6 +40,10 @@ public class FlowerData : ScriptableObject
     [Tooltip("1本・1個あたりの基準仕入れ価格。仕入れを行わない交配花では0でも構いません。")]
     public int purchasePrice;
 
+    [Min(0)]
+    [Tooltip("仕入れ価格を持たない作成品向けのおすすめ販売価格。0なら従来どおり仕入価格×2を使用します。")]
+    public int recommendedSalePrice;
+
     [Min(1)]
     [Tooltip("仕入れてから寿命を迎えるまでの日数")]
     public int freshnessDays = 1;
@@ -73,11 +77,6 @@ public class FlowerData : ScriptableObject
     [Tooltip("一覧で並べる順番。Excelの『ソート時の振り分け番号』に対応します。")]
     public int sortOrder = 9999;
 
-    /// <summary>
-    /// この商品が持つ全色属性を返します。
-    /// colors が未設定の既存データでは、従来の color を1色として返します。
-    /// color と colors の両方が設定されている場合は重複を除いて統合します。
-    /// </summary>
     public IReadOnlyList<string> GetColors()
     {
         List<string> result = new();
@@ -101,10 +100,6 @@ public class FlowerData : ScriptableObject
         return result;
     }
 
-    /// <summary>
-    /// 指定した色属性を持っているか返します。
-    /// 交配花が「赤・緑」を持つ場合、赤でも緑でもtrueになります。
-    /// </summary>
     public bool HasColor(string targetColor)
     {
         if (string.IsNullOrWhiteSpace(targetColor))
@@ -114,19 +109,12 @@ public class FlowerData : ScriptableObject
         return GetColors().Any(value => string.Equals(value, normalized, StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// UI表示用の色文字列を返します。例：「赤・緑」。
-    /// </summary>
     public string GetColorDisplayText()
     {
         IReadOnlyList<string> values = GetColors();
         return values.Count > 0 ? string.Join("・", values) : string.Empty;
     }
 
-    /// <summary>
-    /// 複数色をまとめて設定します。
-    /// 先頭色は従来互換用の代表色 color にも同期します。
-    /// </summary>
     public void SetColors(IEnumerable<string> newColors)
     {
         colors = newColors?
@@ -139,9 +127,6 @@ public class FlowerData : ScriptableObject
         color = colors.Count > 0 ? colors[0] : string.Empty;
     }
 
-    /// <summary>
-    /// 指定した季節の珍しさを返します。
-    /// </summary>
     public int GetRarity(Season season)
     {
         return season switch
@@ -154,10 +139,6 @@ public class FlowerData : ScriptableObject
         };
     }
 
-    /// <summary>
-    /// 現在季節の珍しさから、同じ入荷難易度内で使う季節重みを返します。
-    /// 仕様：季節重み = 1 + (10 - 珍しさ) × 0.15
-    /// </summary>
     public float GetSeasonArrivalWeight(Season season)
     {
         int rarity = GetRarity(season);
