@@ -184,8 +184,20 @@ public class HybridTabUI : MonoBehaviour
 
     private void PopulateFlowerSelection()
     {
+        AutoFindReferences();
+
         if (flowerSelectContent == null || flowerSelectItemPrefab == null || inventorySystem == null)
+        {
+            Debug.LogWarning("HybridTabUI: FlowerSelectContent / FlowerSelectItemPrefab / InventorySystem のいずれかが未設定です。");
             return;
+        }
+
+        // 以前の誤配線でDevelopmentItemが花選択Contentへ生成されていた場合は除去する。
+        foreach (DevelopmentItemUI stray in flowerSelectContent.GetComponentsInChildren<DevelopmentItemUI>(true))
+        {
+            if (stray != null)
+                Destroy(stray.gameObject);
+        }
 
         foreach (FlowerSelectItemUI existing in flowerSelectContent.GetComponentsInChildren<FlowerSelectItemUI>(true))
         {
@@ -283,7 +295,6 @@ public class HybridTabUI : MonoBehaviour
         if (hybridDevelopmentSystem == null)
             hybridDevelopmentSystem = FindFirstObjectByType<HybridDevelopmentSystem>();
 
-        // Sceneへの付け忘れでも新種開発タブを開けば動くようにする。
         if (hybridDevelopmentSystem == null && developmentSystem != null)
             hybridDevelopmentSystem = developmentSystem.gameObject.AddComponent<HybridDevelopmentSystem>();
     }
@@ -326,8 +337,12 @@ public class HybridTabUI : MonoBehaviour
         if (flowerSelectPanel == null)
             flowerSelectPanel = transforms.FirstOrDefault(x => x.gameObject.name == "FlowerSelectPanel")?.gameObject;
 
-        if (flowerSelectContent == null && flowerSelectPanel != null)
+        // 花選択Contentは必ずFlowerSelectPanel配下のContentだけを使う。
+        if (flowerSelectPanel != null &&
+            (flowerSelectContent == null || !flowerSelectContent.IsChildOf(flowerSelectPanel.transform)))
+        {
             flowerSelectContent = flowerSelectPanel.GetComponentsInChildren<Transform>(true)
                 .FirstOrDefault(x => x.gameObject.name == "Content");
+        }
     }
 }
