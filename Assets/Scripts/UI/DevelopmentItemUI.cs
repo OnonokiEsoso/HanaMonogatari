@@ -5,21 +5,21 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 開発パネル内のカード1枚を担当します。
-/// 同じDevelopmentItemプレハブを「開発」と「作成」の両方で流用します。
-/// NameText / StateText / RequirementText / CostText / DaysText / DevelopmentButton という
-/// 子オブジェクト名なら、Inspector未設定でも自動で参照を探します。
+/// 同じDevelopmentItemプレハブを「開発」「作成」「交配花作成」で流用します。
 /// </summary>
 public class DevelopmentItemUI : MonoBehaviour
 {
     public enum DisplayMode
     {
         Development,
-        Production
+        Production,
+        HybridProduction
     }
 
     [Header("対象")]
     [SerializeField] private DevelopmentId developmentId;
     [SerializeField] private DisplayMode displayMode = DisplayMode.Development;
+    [SerializeField] private string hybridName;
 
     [Header("表示")]
     [SerializeField] private TMP_Text nameText;
@@ -30,17 +30,18 @@ public class DevelopmentItemUI : MonoBehaviour
     [SerializeField] private Button developmentButton;
 
     private DevelopmentSystem developmentSystem;
+    private HybridDevelopmentSystem hybridDevelopmentSystem;
     private InventorySystem inventorySystem;
     private ShopManager shopManager;
     private CheckoutItemSystem checkoutItemSystem;
 
     public DevelopmentId DevelopmentId => developmentId;
     public DisplayMode Mode => displayMode;
+    public string HybridName => hybridName;
 
     private void Awake()
     {
         AutoFindReferences();
-
         if (developmentButton != null)
             developmentButton.onClick.AddListener(HandleActionClicked);
     }
@@ -56,34 +57,37 @@ public class DevelopmentItemUI : MonoBehaviour
         developmentSystem = system;
         developmentId = id;
         displayMode = mode;
+        hybridName = string.Empty;
+        ResolveReferences();
+        Refresh();
+    }
 
-        if (inventorySystem == null)
-            inventorySystem = FindFirstObjectByType<InventorySystem>();
-        if (shopManager == null)
-            shopManager = FindFirstObjectByType<ShopManager>();
-        if (checkoutItemSystem == null)
-            checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
-
+    public void BindHybrid(DevelopmentSystem system, HybridDevelopmentSystem hybridSystem, string targetHybridName)
+    {
+        developmentSystem = system;
+        hybridDevelopmentSystem = hybridSystem;
+        displayMode = DisplayMode.HybridProduction;
+        hybridName = targetHybridName;
+        ResolveReferences();
         Refresh();
     }
 
     public void Refresh()
     {
-        if (developmentSystem == null)
-            developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
+        ResolveReferences();
+
+        if (displayMode == DisplayMode.HybridProduction)
+        {
+            RefreshHybridProduction();
+            return;
+        }
+
         if (developmentSystem == null)
             return;
 
         DevelopmentDefinition definition = developmentSystem.GetDefinition(developmentId);
         if (definition == null)
             return;
-
-        if (inventorySystem == null)
-            inventorySystem = FindFirstObjectByType<InventorySystem>();
-        if (shopManager == null)
-            shopManager = FindFirstObjectByType<ShopManager>();
-        if (checkoutItemSystem == null)
-            checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
 
         if (displayMode == DisplayMode.Production)
             RefreshProduction(definition);
@@ -105,57 +109,40 @@ public class DevelopmentItemUI : MonoBehaviour
             SetLockedDisplay($"店評価 {DevelopmentSystem.DevelopmentUnlockShopRating:N0} で開発機能が解禁します");
             return;
         }
-
         if (!prerequisitesDone)
         {
             SetLockedDisplay("前提となる開発が必要です");
             return;
         }
 
-        if (nameText != null)
-            nameText.text = definition.displayName;
-
+        if (nameText != null) nameText.text = definition.displayName;
         SetRequirementVisible(!completed);
-        if (!completed && requirementText != null)
-            requirementText.text = BuildRequirementText(definition);
-
-        if (costText != null)
-            costText.text = $"{definition.developmentCost:N0}円";
-
-        if (daysText != null)
-            daysText.text = $"{definition.developmentDays}日";
+        if (!completed && requirementText != null) requirementText.text = BuildRequirementText(definition);
+        if (costText != null) costText.text = $"{definition.developmentCost:N0}円";
+        if (daysText != null) daysText.text = $"{definition.developmentDays}日";
 
         if (completed)
         {
-            if (stateText != null)
-                stateText.text = "開発済み";
+            if (stateText != null) stateText.text = "開発済み";
             SetButton("開発済み", false);
             return;
         }
-
         if (isThisJob)
         {
-            int remaining = developmentSystem.GetRemainingDays();
-            if (stateText != null)
-                stateText.text = $"開発中　残り{remaining}日";
+            if (stateText != null) stateText.text = $"開発中　残り{developmentSystem.GetRemainingDays()}日";
             SetButton("開発中", false);
             return;
         }
-
-        if (developmentSystem.HasActiveJob)
+        if (developmentSystem.HasAnyActiveWork)
         {
-            if (stateText != null)
-                stateText.text = "別の作業を進行中";
+            if (stateText != null) stateText.text = "別の作業を進行中";
             SetButton("開発開始", false);
             return;
         }
 
         FlowerData materialFlower = FindSuitableMaterialFlower(definition);
         bool canStart = developmentSystem.CanStartDevelopment(developmentId, materialFlower);
-
-        if (stateText != null)
-            stateText.text = canStart ? "開発可能" : GetUnavailableReason(definition, materialFlower);
-
+        if (stateText != null) stateText.text = canStart ? "開発可能" : GetUnavailableReason(definition, materialFlower);
         SetButton("開発開始", canStart);
     }
 
@@ -177,81 +164,89 @@ public class DevelopmentItemUI : MonoBehaviour
             return;
         }
 
-        if (nameText != null)
-            nameText.text = definition.displayName;
-
+        if (nameText != null) nameText.text = definition.displayName;
         SetRequirementVisible(true);
-        if (requirementText != null)
-            requirementText.text = $"完成数：{definition.productionQuantity}個";
-
-        if (costText != null)
-            costText.text = $"{definition.productionCost:N0}円";
-
-        if (daysText != null)
-            daysText.text = $"{definition.productionDays}日";
+        if (requirementText != null) requirementText.text = $"完成数：{definition.productionQuantity}個";
+        if (costText != null) costText.text = $"{definition.productionCost:N0}円";
+        if (daysText != null) daysText.text = $"{definition.productionDays}日";
 
         if (isThisJob)
         {
-            int remaining = developmentSystem.GetRemainingDays();
-            if (stateText != null)
-                stateText.text = $"作成中　残り{remaining}日";
+            if (stateText != null) stateText.text = $"作成中　残り{developmentSystem.GetRemainingDays()}日";
             SetButton("作成中", false);
             return;
         }
-
-        if (developmentSystem.HasActiveJob)
+        if (developmentSystem.HasAnyActiveWork)
         {
-            if (stateText != null)
-                stateText.text = "別の作業を進行中";
+            if (stateText != null) stateText.text = "別の作業を進行中";
             SetButton("作成開始", false);
             return;
         }
 
         bool canStart = developmentSystem.CanStartProduction(developmentId);
         if (stateText != null)
+            stateText.text = canStart ? "作成可能" : (shopManager != null && shopManager.Money < definition.productionCost ? "所持金不足" : "作成不可");
+        SetButton("作成開始", canStart);
+    }
+
+    private void RefreshHybridProduction()
+    {
+        if (hybridDevelopmentSystem == null || string.IsNullOrWhiteSpace(hybridName))
+            return;
+
+        HybridRecipeDefinition recipe = hybridDevelopmentSystem.GetRecipeByHybridName(hybridName);
+        if (recipe == null)
+            return;
+
+        if (nameText != null) nameText.text = recipe.hybridName;
+        SetRequirementVisible(true);
+        if (requirementText != null)
+            requirementText.text = $"{recipe.parentAName} ×{recipe.parentAQuantity}\n{recipe.parentBName} ×{recipe.parentBQuantity}\n完成数：{recipe.productionQuantity}個";
+        if (costText != null) costText.text = $"{recipe.productionCost:N0}円";
+        if (daysText != null) daysText.text = $"{recipe.productionDays}日";
+
+        bool isThisJob = hybridDevelopmentSystem.HasProductionJob &&
+                         hybridDevelopmentSystem.ActiveProductionJob != null &&
+                         string.Equals(hybridDevelopmentSystem.ActiveProductionJob.hybridName, hybridName, System.StringComparison.Ordinal);
+        if (isThisJob)
         {
-            if (canStart)
-                stateText.text = "作成可能";
-            else if (shopManager != null && shopManager.Money < definition.productionCost)
-                stateText.text = "所持金不足";
-            else
-                stateText.text = "作成不可";
+            if (stateText != null) stateText.text = $"作成中　残り{hybridDevelopmentSystem.GetProductionRemainingDays()}日";
+            SetButton("作成中", false);
+            return;
         }
 
+        bool canStart = hybridDevelopmentSystem.CanStartHybridProduction(hybridName, out string reason);
+        if (stateText != null) stateText.text = canStart ? "作成可能" : reason;
         SetButton("作成開始", canStart);
     }
 
     private void HandleActionClicked()
     {
-        if (developmentSystem == null)
-            return;
+        ResolveReferences();
 
-        if (displayMode == DisplayMode.Production)
+        if (displayMode == DisplayMode.HybridProduction)
         {
-            if (developmentSystem.TryStartProduction(developmentId))
+            if (hybridDevelopmentSystem != null && hybridDevelopmentSystem.TryStartHybridProduction(hybridName))
                 Refresh();
             return;
         }
 
-        DevelopmentDefinition definition = developmentSystem.GetDefinition(developmentId);
-        if (definition == null)
+        if (developmentSystem == null) return;
+        if (displayMode == DisplayMode.Production)
+        {
+            if (developmentSystem.TryStartProduction(developmentId)) Refresh();
             return;
+        }
 
+        DevelopmentDefinition definition = developmentSystem.GetDefinition(developmentId);
+        if (definition == null) return;
         FlowerData materialFlower = FindSuitableMaterialFlower(definition);
-        if (developmentSystem.TryStartDevelopment(developmentId, materialFlower))
-            Refresh();
+        if (developmentSystem.TryStartDevelopment(developmentId, materialFlower)) Refresh();
     }
 
     private FlowerData FindSuitableMaterialFlower(DevelopmentDefinition definition)
     {
-        if (definition == null || !definition.requiresFlower)
-            return null;
-
-        if (inventorySystem == null)
-            inventorySystem = FindFirstObjectByType<InventorySystem>();
-        if (inventorySystem == null)
-            return null;
-
+        if (definition == null || !definition.requiresFlower || inventorySystem == null) return null;
         return inventorySystem.Batches
             .Where(b => b != null && b.flower != null && b.quantity > 0)
             .Where(b => b.flower.arrivalDifficulty >= Mathf.Max(1, definition.minimumFlowerArrivalDifficulty))
@@ -265,31 +260,23 @@ public class DevelopmentItemUI : MonoBehaviour
     {
         string text = "必要：";
         bool hasAny = false;
-
         AppendCheckoutRequirement(ref text, ref hasAny, definition.requiredCheckoutItemId, definition.requiredCheckoutItemQuantity);
         AppendCheckoutRequirement(ref text, ref hasAny, definition.requiredCheckoutItemId2, definition.requiredCheckoutItemQuantity2);
 
         if (definition.requiresFlower)
         {
             if (hasAny) text += "\n";
-            text += definition.minimumFlowerArrivalDifficulty <= 1
-                ? "任意の花 ×1"
-                : $"入荷難易度{definition.minimumFlowerArrivalDifficulty}以上の花 ×1";
-
+            text += definition.minimumFlowerArrivalDifficulty <= 1 ? "任意の花 ×1" : $"入荷難易度{definition.minimumFlowerArrivalDifficulty}以上の花 ×1";
             FlowerData selected = FindSuitableMaterialFlower(definition);
-            if (selected != null)
-                text += $"\n（使用予定：{selected.flowerName} / {selected.GetColorDisplayText()}）";
+            if (selected != null) text += $"\n（使用予定：{selected.flowerName} / {selected.GetColorDisplayText()}）";
             hasAny = true;
         }
-
         return hasAny ? text : "必要：なし";
     }
 
     private void AppendCheckoutRequirement(ref string text, ref bool hasAny, string itemId, int quantity)
     {
-        if (string.IsNullOrWhiteSpace(itemId) || quantity <= 0)
-            return;
-
+        if (string.IsNullOrWhiteSpace(itemId) || quantity <= 0) return;
         if (hasAny) text += "\n";
         text += $"{GetCheckoutItemDisplayName(itemId)} ×{quantity}";
         hasAny = true;
@@ -297,12 +284,8 @@ public class DevelopmentItemUI : MonoBehaviour
 
     private string GetCheckoutItemDisplayName(string itemId)
     {
-        CheckoutItemSystem.CheckoutItemDefinition item = checkoutItemSystem != null
-            ? checkoutItemSystem.GetDefinition(itemId)
-            : null;
-        if (item != null && !string.IsNullOrWhiteSpace(item.displayName))
-            return item.displayName;
-
+        CheckoutItemSystem.CheckoutItemDefinition item = checkoutItemSystem != null ? checkoutItemSystem.GetDefinition(itemId) : null;
+        if (item != null && !string.IsNullOrWhiteSpace(item.displayName)) return item.displayName;
         return itemId switch
         {
             DevelopmentSystem.NutritionItemId => "栄養剤",
@@ -318,25 +301,17 @@ public class DevelopmentItemUI : MonoBehaviour
 
     private string GetUnavailableReason(DevelopmentDefinition definition, FlowerData materialFlower)
     {
-        if (shopManager != null && shopManager.Money < definition.developmentCost)
-            return "所持金不足";
-
+        if (shopManager != null && shopManager.Money < definition.developmentCost) return "所持金不足";
         if (!HasCheckoutMaterial(definition.requiredCheckoutItemId, definition.requiredCheckoutItemQuantity) ||
-            !HasCheckoutMaterial(definition.requiredCheckoutItemId2, definition.requiredCheckoutItemQuantity2))
-            return "材料不足";
-
+            !HasCheckoutMaterial(definition.requiredCheckoutItemId2, definition.requiredCheckoutItemQuantity2)) return "材料不足";
         if (definition.requiresFlower && materialFlower == null)
-            return definition.minimumFlowerArrivalDifficulty <= 1
-                ? "使用できる花がありません"
-                : $"入荷難易度{definition.minimumFlowerArrivalDifficulty}以上の花がありません";
-
+            return definition.minimumFlowerArrivalDifficulty <= 1 ? "使用できる花がありません" : $"入荷難易度{definition.minimumFlowerArrivalDifficulty}以上の花がありません";
         return "条件不足";
     }
 
     private bool HasCheckoutMaterial(string itemId, int quantity)
     {
-        if (string.IsNullOrWhiteSpace(itemId) || quantity <= 0)
-            return true;
+        if (string.IsNullOrWhiteSpace(itemId) || quantity <= 0) return true;
         return checkoutItemSystem != null && checkoutItemSystem.GetStockQuantity(itemId) >= quantity;
     }
 
@@ -353,19 +328,23 @@ public class DevelopmentItemUI : MonoBehaviour
 
     private void SetRequirementVisible(bool visible)
     {
-        if (requirementText != null)
-            requirementText.gameObject.SetActive(visible);
+        if (requirementText != null) requirementText.gameObject.SetActive(visible);
     }
 
     private void SetButton(string label, bool interactable)
     {
-        if (developmentButton == null)
-            return;
-
+        if (developmentButton == null) return;
         developmentButton.interactable = interactable;
         TMP_Text buttonText = developmentButton.GetComponentInChildren<TMP_Text>(true);
-        if (buttonText != null)
-            buttonText.text = label;
+        if (buttonText != null) buttonText.text = label;
+    }
+
+    private void ResolveReferences()
+    {
+        if (inventorySystem == null) inventorySystem = FindFirstObjectByType<InventorySystem>();
+        if (shopManager == null) shopManager = FindFirstObjectByType<ShopManager>();
+        if (checkoutItemSystem == null) checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
+        if (hybridDevelopmentSystem == null) hybridDevelopmentSystem = FindFirstObjectByType<HybridDevelopmentSystem>();
     }
 
     private void AutoFindReferences()
@@ -376,11 +355,7 @@ public class DevelopmentItemUI : MonoBehaviour
         if (requirementText == null) requirementText = texts.FirstOrDefault(t => t.gameObject.name == "RequirementText");
         if (costText == null) costText = texts.FirstOrDefault(t => t.gameObject.name == "CostText");
         if (daysText == null) daysText = texts.FirstOrDefault(t => t.gameObject.name == "DaysText");
-
         if (developmentButton == null)
-        {
-            developmentButton = GetComponentsInChildren<Button>(true)
-                .FirstOrDefault(b => b.gameObject.name == "DevelopmentButton");
-        }
+            developmentButton = GetComponentsInChildren<Button>(true).FirstOrDefault(b => b.gameObject.name == "DevelopmentButton");
     }
 }
