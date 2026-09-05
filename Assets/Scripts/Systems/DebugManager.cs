@@ -63,6 +63,15 @@ public class DebugManager : MonoBehaviour
     [Tooltip("ONにするとゲーム開始時に枯ラサン～枯ラサンついまで全て開発済みにします。作成と新種開発のテスト用です。")]
     [SerializeField] private bool completeAllDevelopmentsOnStart;
 
+    [Header("開発品の初期所持数")]
+    [Tooltip("ONにすると、自社開発品5種の初期在庫を下の数量だけ追加します。交配や作成テスト用です。")]
+    [SerializeField] private bool useDevelopmentItemStockOverride;
+    [Min(0)] [SerializeField] private int startKarasanStock;
+    [Min(0)] [SerializeField] private int startSodatsuChoStock;
+    [Min(0)] [SerializeField] private int startSodatsuTsubuStock;
+    [Min(0)] [SerializeField] private int startSodatsuEkiStock;
+    [Min(0)] [SerializeField] private int startKarasanTsuiStock;
+
     public bool IsDebugMode => debugMode;
 
     private void Awake()
@@ -132,10 +141,19 @@ public class DebugManager : MonoBehaviour
                 forcedCheckoutOffer,
                 forceKeepPowerOnFirstDay,
                 forceKeepPowerPurchaseChance);
+
+            if (useDevelopmentItemStockOverride)
+            {
+                AddDebugDevelopmentStock(DevelopmentSystem.KarasanItemId, startKarasanStock);
+                AddDebugDevelopmentStock(DevelopmentSystem.SodatsuChoItemId, startSodatsuChoStock);
+                AddDebugDevelopmentStock(DevelopmentSystem.SodatsuTsubuItemId, startSodatsuTsubuStock);
+                AddDebugDevelopmentStock(DevelopmentSystem.SodatsuEkiItemId, startSodatsuEkiStock);
+                AddDebugDevelopmentStock(DevelopmentSystem.KarasanTsuiItemId, startKarasanTsuiStock);
+            }
         }
-        else if (useCheckoutOfferOverride || forceKeepPowerOnFirstDay || forceKeepPowerPurchaseChance)
+        else if (useCheckoutOfferOverride || forceKeepPowerOnFirstDay || forceKeepPowerPurchaseChance || useDevelopmentItemStockOverride)
         {
-            Debug.LogWarning("DebugManager: CheckoutItemSystemが見つからないため、レジ横商品デバッグを適用できませんでした。");
+            Debug.LogWarning("DebugManager: CheckoutItemSystemが見つからないため、レジ横商品・開発品在庫デバッグを適用できませんでした。");
         }
 
         if (completeAllDevelopmentsOnStart)
@@ -151,6 +169,14 @@ public class DebugManager : MonoBehaviour
         }
 
         PrintAppliedSettings();
+    }
+
+    private void AddDebugDevelopmentStock(string itemId, int quantity)
+    {
+        if (checkoutItemSystem == null || quantity <= 0)
+            return;
+
+        checkoutItemSystem.AddStock(itemId, quantity, false);
     }
 
     [ContextMenu("DEBUG: 現在の設定をログ表示")]
@@ -172,11 +198,14 @@ public class DebugManager : MonoBehaviour
         string firstDayKeepPowerText = forceKeepPowerOnFirstDay ? "ON" : "OFF";
         string keepPowerPurchaseText = forceKeepPowerPurchaseChance ? "100%" : "通常確率";
         string developmentText = completeAllDevelopmentsOnStart ? "全開発済み" : "通常進行";
+        string developmentStockText = useDevelopmentItemStockOverride
+            ? $"枯ラサン:{startKarasanStock} / そだーつ長:{startSodatsuChoStock} / そだーつ粒:{startSodatsuTsubuStock} / そだーつ液:{startSodatsuEkiStock} / 枯ラサンつい:{startKarasanTsuiStock}"
+            : "通常値";
 
         Debug.Log(
             $"DebugManager設定 / 日付:{dateText} / 所持金:{moneyText} / 店評価:{ratingText} / " +
             $"仕入先:{supplierText} / 累計仕入額:{cumulativeText} / 天候:{rainText} / " +
             $"レジ横強制入荷:{checkoutOfferText} / 初日キープパワー:{firstDayKeepPowerText} / " +
-            $"キープパワー購入:{keepPowerPurchaseText} / 開発:{developmentText}");
+            $"キープパワー購入:{keepPowerPurchaseText} / 開発:{developmentText} / 開発品初期在庫:{developmentStockText}");
     }
 }
