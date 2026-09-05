@@ -32,9 +32,11 @@ public class HybridTabUI : MonoBehaviour
     [SerializeField] private Button selectFlowerBButton;
 
     [Header("交配情報")]
+    [Tooltip("必要素材と現在の状態をまとめて表示します。")]
     [SerializeField] private TMP_Text requirementText;
     [SerializeField] private TMP_Text costText;
     [SerializeField] private TMP_Text daysText;
+    [Tooltip("旧UI互換用。RequirementTextへ統合したため、見つかった場合は非表示にします。")]
     [SerializeField] private TMP_Text stateText;
     [SerializeField] private Button startHybridButton;
 
@@ -65,6 +67,9 @@ public class HybridTabUI : MonoBehaviour
 
         if (flowerSelectPanel != null)
             flowerSelectPanel.SetActive(false);
+
+        if (stateText != null)
+            stateText.gameObject.SetActive(false);
 
         Refresh();
     }
@@ -114,36 +119,39 @@ public class HybridTabUI : MonoBehaviour
         ResolveReferences();
         RefreshSelectedFlowerDisplay();
 
-        if (requirementText != null)
-        {
-            string aName = selectedFlowerA != null ? selectedFlowerA.flowerName : "花A";
-            string bName = selectedFlowerB != null ? selectedFlowerB.flowerName : "花B";
-            requirementText.text = $"必要：\n{aName} ×1\n{bName} ×1\n枯ラサンつい ×1";
-        }
-
-        if (costText != null)
-            costText.text = $"研究費：{HybridDevelopmentSystem.DefaultResearchCost:N0}円";
-
         bool active = hybridDevelopmentSystem != null && hybridDevelopmentSystem.HasActiveJob;
-        if (daysText != null)
-            daysText.text = active
-                ? $"残り：{hybridDevelopmentSystem.GetRemainingDays()}日"
-                : "研究期間：組み合わせによる";
-
         bool canStart = false;
         string reason = "新種開発システムが見つかりません";
         if (hybridDevelopmentSystem != null)
             canStart = hybridDevelopmentSystem.CanStartHybrid(selectedFlowerA, selectedFlowerB, out reason);
 
-        if (stateText != null)
+        if (requirementText != null)
         {
+            string aName = selectedFlowerA != null ? selectedFlowerA.flowerName : "花A";
+            string bName = selectedFlowerB != null ? selectedFlowerB.flowerName : "花B";
+
+            string status;
             if (active)
-                stateText.text = $"新種開発中　残り{hybridDevelopmentSystem.GetRemainingDays()}日";
+                status = $"新種開発中　残り{hybridDevelopmentSystem.GetRemainingDays()}日";
             else if (!string.IsNullOrWhiteSpace(hybridDevelopmentSystem?.LastResultMessage))
-                stateText.text = hybridDevelopmentSystem.LastResultMessage;
+                status = hybridDevelopmentSystem.LastResultMessage;
             else
-                stateText.text = canStart ? "交配可能" : reason;
+                status = canStart ? "交配可能" : reason;
+
+            requirementText.text =
+                $"必要：\n{aName} ×1\n{bName} ×1\n枯ラサンつい ×1\n\n{status}";
         }
+
+        if (costText != null)
+            costText.text = $"研究費：{HybridDevelopmentSystem.DefaultResearchCost:N0}円";
+
+        if (daysText != null)
+            daysText.text = active
+                ? $"期間：{hybridDevelopmentSystem.GetRemainingDays()}日"
+                : "期間未定";
+
+        if (stateText != null && stateText.gameObject.activeSelf)
+            stateText.gameObject.SetActive(false);
 
         if (startHybridButton != null)
             startHybridButton.interactable = canStart;
@@ -192,7 +200,6 @@ public class HybridTabUI : MonoBehaviour
             return;
         }
 
-        // 以前の誤配線でDevelopmentItemが花選択Contentへ生成されていた場合は除去する。
         foreach (DevelopmentItemUI stray in flowerSelectContent.GetComponentsInChildren<DevelopmentItemUI>(true))
         {
             if (stray != null)
@@ -337,7 +344,6 @@ public class HybridTabUI : MonoBehaviour
         if (flowerSelectPanel == null)
             flowerSelectPanel = transforms.FirstOrDefault(x => x.gameObject.name == "FlowerSelectPanel")?.gameObject;
 
-        // 花選択Contentは必ずFlowerSelectPanel配下のContentだけを使う。
         if (flowerSelectPanel != null &&
             (flowerSelectContent == null || !flowerSelectContent.IsChildOf(flowerSelectPanel.transform)))
         {
