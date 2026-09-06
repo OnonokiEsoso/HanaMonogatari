@@ -70,6 +70,13 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private Button developmentButton;
     [SerializeField] private Button openShopButton;
 
+    [Header("倍速ボタン")]
+    [Tooltip("ホームに追加する倍速ボタン。ONの状態で開店するとその日の通常客を倍速処理します。")]
+    [SerializeField] private Button fastForwardButton;
+    [Tooltip("任意。倍速ボタン内のTMPテキストを設定すると『倍速：ON/OFF』を自動表示します。")]
+    [SerializeField] private TMP_Text fastForwardButtonText;
+    [SerializeField] private bool fastForwardEnabled;
+
     [Header("開店演出")]
     [Tooltip("ホームの『開店する』を押してから、お客が来始めるまで開店メッセージを表示する時間。")]
     [Min(0f)] [SerializeField] private float openingAnnouncementDuration = 1.4f;
@@ -77,6 +84,7 @@ public class HomeDashboardUI : MonoBehaviour
     private bool isOpening;
 
     public bool IsHomeVisible => homeUIRoot != null && homeUIRoot.activeSelf;
+    public bool IsFastForwardEnabled => fastForwardEnabled;
 
     private void Awake()
     {
@@ -95,6 +103,10 @@ public class HomeDashboardUI : MonoBehaviour
         if (developmentButton != null)
             developmentButton.onClick.AddListener(HandleDevelopmentClicked);
 
+        if (fastForwardButton != null)
+            fastForwardButton.onClick.AddListener(HandleFastForwardClicked);
+
+        RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
     }
@@ -116,6 +128,7 @@ public class HomeDashboardUI : MonoBehaviour
         if (furnitureSystem != null)
             furnitureSystem.OnChanged += RefreshFurnitureAlert;
 
+        RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
     }
@@ -149,6 +162,9 @@ public class HomeDashboardUI : MonoBehaviour
 
         if (developmentButton != null)
             developmentButton.onClick.RemoveListener(HandleDevelopmentClicked);
+
+        if (fastForwardButton != null)
+            fastForwardButton.onClick.RemoveListener(HandleFastForwardClicked);
     }
 
     public void ShowHome()
@@ -183,6 +199,7 @@ public class HomeDashboardUI : MonoBehaviour
             developmentPanelUI.HidePanel();
 
         Refresh();
+        RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
     }
@@ -221,7 +238,27 @@ public class HomeDashboardUI : MonoBehaviour
                 : trendMessage;
         }
 
+        RefreshFastForwardButton();
         RefreshFurnitureAlert();
+    }
+
+    private void HandleFastForwardClicked()
+    {
+        if (isOpening || (customerUI != null && customerUI.IsShopOpen))
+            return;
+
+        fastForwardEnabled = !fastForwardEnabled;
+        RefreshFastForwardButton();
+        Debug.Log($"HomeDashboardUI: 倍速営業 {(fastForwardEnabled ? "ON" : "OFF")}");
+    }
+
+    private void RefreshFastForwardButton()
+    {
+        if (fastForwardButtonText != null)
+            fastForwardButtonText.text = fastForwardEnabled ? "倍速：ON" : "倍速：OFF";
+
+        if (fastForwardButton != null)
+            fastForwardButton.interactable = !isOpening && (customerUI == null || !customerUI.IsShopOpen);
     }
 
     private void HandleOpenShopClicked()
@@ -241,6 +278,7 @@ public class HomeDashboardUI : MonoBehaviour
     private IEnumerator OpenShopRoutine()
     {
         isOpening = true;
+        RefreshFastForwardButton();
 
         if (openShopButton != null)
             openShopButton.interactable = false;
@@ -251,7 +289,6 @@ public class HomeDashboardUI : MonoBehaviour
         if (developmentPanelUI != null)
             developmentPanelUI.HidePanel();
 
-        // 依頼の成功/失敗確認は「開店する」を押したこの瞬間に固定する。
         if (requestSystem != null)
             requestSystem.ResolveAcceptedRequestAtOpening();
 
@@ -272,7 +309,11 @@ public class HomeDashboardUI : MonoBehaviour
         int day = shopManager != null ? shopManager.CurrentDay : 0;
 
         if (standardPurchaseText != null)
-            standardPurchaseText.text = $"～～～　{month}月{day}/{ShopManager.DaysPerMonth}日、開店　～～～";
+        {
+            standardPurchaseText.text = fastForwardEnabled
+                ? $"～～～　{month}月{day}/{ShopManager.DaysPerMonth}日、開店【倍速】　～～～"
+                : $"～～～　{month}月{day}/{ShopManager.DaysPerMonth}日、開店　～～～";
+        }
 
         if (standardPriceText != null)
             standardPriceText.text = string.Empty;
@@ -286,6 +327,8 @@ public class HomeDashboardUI : MonoBehaviour
         if (salesVisualController != null)
             salesVisualController.PrepareForBusiness();
 
+        // 倍速状態は「開店した瞬間」にその日分として固定する。
+        customerUI.SetFastForwardMode(fastForwardEnabled);
         customerUI.OpenShop();
         HideHome();
 
@@ -293,6 +336,7 @@ public class HomeDashboardUI : MonoBehaviour
             openShopButton.interactable = true;
 
         isOpening = false;
+        RefreshFastForwardButton();
     }
 
     private void HandleRequestClicked()
