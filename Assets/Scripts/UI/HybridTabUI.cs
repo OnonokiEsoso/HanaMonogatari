@@ -7,6 +7,7 @@ using UnityEngine.UI;
 /// <summary>
 /// HybridTab のUIを管理します。
 /// A/Bの花選択、所持花一覧の自動生成、画像/名前反映、交配開始条件判定まで担当します。
+/// 交配開始後は選択UIを隠し、進行中メッセージだけを表示します。
 /// </summary>
 public class HybridTabUI : MonoBehaviour
 {
@@ -41,6 +42,14 @@ public class HybridTabUI : MonoBehaviour
     [SerializeField] private TMP_Text stateText;
     [SerializeField] private Button startHybridButton;
 
+    [Header("交配中表示")]
+    [Tooltip("親花A/Bや×をまとめたParentArea。交配開始中は非表示にします。")]
+    [SerializeField] private GameObject parentArea;
+    [Tooltip("RequirementText / CostText / DaysText をまとめたHybridInfo。交配開始中は非表示にします。")]
+    [SerializeField] private GameObject hybridInfo;
+    [Tooltip("交配開始後に表示するテキスト。GameObject名を HybridProgressText にすると自動取得できます。")]
+    [SerializeField] private TMP_Text hybridProgressText;
+
     [Header("花選択パネル")]
     [SerializeField] private GameObject flowerSelectPanel;
     [SerializeField] private Transform flowerSelectContent;
@@ -51,6 +60,7 @@ public class HybridTabUI : MonoBehaviour
     private FlowerData selectedFlowerA;
     private FlowerData selectedFlowerB;
     private SelectionSide currentSelectionSide;
+    private bool showStartedMessage;
 
     private void Awake()
     {
@@ -72,12 +82,19 @@ public class HybridTabUI : MonoBehaviour
         if (stateText != null)
             stateText.gameObject.SetActive(false);
 
+        if (hybridProgressText != null)
+            hybridProgressText.gameObject.SetActive(false);
+
         Refresh();
     }
 
     private void OnEnable()
     {
         ResolveReferences();
+        AutoFindReferences();
+
+        // 一度タブを離れて戻ってきた場合は「交配中です」に切り替える。
+        showStartedMessage = false;
 
         if (hybridDevelopmentSystem != null)
         {
@@ -93,6 +110,9 @@ public class HybridTabUI : MonoBehaviour
 
     private void OnDisable()
     {
+        // 次にこのタブへ戻った時は「交配中です」と表示する。
+        showStartedMessage = false;
+
         if (hybridDevelopmentSystem != null)
         {
             hybridDevelopmentSystem.OnChanged -= Refresh;
@@ -118,9 +138,15 @@ public class HybridTabUI : MonoBehaviour
     public void Refresh()
     {
         ResolveReferences();
+        AutoFindReferences();
         RefreshSelectedFlowerDisplay();
 
         bool active = hybridDevelopmentSystem != null && hybridDevelopmentSystem.HasActiveJob;
+        ApplyHybridActiveDisplay(active);
+
+        if (active)
+            return;
+
         bool canStart = false;
         if (hybridDevelopmentSystem != null)
             canStart = hybridDevelopmentSystem.CanStartHybrid(selectedFlowerA, selectedFlowerB, out _);
@@ -138,9 +164,7 @@ public class HybridTabUI : MonoBehaviour
             costText.text = $"研究費：{HybridDevelopmentSystem.DefaultResearchCost:N0}円";
 
         if (daysText != null)
-            daysText.text = active
-                ? $"期間：{hybridDevelopmentSystem.GetRemainingDays()}日"
-                : "期間未定";
+            daysText.text = "期間未定";
 
         if (stateText != null && stateText.gameObject.activeSelf)
             stateText.gameObject.SetActive(false);
@@ -148,11 +172,33 @@ public class HybridTabUI : MonoBehaviour
         if (startHybridButton != null)
             startHybridButton.interactable = canStart;
 
-        bool canChangeSelection = !active && developmentSystem != null && !developmentSystem.HasAnyActiveWork;
+        bool canChangeSelection = developmentSystem != null && !developmentSystem.HasAnyActiveWork;
         if (selectFlowerAButton != null)
             selectFlowerAButton.interactable = canChangeSelection;
         if (selectFlowerBButton != null)
             selectFlowerBButton.interactable = canChangeSelection;
+    }
+
+    private void ApplyHybridActiveDisplay(bool active)
+    {
+        if (parentArea != null)
+            parentArea.SetActive(!active);
+
+        if (hybridInfo != null)
+            hybridInfo.SetActive(!active);
+
+        if (startHybridButton != null)
+            startHybridButton.gameObject.SetActive(!active);
+
+        if (flowerSelectPanel != null && active)
+            flowerSelectPanel.SetActive(false);
+
+        if (hybridProgressText != null)
+        {
+            hybridProgressText.gameObject.SetActive(active);
+            if (active)
+                hybridProgressText.text = showStartedMessage ? "交配を開始しました" : "交配中です";
+        }
     }
 
     private void HandleSelectA()
@@ -252,11 +298,15 @@ public class HybridTabUI : MonoBehaviour
             return;
 
         if (hybridDevelopmentSystem.TryStartHybrid(selectedFlowerA, selectedFlowerB))
+        {
+            showStartedMessage = true;
             Refresh();
+        }
     }
 
     private void HandleResearchCompleted(string message)
     {
+        showStartedMessage = false;
         Refresh();
     }
 
@@ -323,6 +373,8 @@ public class HybridTabUI : MonoBehaviour
             daysText = texts.FirstOrDefault(x => x.gameObject.name == "DaysText");
         if (stateText == null)
             stateText = texts.FirstOrDefault(x => x.gameObject.name == "StateText");
+        if (hybridProgressText == null)
+            hybridProgressText = texts.FirstOrDefault(x => x.gameObject.name == "HybridProgressText");
         if (selectionTitleText == null)
             selectionTitleText = texts.FirstOrDefault(x => x.gameObject.name == "TitleText" && x.transform.IsChildOf(flowerSelectPanel != null ? flowerSelectPanel.transform : transform));
 
@@ -335,6 +387,10 @@ public class HybridTabUI : MonoBehaviour
         if (backButton == null)
             backButton = buttons.FirstOrDefault(x => x.gameObject.name == "BackButton");
 
+        if (parentArea == null)
+            parentArea = transforms.FirstOrDefault(x => x.gameObject.name == "ParentArea")?.gameObject;
+        if (hybridInfo == null)
+            hybridInfo = transforms.FirstOrDefault(x => x.gameObject.name == "HybridInfo")?.gameObject;
         if (flowerSelectPanel == null)
             flowerSelectPanel = transforms.FirstOrDefault(x => x.gameObject.name == "FlowerSelectPanel")?.gameObject;
 
