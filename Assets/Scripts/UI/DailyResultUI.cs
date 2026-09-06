@@ -8,6 +8,7 @@ using UnityEngine.UI;
 /// 月末だけは通常の閉店処理の途中でMonthlyResultPanelを表示し、
 /// 維持費支払い後に翌月へ進みます。
 /// 翌日に進む時は黒幕演出で画面を覆い、その裏で日付/UIを更新します。
+/// 黒幕が抜けて翌日のホームが見えた直後、保留中のプレイヤー向け通知を表示します。
 /// </summary>
 public class DailyResultUI : MonoBehaviour
 {
@@ -22,6 +23,7 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private MonthlyResultUI monthlyResultUI;
     [SerializeField] private RequestSystem requestSystem;
     [SerializeField] private DayTransitionCurtainUI dayTransitionCurtainUI;
+    [SerializeField] private GameNotificationBridge gameNotificationBridge;
 
     [Header("旧結果表示（任意・未使用でもOK）")]
     [SerializeField] private GameObject resultPanel;
@@ -36,6 +38,9 @@ public class DailyResultUI : MonoBehaviour
 
     private void Awake()
     {
+        if (gameNotificationBridge == null)
+            gameNotificationBridge = FindFirstObjectByType<GameNotificationBridge>();
+
         if (nextDayButton != null)
             nextDayButton.onClick.AddListener(GoToNextDay);
     }
@@ -157,8 +162,9 @@ public class DailyResultUI : MonoBehaviour
 
         if (dayTransitionCurtainUI == null)
         {
-            // 黒幕が未設定でも従来どおり進行できるようにする。
+            // 黒幕が未設定でも進行し、翌日ホームの更新後に通知を表示する。
             CompleteDayTransition();
+            FlushDayStartNotifications();
             return;
         }
 
@@ -169,7 +175,11 @@ public class DailyResultUI : MonoBehaviour
     {
         isDayTransitioning = true;
 
+        // 全面黒になった瞬間にCompleteDayTransitionが呼ばれ、その裏で翌日の状態へ更新される。
         yield return dayTransitionCurtainUI.PlayTransition(CompleteDayTransition);
+
+        // 黒幕が完全に画面外へ抜け、翌日のホームが見えた直後に未通知項目を表示する。
+        FlushDayStartNotifications();
 
         isDayTransitioning = false;
     }
@@ -177,6 +187,7 @@ public class DailyResultUI : MonoBehaviour
     /// <summary>
     /// 黒幕が画面全体を覆っている間に呼ばれます。
     /// 日付・仕入れ・客・依頼・ホーム表示をここで翌日状態へ更新します。
+    /// 開発/作成完了や仕入先Lvアップ等もこの処理中に発生し、通知Bridgeへ保留されます。
     /// </summary>
     private void CompleteDayTransition()
     {
@@ -197,5 +208,13 @@ public class DailyResultUI : MonoBehaviour
 
         if (shopTabUI != null)
             shopTabUI.ShowBusinessHome();
+    }
+
+    private void FlushDayStartNotifications()
+    {
+        if (gameNotificationBridge == null)
+            gameNotificationBridge = FindFirstObjectByType<GameNotificationBridge>();
+
+        gameNotificationBridge?.FlushPendingNotifications();
     }
 }
