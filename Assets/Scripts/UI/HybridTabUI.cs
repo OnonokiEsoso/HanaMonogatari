@@ -197,7 +197,11 @@ public class HybridTabUI : MonoBehaviour
         {
             hybridProgressText.gameObject.SetActive(active);
             if (active)
-                hybridProgressText.text = showStartedMessage ? "交配を開始しました" : "交配中です";
+            {
+                hybridProgressText.text = showStartedMessage
+                    ? "交配を開始しました"
+                    : $"交配中です。\nあと{hybridDevelopmentSystem.GetRemainingDays()}日";
+            }
         }
     }
 
