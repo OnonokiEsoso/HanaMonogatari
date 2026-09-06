@@ -6,9 +6,7 @@ using UnityEngine;
 
 /// <summary>
 /// 開店から、その日の客を先客順に自動処理する営業UIです。
-/// 花/花束購入後、残り予算があれば設置中のレジ横商品を最大1個だけ追加購入判定します。
-/// 謎のお通げ成功日は、通常購入とは別枠で指定花を1個・777円で追加購入します。
-/// 花束依頼を開店時に達成していた日は、通常客全員の退店後に依頼主が最後に来店して予約花束を受け取ります。
+/// 通常営業と、ホームでONにした倍速営業を切り替えられます。
 /// </summary>
 public class CustomerUI : MonoBehaviour
 {
@@ -29,8 +27,10 @@ public class CustomerUI : MonoBehaviour
     [Header("自動営業")]
     [Tooltip("開店してから最初のお客が入ってくるまでの待ち時間。")]
     [Min(0f)] [SerializeField] private float firstCustomerDelay = 0.5f;
-    [Tooltip("1人の退店演出が終わってから次のお客が入ってくるまでの待ち時間。依頼主の受取前にも使用します。")]
+    [Tooltip("1人の退店演出が終わってから次のお客が入ってくるまでの待ち時間。通常営業だけで使用します。")]
     [Min(0f)] [SerializeField] private float nextCustomerDelay = 1.0f;
+    [Tooltip("倍速営業で列を表示してから最初の会計を始めるまでの短い待ち時間。")]
+    [Min(0f)] [SerializeField] private float fastForwardFirstCustomerDelay = 0.15f;
 
     private readonly Queue<CustomerSystem.VisitingCustomer> waitingCustomers = new();
     private int totalVisitors;
@@ -41,6 +41,7 @@ public class CustomerUI : MonoBehaviour
     private bool hasFinishedToday;
     private bool isProcessingCustomer;
     private bool isProcessingRequestPickup;
+    private bool fastForwardMode;
     private Coroutine businessRoutine;
 
     public bool IsShopOpen => isShopOpen;
@@ -49,6 +50,7 @@ public class CustomerUI : MonoBehaviour
     public int ProcessedVisitors => processedVisitors;
     public int PurchaseCount => purchaseCount;
     public int TotalSales => totalSales;
+    public bool IsFastForwardMode => fastForwardMode;
 
     public event Action OnBusinessFinished;
 
@@ -56,6 +58,19 @@ public class CustomerUI : MonoBehaviour
     {
         SetShopOpen(false);
         RefreshState();
+    }
+
+    /// <summary>
+    /// ホームの倍速ボタンから、次に開店する営業の速度を設定します。
+    /// 営業中の切替は行わず、開店時点の状態をその日1日固定します。
+    /// </summary>
+    public void SetFastForwardMode(bool enabled)
+    {
+        if (isShopOpen || businessRoutine != null)
+            return;
+
+        fastForwardMode = enabled;
+        Debug.Log($"CustomerUI: 次の営業モード = {(fastForwardMode ? "倍速" : "通常")}");
     }
 
     public void OpenShop()
@@ -78,7 +93,14 @@ public class CustomerUI : MonoBehaviour
         SetShopOpen(true);
 
         if (resultText != null)
-            resultText.text = "開店しました！";
+            resultText.text = fastForwardMode ? "開店しました！（倍速）" : "開店しました！";
+
+        if (fastForwardMode && salesVisualController != null && waitingCustomers.Count > 0)
+        {
+            List<CustomerSystem.VisitingCustomer> queueSnapshot =
+                new List<CustomerSystem.VisitingCustomer>(waitingCustomers);
+            salesVisualController.PrepareFastCustomerQueue(queueSnapshot);
+        }
 
         RefreshState();
 
@@ -93,19 +115,24 @@ public class CustomerUI : MonoBehaviour
 
     private IEnumerator ProcessAllCustomersRoutine()
     {
-        if (firstCustomerDelay > 0f && waitingCustomers.Count > 0)
-            yield return new WaitForSeconds(firstCustomerDelay);
+        float openingDelay = fastForwardMode ? fastForwardFirstCustomerDelay : firstCustomerDelay;
+        if (openingDelay > 0f && waitingCustomers.Count > 0)
+            yield return new WaitForSeconds(openingDelay);
 
         while (isShopOpen && waitingCustomers.Count > 0)
         {
             yield return ProcessOneCustomerRoutine();
 
-            if (waitingCustomers.Count > 0 && nextCustomerDelay > 0f)
+            if (!fastForwardMode && waitingCustomers.Count > 0 && nextCustomerDelay > 0f)
                 yield return new WaitForSeconds(nextCustomerDelay);
         }
 
+        if (fastForwardMode && salesVisualController != null)
+            salesVisualController.EndFastCustomerQueue();
+
         if (isShopOpen && requestSystem != null && requestSystem.HasPendingBouquetPickup)
         {
+            // 依頼主の受取は特別イベントなので、倍速営業でも通常演出を残します。
             if (nextCustomerDelay > 0f)
                 yield return new WaitForSeconds(nextCustomerDelay);
 
@@ -150,7 +177,12 @@ public class CustomerUI : MonoBehaviour
         }
 
         if (salesVisualController != null)
-            yield return salesVisualController.PlayCustomerSequence(customer, result);
+        {
+            if (fastForwardMode)
+                yield return salesVisualController.PlayFastCustomerSequence(customer, result);
+            else
+                yield return salesVisualController.PlayCustomerSequence(customer, result);
+        }
 
         isProcessingCustomer = false;
         RefreshState();
@@ -210,7 +242,7 @@ public class CustomerUI : MonoBehaviour
         if (!requestSystem.TrySellMysteryBonusFlower(out FlowerData flower, out int price))
             return result;
 
-        string itemText = $"{flower.flowerName}（{flower.color}）×1";
+        string itemText = $"{flower.flowerName}（{flower.GetColorDisplayText()}）×1";
 
         if (result == null)
         {
@@ -264,7 +296,7 @@ public class CustomerUI : MonoBehaviour
         if (string.IsNullOrWhiteSpace(checkoutItemName))
             return message;
 
-        string addonText = $" + {checkoutItemName}";
+        string addonText = $" + {checkoutItemName} ×1";
         if (string.IsNullOrEmpty(message))
             return addonText.TrimStart();
 
@@ -299,6 +331,9 @@ public class CustomerUI : MonoBehaviour
     private void FinishBusinessDay()
     {
         if (hasFinishedToday) return;
+
+        if (salesVisualController != null)
+            salesVisualController.EndFastCustomerQueue();
 
         SetShopOpen(false);
         hasFinishedToday = true;
@@ -356,7 +391,7 @@ public class CustomerUI : MonoBehaviour
             }
             else if (isProcessingCustomer)
             {
-                currentCustomerText.text = "ただいま会計中です";
+                currentCustomerText.text = fastForwardMode ? "倍速で会計中です" : "ただいま会計中です";
             }
             else if (waitingCustomers.Count > 0)
             {
