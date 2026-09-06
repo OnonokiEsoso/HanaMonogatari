@@ -18,6 +18,7 @@ public class DebugManager : MonoBehaviour
     [SerializeField] private CheckoutItemSystem checkoutItemSystem;
     [SerializeField] private DevelopmentSystem developmentSystem;
     [SerializeField] private HybridDevelopmentSystem hybridDevelopmentSystem;
+    [SerializeField] private CustomerSystem customerSystem;
 
     [Header("年月日を指定")]
     [SerializeField] private bool useDateOverride;
@@ -43,6 +44,11 @@ public class DebugManager : MonoBehaviour
     [Tooltip("仕入先Lv条件や中盤以降のテスト用。仕入先Lv指定がOFFなら、この金額から到達可能Lvを再計算します。")]
     [SerializeField] private bool useCumulativePurchaseOverride;
     [Min(0)] [SerializeField] private int startCumulativePurchaseAmount;
+
+    [Header("来客数デバッグ")]
+    [Tooltip("ONにすると、その日の最終来客数を指定人数に固定します。店評価・家具・依頼・天候・初日ボーナス・ランダム補正は無視されます。")]
+    [SerializeField] private bool useVisitorCountOverride;
+    [Min(0)] [SerializeField] private int fixedVisitorCount = 20;
 
     [Header("天候デバッグ")]
     [Tooltip("ONにするとゲーム開始時から天候を下の値へ固定します。日送り後も固定されたままです。")]
@@ -92,23 +98,19 @@ public class DebugManager : MonoBehaviour
 
         if (shopManager == null)
             shopManager = FindFirstObjectByType<ShopManager>();
-
         if (furnitureSystem == null)
             furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
-
         if (weatherSystem == null)
             weatherSystem = FindFirstObjectByType<WeatherSystem>();
-
         if (checkoutItemSystem == null)
             checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
-
         if (developmentSystem == null)
             developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
-
         if (hybridDevelopmentSystem == null)
             hybridDevelopmentSystem = FindFirstObjectByType<HybridDevelopmentSystem>();
+        if (customerSystem == null)
+            customerSystem = FindFirstObjectByType<CustomerSystem>();
 
-        // まだSceneに無い場合でも、交配系デバッグを有効にした時点で確実に適用できるようにする。
         if (hybridDevelopmentSystem == null &&
             (useHybridResearchDaysOverride || useHybridProductionDaysOverride) &&
             developmentSystem != null)
@@ -121,39 +123,37 @@ public class DebugManager : MonoBehaviour
         if (shopManager != null)
         {
             shopManager.ApplyDebugStartupState(
-                useDateOverride,
-                startYear,
-                startMonth,
-                startDay,
-                useMoneyOverride,
-                startMoney,
-                useShopRatingOverride,
-                startShopRating,
-                useSupplierLevelOverride,
-                startSupplierLevel,
-                useCumulativePurchaseOverride,
-                startCumulativePurchaseAmount);
+                useDateOverride, startYear, startMonth, startDay,
+                useMoneyOverride, startMoney,
+                useShopRatingOverride, startShopRating,
+                useSupplierLevelOverride, startSupplierLevel,
+                useCumulativePurchaseOverride, startCumulativePurchaseAmount);
         }
         else
         {
             Debug.LogWarning("DebugManager: ShopManagerが見つからないため、開始状態の上書きを適用できませんでした。");
         }
 
+        if (customerSystem != null)
+        {
+            customerSystem.ApplyDebugVisitorCountOverride(useVisitorCountOverride, fixedVisitorCount);
+        }
+        else if (useVisitorCountOverride)
+        {
+            Debug.LogWarning("DebugManager: CustomerSystemが見つからないため、来客数固定デバッグを適用できませんでした。");
+        }
+
         if (useRainOverride)
         {
             if (weatherSystem != null)
-            {
                 weatherSystem.SetDebugRainOverride(true, startAsRainy);
-            }
             else if (furnitureSystem != null)
             {
                 furnitureSystem.SetRainyToday(startAsRainy);
                 Debug.LogWarning("DebugManager: WeatherSystemが見つからないため、家具側の雨フラグだけを変更しました。");
             }
             else
-            {
                 Debug.LogWarning("DebugManager: WeatherSystem / FurnitureSystemが見つからないため、雨状態を適用できませんでした。");
-            }
         }
 
         if (checkoutItemSystem != null)
@@ -172,24 +172,15 @@ public class DebugManager : MonoBehaviour
         if (completeAllDevelopmentsOnStart)
         {
             if (developmentSystem != null)
-            {
                 developmentSystem.ApplyDebugCompleteAllDevelopments();
-            }
             else
-            {
                 Debug.LogWarning("DebugManager: DevelopmentSystemが見つからないため、全開発完了デバッグを適用できませんでした。");
-            }
         }
 
         if (hybridDevelopmentSystem != null)
         {
-            hybridDevelopmentSystem.ApplyDebugResearchDaysOverride(
-                useHybridResearchDaysOverride,
-                hybridResearchDays);
-
-            hybridDevelopmentSystem.ApplyDebugProductionDaysOverride(
-                useHybridProductionDaysOverride,
-                hybridProductionDays);
+            hybridDevelopmentSystem.ApplyDebugResearchDaysOverride(useHybridResearchDaysOverride, hybridResearchDays);
+            hybridDevelopmentSystem.ApplyDebugProductionDaysOverride(useHybridProductionDaysOverride, hybridProductionDays);
         }
         else if (useHybridResearchDaysOverride || useHybridProductionDaysOverride)
         {
@@ -199,12 +190,6 @@ public class DebugManager : MonoBehaviour
         PrintAppliedSettings();
     }
 
-    /// <summary>
-    /// CheckoutItemSystem の Awake で商品カタログが構築された後に、
-    /// 開発品のデバッグ初期在庫を追加します。
-    /// DebugManager は非常に早い実行順なので、Awake 内で AddStock すると
-    /// カタログ未構築のため無視されるケースがありました。
-    /// </summary>
     private void Start()
     {
         if (!debugMode || !useDevelopmentItemStockOverride)
@@ -254,6 +239,7 @@ public class DebugManager : MonoBehaviour
         string ratingText = useShopRatingOverride ? startShopRating.ToString("N0") : "通常値";
         string supplierText = useSupplierLevelOverride ? $"Lv.{startSupplierLevel}" : "通常値";
         string cumulativeText = useCumulativePurchaseOverride ? $"{startCumulativePurchaseAmount:N0}円" : "通常値";
+        string visitorText = useVisitorCountOverride ? $"{fixedVisitorCount}人固定" : "通常計算";
         string rainText = useRainOverride ? (startAsRainy ? "雨固定" : "晴れ固定") : "通常抽選";
         string checkoutOfferText = useCheckoutOfferOverride ? forcedCheckoutOffer.ToString() : "通常抽選";
         string firstDayKeepPowerText = forceKeepPowerOnFirstDay ? "ON" : "OFF";
@@ -267,7 +253,7 @@ public class DebugManager : MonoBehaviour
 
         Debug.Log(
             $"DebugManager設定 / 日付:{dateText} / 所持金:{moneyText} / 店評価:{ratingText} / " +
-            $"仕入先:{supplierText} / 累計仕入額:{cumulativeText} / 天候:{rainText} / " +
+            $"仕入先:{supplierText} / 累計仕入額:{cumulativeText} / 来客数:{visitorText} / 天候:{rainText} / " +
             $"レジ横強制入荷:{checkoutOfferText} / 初日キープパワー:{firstDayKeepPowerText} / " +
             $"キープパワー購入:{keepPowerPurchaseText} / 開発:{developmentText} / " +
             $"開発品初期在庫:{developmentStockText} / 交配期間:{hybridDaysText} / " +
