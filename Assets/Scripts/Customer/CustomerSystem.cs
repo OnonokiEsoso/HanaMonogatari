@@ -37,6 +37,15 @@ public class CustomerSystem : MonoBehaviour
         [Min(0)] public int regularCount;
     }
 
+    private class ProfileBaseline
+    {
+        public int budget;
+        public int minPopularity;
+        public int maxPopularity;
+        public int minRarity;
+        public int maxRarity;
+    }
+
     public readonly struct RegularPointResult
     {
         public readonly int currentPoints;
@@ -66,12 +75,20 @@ public class CustomerSystem : MonoBehaviour
     [Tooltip("ゲーム開始から2日間だけ、倍率計算後に固定人数として加算します。")]
     [SerializeField] private int openingBonusVisitors = 5;
 
+    [Header("店成長による客単価")]
+    [Tooltip("店評価が上がるほど客の基礎予算を増やします。最大店評価ではおよそ3.2倍です。")]
+    [SerializeField] private bool useShopRatingBudgetGrowth = true;
+    [Tooltip("同じ客タイプでも所持予算に少し個人差を付けます。")]
+    [Range(0f, 0.5f)] [SerializeField] private float budgetRandomVariance = 0.12f;
+
     [Header("常連")]
     [Tooltip("常連1人につき、その客タイプの来店抽選重みを何%増やすか。")]
     [Min(0f)] [SerializeField] private float regularSpawnBonusPercent = 5f;
     [SerializeField] private List<RegularStatus> regularStatuses = new();
 
     [SerializeField] private List<VisitingCustomer> todayCustomers = new();
+
+    private readonly Dictionary<CustomerType, ProfileBaseline> profileBaselines = new();
 
     public IReadOnlyList<VisitingCustomer> TodayCustomers => todayCustomers;
     public IReadOnlyList<RegularStatus> RegularStatuses => regularStatuses;
@@ -82,6 +99,8 @@ public class CustomerSystem : MonoBehaviour
             furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
 
         EnsureDefaultProfiles();
+        CaptureProfileBaselines();
+        ApplyShopRatingProfileGrowth();
         ApplyBaseSpawnWeights();
         EnsureRegularStatuses();
     }
@@ -90,16 +109,20 @@ public class CustomerSystem : MonoBehaviour
     public void GenerateTodayCustomers()
     {
         EnsureDefaultProfiles();
+        CaptureProfileBaselines();
+        ApplyShopRatingProfileGrowth();
         ApplyBaseSpawnWeights();
         EnsureRegularStatuses();
         todayCustomers.Clear();
 
         int visitorCount = CalculateTodayVisitorCount();
-        float budgetMultiplier = TrendSystem.GetBudgetMultiplier(shopManager);
+        float dayBudgetMultiplier = TrendSystem.GetBudgetMultiplier(shopManager);
         if (furnitureSystem == null)
             furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
         if (furnitureSystem != null)
-            budgetMultiplier += furnitureSystem.GetBudgetBonusPercentToday();
+            dayBudgetMultiplier += furnitureSystem.GetBudgetBonusPercentToday();
+
+        float shopBudgetMultiplier = useShopRatingBudgetGrowth ? GetShopRatingBudgetMultiplier() : 1f;
 
         for (int i = 0; i < visitorCount; i++)
         {
@@ -108,11 +131,22 @@ public class CustomerSystem : MonoBehaviour
 
             string favoriteColor = PickFavoriteColor();
             VisitPurpose purpose = PickVisitPurpose(profile.customerType);
-            int effectiveBudget = Mathf.Max(0, Mathf.RoundToInt(profile.budget * budgetMultiplier));
+            float purposeMultiplier = GetPurposeBudgetMultiplier(purpose);
+            float individualMultiplier = UnityEngine.Random.Range(
+                Mathf.Max(0.5f, 1f - budgetRandomVariance),
+                1f + budgetRandomVariance);
+
+            int baseBudget = GetBaselineBudget(profile);
+            int effectiveBudget = Mathf.Max(0, Mathf.RoundToInt(
+                baseBudget * shopBudgetMultiplier * dayBudgetMultiplier * purposeMultiplier * individualMultiplier));
+
             todayCustomers.Add(new VisitingCustomer(profile, favoriteColor, purpose, effectiveBudget));
         }
 
-        Debug.Log($"本日の来客を生成しました。{todayCustomers.Count}人 / 予算倍率×{budgetMultiplier:0.###}");
+        int rating = shopManager != null ? shopManager.ShopRating : 0;
+        Debug.Log(
+            $"本日の来客を生成しました。{todayCustomers.Count}人 / 店評価:{rating:N0} / " +
+            $"店成長予算×{shopBudgetMultiplier:0.00} / 日補正×{dayBudgetMultiplier:0.00}");
     }
 
     public int CalculateTodayVisitorCount()
@@ -136,6 +170,8 @@ public class CustomerSystem : MonoBehaviour
     public RegularPointResult AddRegularPoint(CustomerType customerType)
     {
         EnsureDefaultProfiles();
+        CaptureProfileBaselines();
+        ApplyShopRatingProfileGrowth();
         ApplyBaseSpawnWeights();
         EnsureRegularStatuses();
 
@@ -184,6 +220,17 @@ public class CustomerSystem : MonoBehaviour
         return VisitPurpose.Anniversary;
     }
 
+    private static float GetPurposeBudgetMultiplier(VisitPurpose purpose)
+    {
+        return purpose switch
+        {
+            VisitPurpose.Gift => 1.10f,
+            VisitPurpose.Offering => 1.05f,
+            VisitPurpose.Anniversary => 1.25f,
+            _ => 1f
+        };
+    }
+
     public static string GetPurposeLabel(VisitPurpose purpose)
     {
         return purpose switch
@@ -229,10 +276,13 @@ public class CustomerSystem : MonoBehaviour
     {
         if (customerProfiles == null) return;
 
+        float progress = GetShopRatingProgress();
+
         foreach (CustomerData profile in customerProfiles)
         {
             if (profile == null) continue;
-            profile.spawnWeight = profile.customerType switch
+
+            float baseWeight = profile.customerType switch
             {
                 CustomerType.Housewife => 42.5f,
                 CustomerType.Student => 14.1667f,
@@ -242,7 +292,111 @@ public class CustomerSystem : MonoBehaviour
                 CustomerType.OfficeWorker => 10f,
                 _ => 1f
             };
+
+            float growth = profile.customerType switch
+            {
+                CustomerType.Housewife => Mathf.Lerp(1f, 0.80f, progress),
+                CustomerType.Student => Mathf.Lerp(1f, 0.55f, progress),
+                CustomerType.Grandmother => Mathf.Lerp(1f, 0.90f, progress),
+                CustomerType.Wealthy => Mathf.Lerp(1f, 5.00f, progress),
+                CustomerType.Child => Mathf.Lerp(1f, 0.70f, progress),
+                CustomerType.OfficeWorker => Mathf.Lerp(1f, 1.80f, progress),
+                _ => 1f
+            };
+
+            profile.spawnWeight = Mathf.Max(0.01f, baseWeight * growth);
         }
+    }
+
+    private void CaptureProfileBaselines()
+    {
+        if (customerProfiles == null) return;
+
+        foreach (CustomerData profile in customerProfiles)
+        {
+            if (profile == null || profileBaselines.ContainsKey(profile.customerType))
+                continue;
+
+            profileBaselines[profile.customerType] = new ProfileBaseline
+            {
+                budget = Mathf.Max(0, profile.budget),
+                minPopularity = Mathf.Clamp(profile.minPopularity, 1, 10),
+                maxPopularity = Mathf.Clamp(profile.maxPopularity, 1, 10),
+                minRarity = Mathf.Clamp(profile.minRarity, 1, 10),
+                maxRarity = Mathf.Clamp(profile.maxRarity, 1, 10)
+            };
+        }
+    }
+
+    private void ApplyShopRatingProfileGrowth()
+    {
+        if (customerProfiles == null) return;
+
+        int rating = shopManager != null ? Mathf.Clamp(shopManager.ShopRating, 0, 10000) : 0;
+        GetPreferenceExpansion(rating, out int lowerExpansion, out int upperExpansion);
+
+        foreach (CustomerData profile in customerProfiles)
+        {
+            if (profile == null || !profileBaselines.TryGetValue(profile.customerType, out ProfileBaseline baseline))
+                continue;
+
+            profile.minPopularity = Mathf.Clamp(baseline.minPopularity - lowerExpansion, 1, 10);
+            profile.maxPopularity = Mathf.Clamp(baseline.maxPopularity + upperExpansion, 1, 10);
+            profile.minRarity = Mathf.Clamp(baseline.minRarity - lowerExpansion, 1, 10);
+            profile.maxRarity = Mathf.Clamp(baseline.maxRarity + upperExpansion, 1, 10);
+        }
+    }
+
+    private static void GetPreferenceExpansion(int rating, out int lowerExpansion, out int upperExpansion)
+    {
+        if (rating >= 8000)
+        {
+            lowerExpansion = 2;
+            upperExpansion = 2;
+        }
+        else if (rating >= 5000)
+        {
+            lowerExpansion = 1;
+            upperExpansion = 2;
+        }
+        else if (rating >= 2000)
+        {
+            lowerExpansion = 0;
+            upperExpansion = 1;
+        }
+        else
+        {
+            lowerExpansion = 0;
+            upperExpansion = 0;
+        }
+    }
+
+    private int GetBaselineBudget(CustomerData profile)
+    {
+        if (profile == null) return 0;
+        return profileBaselines.TryGetValue(profile.customerType, out ProfileBaseline baseline)
+            ? Mathf.Max(0, baseline.budget)
+            : Mathf.Max(0, profile.budget);
+    }
+
+    private float GetShopRatingBudgetMultiplier()
+    {
+        int rating = shopManager != null ? Mathf.Clamp(shopManager.ShopRating, 0, 10000) : 0;
+
+        if (rating <= 1000) return Mathf.Lerp(1.00f, 1.05f, rating / 1000f);
+        if (rating <= 2000) return Mathf.Lerp(1.05f, 1.15f, (rating - 1000) / 1000f);
+        if (rating <= 3500) return Mathf.Lerp(1.15f, 1.35f, (rating - 2000) / 1500f);
+        if (rating <= 5000) return Mathf.Lerp(1.35f, 1.60f, (rating - 3500) / 1500f);
+        if (rating <= 6500) return Mathf.Lerp(1.60f, 1.95f, (rating - 5000) / 1500f);
+        if (rating <= 8000) return Mathf.Lerp(1.95f, 2.35f, (rating - 6500) / 1500f);
+        if (rating <= 9000) return Mathf.Lerp(2.35f, 2.70f, (rating - 8000) / 1000f);
+        return Mathf.Lerp(2.70f, 3.20f, (rating - 9000) / 1000f);
+    }
+
+    private float GetShopRatingProgress()
+    {
+        int rating = shopManager != null ? Mathf.Clamp(shopManager.ShopRating, 0, 10000) : 0;
+        return rating / 10000f;
     }
 
     private string PickFavoriteColor()
@@ -253,8 +407,13 @@ public class CustomerSystem : MonoBehaviour
         {
             foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
             {
-                if (batch?.flower == null || string.IsNullOrWhiteSpace(batch.flower.color)) continue;
-                if (!colors.Contains(batch.flower.color)) colors.Add(batch.flower.color);
+                if (batch?.flower == null) continue;
+
+                foreach (string color in batch.flower.GetColors())
+                {
+                    if (string.IsNullOrWhiteSpace(color)) continue;
+                    if (!colors.Contains(color)) colors.Add(color);
+                }
             }
         }
 
