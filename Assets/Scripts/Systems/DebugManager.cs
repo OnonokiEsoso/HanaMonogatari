@@ -141,15 +141,6 @@ public class DebugManager : MonoBehaviour
                 forcedCheckoutOffer,
                 forceKeepPowerOnFirstDay,
                 forceKeepPowerPurchaseChance);
-
-            if (useDevelopmentItemStockOverride)
-            {
-                AddDebugDevelopmentStock(DevelopmentSystem.KarasanItemId, startKarasanStock);
-                AddDebugDevelopmentStock(DevelopmentSystem.SodatsuChoItemId, startSodatsuChoStock);
-                AddDebugDevelopmentStock(DevelopmentSystem.SodatsuTsubuItemId, startSodatsuTsubuStock);
-                AddDebugDevelopmentStock(DevelopmentSystem.SodatsuEkiItemId, startSodatsuEkiStock);
-                AddDebugDevelopmentStock(DevelopmentSystem.KarasanTsuiItemId, startKarasanTsuiStock);
-            }
         }
         else if (useCheckoutOfferOverride || forceKeepPowerOnFirstDay || forceKeepPowerPurchaseChance || useDevelopmentItemStockOverride)
         {
@@ -169,6 +160,39 @@ public class DebugManager : MonoBehaviour
         }
 
         PrintAppliedSettings();
+    }
+
+    /// <summary>
+    /// CheckoutItemSystem の Awake で商品カタログが構築された後に、
+    /// 開発品のデバッグ初期在庫を追加します。
+    /// DebugManager は非常に早い実行順なので、Awake 内で AddStock すると
+    /// カタログ未構築のため無視されるケースがありました。
+    /// </summary>
+    private void Start()
+    {
+        if (!debugMode || !useDevelopmentItemStockOverride)
+            return;
+
+        if (checkoutItemSystem == null)
+            checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
+
+        if (checkoutItemSystem == null)
+        {
+            Debug.LogWarning("DebugManager: CheckoutItemSystemが見つからないため、開発品初期在庫を適用できませんでした。");
+            return;
+        }
+
+        AddDebugDevelopmentStock(DevelopmentSystem.KarasanItemId, startKarasanStock);
+        AddDebugDevelopmentStock(DevelopmentSystem.SodatsuChoItemId, startSodatsuChoStock);
+        AddDebugDevelopmentStock(DevelopmentSystem.SodatsuTsubuItemId, startSodatsuTsubuStock);
+        AddDebugDevelopmentStock(DevelopmentSystem.SodatsuEkiItemId, startSodatsuEkiStock);
+        AddDebugDevelopmentStock(DevelopmentSystem.KarasanTsuiItemId, startKarasanTsuiStock);
+
+        Debug.Log(
+            $"DebugManager: 開発品初期在庫を適用しました / " +
+            $"枯ラサン:{startKarasanStock} / そだーつ長:{startSodatsuChoStock} / " +
+            $"そだーつ粒:{startSodatsuTsubuStock} / そだーつ液:{startSodatsuEkiStock} / " +
+            $"枯ラサンつい:{startKarasanTsuiStock}");
     }
 
     private void AddDebugDevelopmentStock(string itemId, int quantity)
