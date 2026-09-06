@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
@@ -7,6 +8,7 @@ using UnityEngine.UI;
 /// <summary>
 /// HybridTab のUIを管理します。
 /// A/Bの花選択、所持花一覧の自動生成、画像/名前反映、交配開始条件判定まで担当します。
+/// 一度結果が判明した組み合わせはゲーム内の既知情報として扱い、再研究できないようにします。
 /// 交配開始後は選択UIを隠し、進行中メッセージだけを表示します。
 /// </summary>
 public class HybridTabUI : MonoBehaviour
@@ -42,6 +44,10 @@ public class HybridTabUI : MonoBehaviour
     [SerializeField] private TMP_Text stateText;
     [SerializeField] private Button startHybridButton;
 
+    [Header("既知の交配結果")]
+    [Tooltip("このプレイ中に失敗が判明した組み合わせ。A×BとB×Aは同一として記録します。")]
+    [SerializeField] private List<string> knownFailedPairKeys = new();
+
     [Header("交配中表示")]
     [Tooltip("親花A/Bや×をまとめたParentArea。交配開始中は非表示にします。")]
     [SerializeField] private GameObject parentArea;
@@ -66,6 +72,7 @@ public class HybridTabUI : MonoBehaviour
     {
         ResolveReferences();
         AutoFindReferences();
+        knownFailedPairKeys ??= new List<string>();
 
         if (selectFlowerAButton != null)
             selectFlowerAButton.onClick.AddListener(HandleSelectA);
@@ -95,6 +102,9 @@ public class HybridTabUI : MonoBehaviour
 
         // 一度タブを離れて戻ってきた場合は「交配中です」に切り替える。
         showStartedMessage = false;
+
+        // タブを閉じている間に失敗結果が確定した場合も、選択中だった組み合わせを既知失敗として記録する。
+        RecordFailureFromLastResultIfNeeded();
 
         if (hybridDevelopmentSystem != null)
         {
@@ -147,8 +157,9 @@ public class HybridTabUI : MonoBehaviour
         if (active)
             return;
 
+        bool knownCombination = IsKnownCombination(selectedFlowerA, selectedFlowerB);
         bool canStart = false;
-        if (hybridDevelopmentSystem != null)
+        if (!knownCombination && hybridDevelopmentSystem != null)
             canStart = hybridDevelopmentSystem.CanStartHybrid(selectedFlowerA, selectedFlowerB, out _);
 
         if (requirementText != null)
@@ -177,6 +188,54 @@ public class HybridTabUI : MonoBehaviour
             selectFlowerAButton.interactable = canChangeSelection;
         if (selectFlowerBButton != null)
             selectFlowerBButton.interactable = canChangeSelection;
+    }
+
+    private bool IsKnownCombination(FlowerData a, FlowerData b)
+    {
+        if (a == null || b == null || hybridDevelopmentSystem == null)
+            return false;
+
+        HybridRecipeDefinition recipe = hybridDevelopmentSystem.FindRecipe(a, b);
+        if (recipe != null && hybridDevelopmentSystem.IsHybridUnlocked(recipe.hybridName))
+            return true;
+
+        string pairKey = BuildPairKey(a, b);
+        return !string.IsNullOrWhiteSpace(pairKey) && knownFailedPairKeys.Contains(pairKey);
+    }
+
+    private void RecordKnownFailedPair(FlowerData a, FlowerData b)
+    {
+        string pairKey = BuildPairKey(a, b);
+        if (string.IsNullOrWhiteSpace(pairKey))
+            return;
+
+        knownFailedPairKeys ??= new List<string>();
+        if (!knownFailedPairKeys.Contains(pairKey))
+            knownFailedPairKeys.Add(pairKey);
+    }
+
+    private static string BuildPairKey(FlowerData a, FlowerData b)
+    {
+        if (a == null || b == null || string.IsNullOrWhiteSpace(a.flowerName) || string.IsNullOrWhiteSpace(b.flowerName))
+            return string.Empty;
+
+        string first = a.flowerName.Trim();
+        string second = b.flowerName.Trim();
+        return string.CompareOrdinal(first, second) <= 0
+            ? $"{first}|{second}"
+            : $"{second}|{first}";
+    }
+
+    private void RecordFailureFromLastResultIfNeeded()
+    {
+        if (hybridDevelopmentSystem == null || string.IsNullOrWhiteSpace(hybridDevelopmentSystem.LastResultMessage))
+            return;
+
+        if (hybridDevelopmentSystem.LastResultMessage.Contains("無理っぽかった", StringComparison.Ordinal) ||
+            hybridDevelopmentSystem.LastResultMessage.Contains("できませんでした", StringComparison.Ordinal))
+        {
+            RecordKnownFailedPair(selectedFlowerA, selectedFlowerB);
+        }
     }
 
     private void ApplyHybridActiveDisplay(bool active)
@@ -298,7 +357,7 @@ public class HybridTabUI : MonoBehaviour
 
     private void HandleStartHybrid()
     {
-        if (hybridDevelopmentSystem == null)
+        if (hybridDevelopmentSystem == null || IsKnownCombination(selectedFlowerA, selectedFlowerB))
             return;
 
         if (hybridDevelopmentSystem.TryStartHybrid(selectedFlowerA, selectedFlowerB))
@@ -310,6 +369,13 @@ public class HybridTabUI : MonoBehaviour
 
     private void HandleResearchCompleted(string message)
     {
+        if (!string.IsNullOrWhiteSpace(message) &&
+            (message.Contains("無理っぽかった", StringComparison.Ordinal) ||
+             message.Contains("できませんでした", StringComparison.Ordinal)))
+        {
+            RecordKnownFailedPair(selectedFlowerA, selectedFlowerB);
+        }
+
         showStartedMessage = false;
         Refresh();
     }
