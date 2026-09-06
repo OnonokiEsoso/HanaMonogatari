@@ -49,8 +49,28 @@ public class BouquetSystem : MonoBehaviour
             ? components.Where(c => c != null).Select(c => c.OldestRemainingFreshnessDays).DefaultIfEmpty(0).Min()
             : 0;
 
+        /// <summary>
+        /// 花束価格計算用の材料価値。
+        /// 通常花は従来どおり仕入価格を使用します。
+        /// 交配花など仕入価格を持たない作成花は、おすすめ販売価格の半額を
+        /// 「通常花でいう仕入価格相当」として扱います。
+        /// 通常花のおすすめ価格が仕入価格×2なので、これにより同じ基準で花束価格へ反映されます。
+        /// </summary>
         public int MaterialCost => components?.Sum(c =>
-            c?.flower != null ? c.flower.purchasePrice * Mathf.Max(0, c.quantity) : 0) ?? 0;
+            c?.flower != null ? GetBouquetMaterialValue(c.flower) * Mathf.Max(0, c.quantity) : 0) ?? 0;
+
+        private static int GetBouquetMaterialValue(FlowerData flower)
+        {
+            if (flower == null) return 0;
+
+            if (flower.purchasePrice > 0)
+                return flower.purchasePrice;
+
+            if (flower.recommendedSalePrice > 0)
+                return Mathf.Max(1, Mathf.RoundToInt(flower.recommendedSalePrice * 0.5f));
+
+            return 0;
+        }
     }
 
     [Header("参照")]
