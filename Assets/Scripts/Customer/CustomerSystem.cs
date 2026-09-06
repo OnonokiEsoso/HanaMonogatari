@@ -90,6 +90,10 @@ public class CustomerSystem : MonoBehaviour
 
     private readonly Dictionary<CustomerType, ProfileBaseline> profileBaselines = new();
 
+    // DebugManager からのみ設定する。ONの時は来客補正・初日ボーナス・ランダムを無視して最終来客数を固定する。
+    private bool debugVisitorCountOverrideEnabled;
+    private int debugFixedVisitorCount;
+
     public IReadOnlyList<VisitingCustomer> TodayCustomers => todayCustomers;
     public IReadOnlyList<RegularStatus> RegularStatuses => regularStatuses;
 
@@ -103,6 +107,17 @@ public class CustomerSystem : MonoBehaviour
         ApplyShopRatingProfileGrowth();
         ApplyBaseSpawnWeights();
         EnsureRegularStatuses();
+    }
+
+    /// <summary>
+    /// DebugManagerからその日の最終来客数を固定します。
+    /// ON時は店評価・家具・依頼・トレンド・雨・初日ボーナス・ランダム補正をすべて無視します。
+    /// </summary>
+    public void ApplyDebugVisitorCountOverride(bool enabled, int visitorCount)
+    {
+        debugVisitorCountOverrideEnabled = enabled;
+        debugFixedVisitorCount = Mathf.Max(0, visitorCount);
+        Debug.Log($"CustomerSystemデバッグ / 来客数:{(enabled ? debugFixedVisitorCount + "人固定" : "通常計算")}");
     }
 
     [ContextMenu("本日の来客を生成")]
@@ -146,11 +161,15 @@ public class CustomerSystem : MonoBehaviour
         int rating = shopManager != null ? shopManager.ShopRating : 0;
         Debug.Log(
             $"本日の来客を生成しました。{todayCustomers.Count}人 / 店評価:{rating:N0} / " +
-            $"店成長予算×{shopBudgetMultiplier:0.00} / 日補正×{dayBudgetMultiplier:0.00}");
+            $"店成長予算×{shopBudgetMultiplier:0.00} / 日補正×{dayBudgetMultiplier:0.00}" +
+            (debugVisitorCountOverrideEnabled ? " / DEBUG来客数固定" : string.Empty));
     }
 
     public int CalculateTodayVisitorCount()
     {
+        if (debugVisitorCountOverrideEnabled)
+            return debugFixedVisitorCount;
+
         int rating = shopManager != null ? shopManager.ShopRating : 0;
         int baseVisitors = 2 + Mathf.FloorToInt(rating / 300f);
         float randomMultiplier = UnityEngine.Random.Range(0.8f, 1.2f);
