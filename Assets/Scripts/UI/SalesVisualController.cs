@@ -8,10 +8,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 営業画面の見た目を担当します。
-/// 客を右側からレジ前へ移動させ、購入内容・金額・一言を表示したあと右側へ退店させます。
-/// 各客画像のInspector上の配置位置を、その客固有のレジ前停止位置として使用します。
-/// 吹き出し本体は常時表示し、話者に応じて主人公用・第三者用の吹き出しパーツを切り替えます。
-/// 花束依頼達成日は通常客のあとに依頼主の受取演出も行います。
+/// 通常営業では客を1人ずつ入退店させ、倍速営業では複数人を画面内に並ばせながら約1秒で1人ずつ会計します。
 /// </summary>
 public class SalesVisualController : MonoBehaviour
 {
@@ -59,20 +56,34 @@ public class SalesVisualController : MonoBehaviour
     [SerializeField] private CustomerUI customerUI;
 
     [Header("移動位置")]
-    [Tooltip("各客画像の現在位置から、右へどれだけ離れた場所を入店開始・退店位置にするか。レジ前停止位置は各画像のInspector上の現在位置をそのまま使います。")]
+    [Tooltip("各客画像の現在位置から、右へどれだけ離れた場所を入店開始・退店位置にするか。")]
     [FormerlySerializedAs("outsideRightX")]
     [SerializeField] private float outsideRightOffset = 850f;
 
-    [Header("演出時間")]
+    [Header("通常営業の演出時間")]
     [Min(0.05f)] [SerializeField] private float enterDuration = 0.65f;
     [Min(0f)] [SerializeField] private float purchaseDisplayDelay = 0.35f;
     [Min(0f)] [SerializeField] private float priceDisplayDelay = 0.45f;
     [Min(0f)] [SerializeField] private float commentDisplayDuration = 1.1f;
     [Min(0.05f)] [SerializeField] private float exitDuration = 0.65f;
 
+    [Header("倍速営業")]
+    [Tooltip("画面内に同時に並ばせる最大人数。残りの客は画面外待機として順次補充します。")]
+    [Range(2, 8)] [SerializeField] private int fastQueueVisibleCount = 5;
+    [Tooltip("倍速時の客同士の横方向間隔。レジから右方向へ列を作ります。")]
+    [Min(40f)] [SerializeField] private float fastQueueSpacing = 150f;
+    [Tooltip("購入内容と合計金額だけを表示しておく時間。")]
+    [Min(0.1f)] [SerializeField] private float fastCheckoutDisplayDuration = 0.8f;
+    [Tooltip("先頭客の退店と列詰めに使う時間。0.25秒なら1人あたり約1.05秒です。")]
+    [Min(0.05f)] [SerializeField] private float fastQueueMoveDuration = 0.25f;
+
     private readonly Dictionary<RectTransform, Vector2> customerCounterPositions = new();
+    private readonly List<RectTransform> fastQueueVisuals = new();
+    private readonly Queue<CustomerType> fastPendingCustomerTypes = new();
+
     private RectTransform activeCustomer;
     private bool isPlaying;
+    private bool fastQueuePrepared;
     private BubbleSpeaker currentSpeaker = BubbleSpeaker.None;
     private ActionButtonMode actionButtonMode = ActionButtonMode.None;
 
@@ -103,6 +114,8 @@ public class SalesVisualController : MonoBehaviour
     {
         if (shopActionButton != null)
             shopActionButton.onClick.RemoveListener(HandleShopActionButton);
+
+        ClearFastQueue();
     }
 
     public void ShowOpenConfirmation()
@@ -279,8 +292,176 @@ public class SalesVisualController : MonoBehaviour
     }
 
     /// <summary>
+    /// 倍速営業開始時に、その日の通常客を先客順で列として準備します。
+    /// 元画像はテンプレートとして残し、表示用クローンを生成するため同じ客タイプが連続しても並べられます。
+    /// </summary>
+    public void PrepareFastCustomerQueue(IReadOnlyList<CustomerSystem.VisitingCustomer> customers)
+    {
+        ClearFastQueue();
+        HideOriginalCustomerImages();
+        ClearCheckoutText();
+        HideActionButton();
+
+        if (speechBubble != null)
+            speechBubble.SetActive(true);
+
+        if (customers == null || customers.Count == 0)
+            return;
+
+        foreach (CustomerSystem.VisitingCustomer customer in customers)
+            fastPendingCustomerTypes.Enqueue(customer?.data?.customerType ?? CustomerType.Housewife);
+
+        int initialCount = Mathf.Min(Mathf.Max(2, fastQueueVisibleCount), fastPendingCustomerTypes.Count);
+        for (int i = 0; i < initialCount; i++)
+            AddNextFastQueueVisual(i);
+
+        fastQueuePrepared = fastQueueVisuals.Count > 0;
+    }
+
+    /// <summary>
+    /// 倍速営業1人分。セリフや満足度文は省略し、購入品・個数と合計金額だけ表示します。
+    /// </summary>
+    public IEnumerator PlayFastCustomerSequence(
+        CustomerSystem.VisitingCustomer customer,
+        CustomerPurchaseSystem.PurchaseResult result)
+    {
+        if (isPlaying)
+            yield break;
+
+        if (!fastQueuePrepared || fastQueueVisuals.Count == 0)
+        {
+            PrepareFastCustomerQueue(new[] { customer });
+        }
+
+        if (fastQueueVisuals.Count == 0)
+            yield break;
+
+        isPlaying = true;
+        currentSpeaker = BubbleSpeaker.ThirdParty;
+        HideActionButton();
+
+        SetPurchaseText(BuildPurchaseText(result));
+        SetPriceText(result != null && result.purchased ? $"合計 {result.salePrice:N0}円" : string.Empty);
+        SetCommentText(string.Empty);
+
+        if (fastCheckoutDisplayDuration > 0f)
+            yield return new WaitForSeconds(fastCheckoutDisplayDuration);
+
+        RectTransform leaving = fastQueueVisuals[0];
+        fastQueueVisuals.RemoveAt(0);
+
+        // 空いた最後尾へ次のお客を補充してから、列全体を1つ前へ詰める。
+        if (fastPendingCustomerTypes.Count > 0)
+            AddNextFastQueueVisual(fastQueueVisuals.Count + 1);
+
+        yield return MoveFastQueueAndExit(leaving);
+
+        if (leaving != null)
+            Destroy(leaving.gameObject);
+
+        currentSpeaker = BubbleSpeaker.None;
+        ClearCheckoutText();
+        isPlaying = false;
+
+        if (fastQueueVisuals.Count == 0 && fastPendingCustomerTypes.Count == 0)
+            fastQueuePrepared = false;
+    }
+
+    public void EndFastCustomerQueue()
+    {
+        ClearFastQueue();
+        currentSpeaker = BubbleSpeaker.None;
+        ClearCheckoutText();
+    }
+
+    private void AddNextFastQueueVisual(int slotIndexBeforeShift)
+    {
+        if (fastPendingCustomerTypes.Count == 0)
+            return;
+
+        CustomerType type = fastPendingCustomerTypes.Dequeue();
+        RectTransform template = GetCustomerImage(type);
+        if (template == null)
+            return;
+
+        RectTransform clone = Instantiate(template, template.parent);
+        clone.gameObject.name = $"FastCustomer_{type}_{Guid.NewGuid():N}";
+        clone.gameObject.SetActive(true);
+
+        Vector2 basePosition = GetFastQueueBasePosition();
+        clone.anchoredPosition = new Vector2(
+            basePosition.x + fastQueueSpacing * Mathf.Max(0, slotIndexBeforeShift),
+            basePosition.y);
+
+        fastQueueVisuals.Add(clone);
+    }
+
+    private Vector2 GetFastQueueBasePosition()
+    {
+        RectTransform reference = housewifeImage ?? studentImage1 ?? grandmotherImage ?? wealthyImage ?? childImage ?? officeWorkerImage;
+        if (reference != null)
+            return GetCounterPosition(reference);
+        return Vector2.zero;
+    }
+
+    private IEnumerator MoveFastQueueAndExit(RectTransform leaving)
+    {
+        float duration = Mathf.Max(0.05f, fastQueueMoveDuration);
+        Vector2 basePosition = GetFastQueueBasePosition();
+        Vector2 leavingStart = leaving != null ? leaving.anchoredPosition : Vector2.zero;
+        Vector2 leavingEnd = new Vector2(basePosition.x - Mathf.Abs(outsideRightOffset), basePosition.y);
+
+        Vector2[] starts = new Vector2[fastQueueVisuals.Count];
+        Vector2[] ends = new Vector2[fastQueueVisuals.Count];
+        for (int i = 0; i < fastQueueVisuals.Count; i++)
+        {
+            RectTransform visual = fastQueueVisuals[i];
+            starts[i] = visual != null ? visual.anchoredPosition : Vector2.zero;
+            ends[i] = new Vector2(basePosition.x + fastQueueSpacing * i, basePosition.y);
+        }
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            t = t * t * (3f - 2f * t);
+
+            if (leaving != null)
+                leaving.anchoredPosition = Vector2.LerpUnclamped(leavingStart, leavingEnd, t);
+
+            for (int i = 0; i < fastQueueVisuals.Count; i++)
+            {
+                if (fastQueueVisuals[i] != null)
+                    fastQueueVisuals[i].anchoredPosition = Vector2.LerpUnclamped(starts[i], ends[i], t);
+            }
+
+            yield return null;
+        }
+
+        if (leaving != null)
+            leaving.anchoredPosition = leavingEnd;
+
+        for (int i = 0; i < fastQueueVisuals.Count; i++)
+            if (fastQueueVisuals[i] != null)
+                fastQueueVisuals[i].anchoredPosition = ends[i];
+    }
+
+    private void ClearFastQueue()
+    {
+        foreach (RectTransform visual in fastQueueVisuals)
+        {
+            if (visual != null)
+                Destroy(visual.gameObject);
+        }
+
+        fastQueueVisuals.Clear();
+        fastPendingCustomerTypes.Clear();
+        fastQueuePrepared = false;
+    }
+
+    /// <summary>
     /// 花束依頼の依頼主専用演出。
-    /// 通常客と同じように入店し、予約花束と価格を表示したあと、依頼固有の感謝の言葉を表示して退店します。
     /// </summary>
     public IEnumerator PlayRequestPickupSequence(
         RequestData request,
@@ -291,6 +472,7 @@ public class SalesVisualController : MonoBehaviour
         if (isPlaying || request == null || bouquet == null)
             yield break;
 
+        ClearFastQueue();
         isPlaying = true;
         currentSpeaker = BubbleSpeaker.None;
         ClearCheckoutText();
@@ -428,13 +610,10 @@ public class SalesVisualController : MonoBehaviour
         if (result.bouquet != null)
             return $"{result.bouquet.bouquetName} ×1";
         if (result.flower != null)
-            return $"{result.flower.flowerName}（{result.flower.color}）";
+            return $"{result.flower.flowerName}（{result.flower.GetColorDisplayText()}） ×1";
         return "お花を購入";
     }
 
-    /// <summary>
-    /// お客の種類 × 満足度（または購入なし）に応じた3種類のセリフからランダムに選びます。
-    /// </summary>
     private static string BuildComment(
         CustomerSystem.VisitingCustomer customer,
         CustomerPurchaseSystem.PurchaseResult result)
@@ -456,30 +635,12 @@ public class SalesVisualController : MonoBehaviour
     {
         return type switch
         {
-            CustomerType.Housewife => PickRandom(
-                "まあ、素敵！ 家に飾るのが楽しみね。",
-                "これ、すごくいいわ。また見に来るわね。",
-                "今日はいいお花に出会えたわ。"),
-            CustomerType.Student => PickRandom(
-                "これめっちゃいい！ 部屋に飾りたい！",
-                "かわいい！ これにして正解かも。",
-                "お、これ好き！ ネットに上げなきゃ"),
-            CustomerType.Grandmother => PickRandom(
-                "まあまあ、きれいねえ。大事に飾るわ。",
-                "とっても素敵ね。いいものを選べたわ。",
-                "こういうお花、好きなのよ。うれしいわ。"),
-            CustomerType.Wealthy => PickRandom(
-                "これは素晴らしい。実に気に入ったよ。",
-                "いいね。こういうものを探していたんだ。",
-                "見事だね。また良いものを見せてほしい。"),
-            CustomerType.Child => PickRandom(
-                "わあ！ これすっごくきれい！",
-                "やったー！ このお花にする！",
-                "これだいすき！ おうちにかざる！"),
-            CustomerType.OfficeWorker => PickRandom(
-                "これ、すごくいいですね。喜んでもらえそうです。",
-                "いいものが見つかりました。助かりました。",
-                "これは素敵ですね。またお願いしたいです。"),
+            CustomerType.Housewife => PickRandom("まあ、素敵！ 家に飾るのが楽しみね。", "これ、すごくいいわ。また見に来るわね。", "今日はいいお花に出会えたわ。"),
+            CustomerType.Student => PickRandom("これめっちゃいい！ 部屋に飾りたい！", "かわいい！ これにして正解かも。", "お、これ好き！ ネットに上げなきゃ"),
+            CustomerType.Grandmother => PickRandom("まあまあ、きれいねえ。大事に飾るわ。", "とっても素敵ね。いいものを選べたわ。", "こういうお花、好きなのよ。うれしいわ。"),
+            CustomerType.Wealthy => PickRandom("これは素晴らしい。実に気に入ったよ。", "いいね。こういうものを探していたんだ。", "見事だね。また良いものを見せてほしい。"),
+            CustomerType.Child => PickRandom("わあ！ これすっごくきれい！", "やったー！ このお花にする！", "これだいすき！ おうちにかざる！"),
+            CustomerType.OfficeWorker => PickRandom("これ、すごくいいですね。喜んでもらえそうです。", "いいものが見つかりました。助かりました。", "これは素敵ですね。またお願いしたいです。"),
             _ => "すごく素敵！"
         };
     }
@@ -488,30 +649,12 @@ public class SalesVisualController : MonoBehaviour
     {
         return type switch
         {
-            CustomerType.Housewife => PickRandom(
-                "うん、これなら家に飾るのにちょうどいいわね。",
-                "いい感じね。これにするわ。",
-                "これなら長く楽しめそうね。"),
-            CustomerType.Student => PickRandom(
-                "いい感じ！ これにしよう。",
-                "これなら予算もちょうどいいかな。",
-                "うん、結構好きかも。これください。"),
-            CustomerType.Grandmother => PickRandom(
-                "きれいねえ。これをいただこうかしら。",
-                "うん、いいお花ね。これにするわ。",
-                "ちょうどよさそうね。ありがとう。"),
-            CustomerType.Wealthy => PickRandom(
-                "ほお、よい。これをいただこう。",
-                "なかなかいいね。これにしよう。",
-                "このくらいなら十分満足だよ。"),
-            CustomerType.Child => PickRandom(
-                "これかわいい！ これにする！",
-                "うん！ このお花すき！",
-                "きれいだね！ これください！"),
-            CustomerType.OfficeWorker => PickRandom(
-                "いいですね。これなら安心して渡せそうです。",
-                "うん、これにしましょう。ちょうどよさそうです。",
-                "これなら良さそうですね。お願いします。"),
+            CustomerType.Housewife => PickRandom("うん、これなら家に飾るのにちょうどいいわね。", "いい感じね。これにするわ。", "これなら長く楽しめそうね。"),
+            CustomerType.Student => PickRandom("いい感じ！ これにしよう。", "これなら予算もちょうどいいかな。", "うん、結構好きかも。これください。"),
+            CustomerType.Grandmother => PickRandom("きれいねえ。これをいただこうかしら。", "うん、いいお花ね。これにするわ。", "ちょうどよさそうね。ありがとう。"),
+            CustomerType.Wealthy => PickRandom("ほお、よい。これをいただこう。", "なかなかいいね。これにしよう。", "このくらいなら十分満足だよ。"),
+            CustomerType.Child => PickRandom("これかわいい！ これにする！", "うん！ このお花すき！", "きれいだね！ これください！"),
+            CustomerType.OfficeWorker => PickRandom("いいですね。これなら安心して渡せそうです。", "うん、これにしましょう。ちょうどよさそうです。", "これなら良さそうですね。お願いします。"),
             _ => "いい感じですね。"
         };
     }
@@ -520,30 +663,12 @@ public class SalesVisualController : MonoBehaviour
     {
         return type switch
         {
-            CustomerType.Housewife => PickRandom(
-                "うん、今日はこれにしておこうかしら。",
-                "悪くないわね。これをもらうわ。",
-                "ちょうど欲しかったし、これにするわね。"),
-            CustomerType.Student => PickRandom(
-                "まあ、これならいいかな。",
-                "うん、今日はこれにしとこう。",
-                "強いて言うなら、これにします。"),
-            CustomerType.Grandmother => PickRandom(
-                "そうねえ、今日はこれにしましょう。",
-                "うん、これならよさそうね。",
-                "せっかくだし、これをいただくわ。"),
-            CustomerType.Wealthy => PickRandom(
-                "まあ、今日はこれにしておこう。",
-                "悪くはないね。これをいただくよ。",
-                "うん、今回はこれでいいだろう。"),
-            CustomerType.Child => PickRandom(
-                "うん、これにしようかな。",
-                "えーっとぉ、これにする！",
-                "じゃあ今日はこれにするね。"),
-            CustomerType.OfficeWorker => PickRandom(
-                "そうですね、今日はこれにします。",
-                "時間もないし、これでお願いできますか。",
-                "うん、これなら大丈夫そうですね。"),
+            CustomerType.Housewife => PickRandom("うん、今日はこれにしておこうかしら。", "悪くないわね。これをもらうわ。", "ちょうど欲しかったし、これにするわね。"),
+            CustomerType.Student => PickRandom("まあ、これならいいかな。", "うん、今日はこれにしとこう。", "強いて言うなら、これにします。"),
+            CustomerType.Grandmother => PickRandom("そうねえ、今日はこれにしましょう。", "うん、これならよさそうね。", "せっかくだし、これをいただくわ。"),
+            CustomerType.Wealthy => PickRandom("まあ、今日はこれにしておこう。", "悪くはないね。これをいただくよ。", "うん、今回はこれでいいだろう。"),
+            CustomerType.Child => PickRandom("うん、これにしようかな。", "えーっとぉ、これにする！", "じゃあ今日はこれにするね。"),
+            CustomerType.OfficeWorker => PickRandom("そうですね、今日はこれにします。", "時間もないし、これでお願いできますか。", "うん、これなら大丈夫そうですね。"),
             _ => "今回はこれにしよう。"
         };
     }
@@ -552,30 +677,12 @@ public class SalesVisualController : MonoBehaviour
     {
         return type switch
         {
-            CustomerType.Housewife => PickRandom(
-                "今日は見るだけにしておこうかしら。",
-                "また今度、ゆっくり選びに来るわね。",
-                "今日は決めきれないわ。また来るわね。"),
-            CustomerType.Student => PickRandom(
-                "うーん、今日はやめとこうかな。",
-                "もうちょっと考えてからにしよう。",
-                "またお金ある時に見に来ようかな。"),
-            CustomerType.Grandmother => PickRandom(
-                "今日は見るだけにしておくわね。",
-                "また今度、いい日に寄らせてもらうわ。",
-                "今日は決めずに帰ろうかしらね。"),
-            CustomerType.Wealthy => PickRandom(
-                "今日は見送ろう。また寄らせてもらうよ。",
-                "今回は決めずにおこう。",
-                "また別の日に見せてもらおうかな。"),
-            CustomerType.Child => PickRandom(
-                "今日は見るだけにする！",
-                "うーん、またこんどにする！",
-                "どれにするか決められないや。"),
-            CustomerType.OfficeWorker => PickRandom(
-                "今日は決めずに、また寄ります。",
-                "もう少し考えてみます。ありがとうございました。",
-                "今回は見送ります。またお願いします。"),
+            CustomerType.Housewife => PickRandom("今日は見るだけにしておこうかしら。", "また今度、ゆっくり選びに来るわね。", "今日は決めきれないわ。また来るわね。"),
+            CustomerType.Student => PickRandom("うーん、今日はやめとこうかな。", "もうちょっと考えてからにしよう。", "またお金ある時に見に来ようかな。"),
+            CustomerType.Grandmother => PickRandom("今日は見るだけにしておくわね。", "また今度、いい日に寄らせてもらうわ。", "今日は決めずに帰ろうかしらね。"),
+            CustomerType.Wealthy => PickRandom("今日は見送ろう。また寄らせてもらうよ。", "今回は決めずにおこう。", "また別の日に見せてもらおうかな。"),
+            CustomerType.Child => PickRandom("今日は見るだけにする！", "うーん、またこんどにする！", "どれにするか決められないや。"),
+            CustomerType.OfficeWorker => PickRandom("今日は決めずに、また寄ります。", "もう少し考えてみます。ありがとうございました。", "今回は見送ります。またお願いします。"),
             _ => "今日はやめておこうかな。"
         };
     }
@@ -587,6 +694,12 @@ public class SalesVisualController : MonoBehaviour
     }
 
     public void HideAllCustomers()
+    {
+        ClearFastQueue();
+        HideOriginalCustomerImages();
+    }
+
+    private void HideOriginalCustomerImages()
     {
         SetActive(housewifeImage, false);
         SetActive(studentImage1, false);
