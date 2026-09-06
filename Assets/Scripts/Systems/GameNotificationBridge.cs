@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 各ゲームシステムの「プレイヤーに知らせたい出来事」を NotificationPanelUI へ集約します。
-/// 既存のDebug.Logだけで終わっていた完了・解禁・到達系イベントを、ゲーム画面でも通知します。
+/// 各ゲームシステムの「プレイヤーに知らせたい出来事」を集約します。
+/// 営業中や日送り処理の途中ではポップアップを割り込ませず、通知候補を一旦保留します。
+/// 翌日の画面へ切り替わったあと DailyResultUI から FlushPendingNotifications を呼び、
+/// その日の開始時に未通知項目をまとめて順番に表示します。
 /// </summary>
 public class GameNotificationBridge : MonoBehaviour
 {
@@ -15,15 +18,20 @@ public class GameNotificationBridge : MonoBehaviour
     [SerializeField] private CustomerUI customerUI;
 
     [Header("来客マイルストーン")]
-    [Tooltip("累計来客がこの人数を超えた時に通知します。")]
+    [Tooltip("累計来客がこの人数を超えた時に通知候補へ追加します。表示は次の日の開始時です。")]
     [SerializeField] private int[] visitorMilestones = { 100, 500, 1000 };
     [SerializeField] private int cumulativeVisitors;
     [SerializeField] private int nextVisitorMilestoneIndex;
+
+    private readonly Queue<string> deferredMessages = new();
 
     private int observedSupplierLevel = 1;
     private bool observedClear;
     private bool observedDevelopmentUnlocked;
     private bool initializedShopState;
+
+    public int PendingNotificationCount => deferredMessages.Count;
+    public bool HasPendingNotifications => deferredMessages.Count > 0;
 
     private void Awake()
     {
@@ -73,15 +81,17 @@ public class GameNotificationBridge : MonoBehaviour
 
     private void HandleDevelopmentJobCompleted(string message)
     {
-        Notify(message);
+        QueueNotification(message);
 
-        // 枯ラサンつい完了時は新種開発が解禁されるため、その変化も明示します。
+        // 枯ラサンつい完了時は新種開発も同時に解禁されるので、別通知で明示する。
         if (developmentSystem != null && developmentSystem.IsNewSpeciesDevelopmentUnlocked)
         {
             DevelopmentDefinition definition = developmentSystem.GetDefinition(DevelopmentId.KarasanTsui);
             if (definition != null && message != null && message.Contains(definition.displayName, StringComparison.Ordinal))
             {
-                Notify("新種開発が解禁されたよ！", "開発パネルの『交配』から、新しい花を生み出せるようになったよ。");
+                QueueNotification(
+                    "新種開発が解禁されたよ！",
+                    "開発パネルの『交配』から、新しい花を生み出せるようになったよ。");
             }
         }
     }
@@ -90,19 +100,23 @@ public class GameNotificationBridge : MonoBehaviour
     {
         if (!string.IsNullOrWhiteSpace(message) && message.Contains("無理っぽかった", StringComparison.Ordinal))
         {
-            Notify("この組み合わせはできませんでした");
+            QueueNotification("この組み合わせはできませんでした");
             return;
         }
 
-        Notify(message);
+        QueueNotification(message);
 
         if (!string.IsNullOrWhiteSpace(message) && message.Contains("成功", StringComparison.Ordinal))
-            Notify("交配花を作成できるようになったよ！", "開発パネルの『作成』に、完成した新種が追加されたよ。");
+        {
+            QueueNotification(
+                "交配花を作成できるようになったよ！",
+                "開発パネルの『作成』に、完成した新種が追加されたよ。");
+        }
     }
 
     private void HandleHybridProductionCompleted(string message)
     {
-        Notify(message);
+        QueueNotification(message);
     }
 
     private void HandleShopStateChanged()
@@ -119,21 +133,21 @@ public class GameNotificationBridge : MonoBehaviour
         int currentSupplierLevel = shopManager.SupplierLevel;
         if (currentSupplierLevel > observedSupplierLevel)
         {
-            Notify(
+            QueueNotification(
                 $"仕入先Lvが{currentSupplierLevel}になったよ！",
                 "仕入れられる商品の幅が広がったよ。仕入れ画面を確認してみよう。");
             observedSupplierLevel = currentSupplierLevel;
         }
         else if (currentSupplierLevel < observedSupplierLevel)
         {
-            // デバッグ操作等で戻された場合は観測値だけ同期します。
+            // デバッグ操作等で戻された場合は観測値だけ同期する。
             observedSupplierLevel = currentSupplierLevel;
         }
 
         bool developmentUnlocked = shopManager.ShopRating >= DevelopmentSystem.DevelopmentUnlockShopRating;
         if (developmentUnlocked && !observedDevelopmentUnlocked)
         {
-            Notify(
+            QueueNotification(
                 "開発が解禁されたよ！",
                 "店評価が2,000に到達したので、ホームの『開発』から新しい商品を研究できるようになったよ。");
         }
@@ -141,7 +155,7 @@ public class GameNotificationBridge : MonoBehaviour
 
         if (shopManager.HasCleared && !observedClear)
         {
-            Notify(
+            QueueNotification(
                 "店評価10,000達成！",
                 "街で一番人気のお花屋さんになったよ！ ゲームクリア！");
         }
@@ -168,11 +182,32 @@ public class GameNotificationBridge : MonoBehaviour
             if (cumulativeVisitors < milestone)
                 break;
 
-            Notify(
+            QueueNotification(
                 $"累計来客{milestone:N0}人突破！",
                 $"これまでに{cumulativeVisitors:N0}人のお客さんが来店してくれたよ。");
             nextVisitorMilestoneIndex++;
         }
+    }
+
+    /// <summary>
+    /// 翌日の画面が表示されたタイミングで呼びます。
+    /// 保留していた通知を NotificationPanelUI へ渡し、閉じるたびに次の通知を表示します。
+    /// パネルがまだ見つからない場合は通知を捨てず、そのまま次回まで保持します。
+    /// </summary>
+    public void FlushPendingNotifications()
+    {
+        if (deferredMessages.Count == 0)
+            return;
+
+        ResolveReferences();
+        if (notificationPanel == null)
+        {
+            Debug.LogWarning($"GameNotificationBridge: NotificationPanelUIが見つからないため、{deferredMessages.Count}件の通知を保留します。");
+            return;
+        }
+
+        while (deferredMessages.Count > 0)
+            notificationPanel.ShowMessage(deferredMessages.Dequeue());
     }
 
     private void CaptureInitialShopState()
@@ -188,8 +223,9 @@ public class GameNotificationBridge : MonoBehaviour
 
     private void ResolveReferences()
     {
+        // NotificationPanelは通常非表示なので、inactiveも含めて探す。
         if (notificationPanel == null)
-            notificationPanel = FindFirstObjectByType<NotificationPanelUI>();
+            notificationPanel = FindFirstObjectByType<NotificationPanelUI>(FindObjectsInactive.Include);
         if (developmentSystem == null)
             developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
         if (hybridDevelopmentSystem == null)
@@ -200,25 +236,29 @@ public class GameNotificationBridge : MonoBehaviour
             customerUI = FindFirstObjectByType<CustomerUI>();
     }
 
-    private void Notify(string message)
+    private void QueueNotification(string message)
     {
-        if (notificationPanel == null)
-            notificationPanel = FindFirstObjectByType<NotificationPanelUI>();
+        if (string.IsNullOrWhiteSpace(message))
+            return;
 
-        if (notificationPanel != null)
-            notificationPanel.ShowMessage(message);
-        else if (!string.IsNullOrWhiteSpace(message))
-            Debug.LogWarning($"通知パネル未設定：{message}");
+        deferredMessages.Enqueue(message.Trim());
+        Debug.Log($"通知予約：{message.Trim()}");
     }
 
-    private void Notify(string headline, string detail)
+    private void QueueNotification(string headline, string detail)
     {
-        if (notificationPanel == null)
-            notificationPanel = FindFirstObjectByType<NotificationPanelUI>();
+        if (string.IsNullOrWhiteSpace(headline))
+        {
+            QueueNotification(detail);
+            return;
+        }
 
-        if (notificationPanel != null)
-            notificationPanel.ShowMessage(headline, detail);
-        else
-            Debug.LogWarning($"通知パネル未設定：{headline} / {detail}");
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            QueueNotification(headline);
+            return;
+        }
+
+        QueueNotification($"{headline.Trim()}\n{detail.Trim()}");
     }
 }
