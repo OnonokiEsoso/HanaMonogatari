@@ -17,6 +17,7 @@ public class DebugManager : MonoBehaviour
     [SerializeField] private WeatherSystem weatherSystem;
     [SerializeField] private CheckoutItemSystem checkoutItemSystem;
     [SerializeField] private DevelopmentSystem developmentSystem;
+    [SerializeField] private HybridDevelopmentSystem hybridDevelopmentSystem;
 
     [Header("年月日を指定")]
     [SerializeField] private bool useDateOverride;
@@ -72,6 +73,11 @@ public class DebugManager : MonoBehaviour
     [Min(0)] [SerializeField] private int startSodatsuEkiStock;
     [Min(0)] [SerializeField] private int startKarasanTsuiStock;
 
+    [Header("交配期間デバッグ")]
+    [Tooltip("ONにすると新種開発の交配期間を指定日数へ上書きします。0日にすると開始直後に成功/失敗が確定します。")]
+    [SerializeField] private bool useHybridResearchDaysOverride;
+    [Min(0)] [SerializeField] private int hybridResearchDays = HybridDevelopmentSystem.DefaultSuccessDays;
+
     public bool IsDebugMode => debugMode;
 
     private void Awake()
@@ -93,6 +99,13 @@ public class DebugManager : MonoBehaviour
 
         if (developmentSystem == null)
             developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
+
+        if (hybridDevelopmentSystem == null)
+            hybridDevelopmentSystem = FindFirstObjectByType<HybridDevelopmentSystem>();
+
+        // まだSceneに無い場合でも、交配デバッグを有効にした時点で確実に適用できるようにする。
+        if (hybridDevelopmentSystem == null && useHybridResearchDaysOverride && developmentSystem != null)
+            hybridDevelopmentSystem = developmentSystem.gameObject.AddComponent<HybridDevelopmentSystem>();
 
         Debug.LogWarning("【デバッグモードを使用中】通常プレイ用の開始状態ではありません。");
 
@@ -157,6 +170,17 @@ public class DebugManager : MonoBehaviour
             {
                 Debug.LogWarning("DebugManager: DevelopmentSystemが見つからないため、全開発完了デバッグを適用できませんでした。");
             }
+        }
+
+        if (hybridDevelopmentSystem != null)
+        {
+            hybridDevelopmentSystem.ApplyDebugResearchDaysOverride(
+                useHybridResearchDaysOverride,
+                hybridResearchDays);
+        }
+        else if (useHybridResearchDaysOverride)
+        {
+            Debug.LogWarning("DebugManager: HybridDevelopmentSystemが見つからないため、交配期間デバッグを適用できませんでした。");
         }
 
         PrintAppliedSettings();
@@ -225,11 +249,13 @@ public class DebugManager : MonoBehaviour
         string developmentStockText = useDevelopmentItemStockOverride
             ? $"枯ラサン:{startKarasanStock} / そだーつ長:{startSodatsuChoStock} / そだーつ粒:{startSodatsuTsubuStock} / そだーつ液:{startSodatsuEkiStock} / 枯ラサンつい:{startKarasanTsuiStock}"
             : "通常値";
+        string hybridDaysText = useHybridResearchDaysOverride ? $"{hybridResearchDays}日" : "通常値";
 
         Debug.Log(
             $"DebugManager設定 / 日付:{dateText} / 所持金:{moneyText} / 店評価:{ratingText} / " +
             $"仕入先:{supplierText} / 累計仕入額:{cumulativeText} / 天候:{rainText} / " +
             $"レジ横強制入荷:{checkoutOfferText} / 初日キープパワー:{firstDayKeepPowerText} / " +
-            $"キープパワー購入:{keepPowerPurchaseText} / 開発:{developmentText} / 開発品初期在庫:{developmentStockText}");
+            $"キープパワー購入:{keepPowerPurchaseText} / 開発:{developmentText} / " +
+            $"開発品初期在庫:{developmentStockText} / 交配期間:{hybridDaysText}");
     }
 }
