@@ -32,6 +32,8 @@ public class HybridDevelopmentSystem : MonoBehaviour
     // DebugManager からのみ設定する。通常プレイではOFF。
     private bool debugResearchDaysOverrideEnabled;
     private int debugResearchDays;
+    private bool debugProductionDaysOverrideEnabled;
+    private int debugProductionDays;
 
     public IReadOnlyList<HybridRecipeDefinition> Recipes => recipes;
     public IReadOnlyList<string> UnlockedHybridNames => unlockedHybridNames;
@@ -83,6 +85,18 @@ public class HybridDevelopmentSystem : MonoBehaviour
         Debug.Log($"HybridDevelopmentSystemデバッグ / 交配期間:{(enabled ? debugResearchDays + "日" : "通常値")}");
     }
 
+    /// <summary>
+    /// DebugManager から交配花の作成日数を上書きします。
+    /// 0日なら作成開始直後に完成させます。
+    /// </summary>
+    public void ApplyDebugProductionDaysOverride(bool enabled, int days)
+    {
+        debugProductionDaysOverrideEnabled = enabled;
+        debugProductionDays = Mathf.Max(0, days);
+
+        Debug.Log($"HybridDevelopmentSystemデバッグ / 交配花作成時間:{(enabled ? debugProductionDays + "日" : "通常値")}");
+    }
+
     public bool IsHybridUnlocked(string hybridName)
     {
         if (string.IsNullOrWhiteSpace(hybridName)) return false;
@@ -115,6 +129,14 @@ public class HybridDevelopmentSystem : MonoBehaviour
             return debugResearchDays;
 
         return FindRecipe(a, b) != null ? DefaultSuccessDays : FailureDays;
+    }
+
+    private int GetProductionDays(HybridRecipeDefinition recipe)
+    {
+        if (debugProductionDaysOverrideEnabled)
+            return debugProductionDays;
+
+        return recipe != null ? Mathf.Max(1, recipe.productionDays) : 1;
     }
 
     public bool CanStartHybrid(FlowerData a, FlowerData b, out string reason)
@@ -281,12 +303,20 @@ public class HybridDevelopmentSystem : MonoBehaviour
         activeProductionJob.hybridName = hybridName;
         activeProductionJob.parentA = parentA;
         activeProductionJob.parentB = parentB;
-        activeProductionJob.remainingDays = Mathf.Max(1, recipe.productionDays);
+        activeProductionJob.remainingDays = GetProductionDays(recipe);
         activeProductionJob.paidCost = recipe.productionCost;
         lastResultMessage = string.Empty;
 
+        Debug.Log($"交配花『{hybridName}』の作成を開始しました。{recipe.productionCost:N0}円 / {activeProductionJob.remainingDays}日");
+
+        // デバッグで0日にした場合は、日送りを待たずその場で完成させる。
+        if (activeProductionJob.remainingDays <= 0)
+        {
+            CompleteProductionJob();
+            return true;
+        }
+
         SyncExternalWorkFlag();
-        Debug.Log($"交配花『{hybridName}』の作成を開始しました。{recipe.productionCost:N0}円 / {recipe.productionDays}日");
         OnChanged?.Invoke();
         return true;
     }
