@@ -88,6 +88,12 @@ public class GameNotificationBridge : MonoBehaviour
 
     private void HandleHybridResearchCompleted(string message)
     {
+        if (!string.IsNullOrWhiteSpace(message) && message.Contains("無理っぽかった", StringComparison.Ordinal))
+        {
+            Notify("この組み合わせはできませんでした");
+            return;
+        }
+
         Notify(message);
 
         if (!string.IsNullOrWhiteSpace(message) && message.Contains("成功", StringComparison.Ordinal))
