@@ -7,7 +7,7 @@ using UnityEngine.UI;
 /// プレイヤーへ「知っておいてほしい出来事」を順番に表示する共通通知パネルです。
 /// 開発完了・作成完了・レベルアップ・人数到達など、ゲーム中の各システムから
 /// ShowMessage を呼ぶだけで利用できます。
-/// 複数通知が同時に発生した場合はキューへ溜め、閉じるたびに次の通知を表示します。
+/// 複数通知が同時に発生した場合はキューへ溜め、ボタンを押すたびに次の通知を表示します。
 /// </summary>
 public class NotificationPanelUI : MonoBehaviour
 {
@@ -16,8 +16,14 @@ public class NotificationPanelUI : MonoBehaviour
     [SerializeField] private GameObject panelRoot;
     [Tooltip("通知本文を表示するTMPテキスト。")]
     [SerializeField] private TMP_Text messageText;
-    [Tooltip("通知を閉じるボタン。")]
+    [Tooltip("通知を閉じる/次へ進む共通ボタン。")]
     [SerializeField] private Button closeButton;
+    [Tooltip("CloseButton内のラベル。未設定なら子のTMP_Textを自動取得します。")]
+    [SerializeField] private TMP_Text closeButtonText;
+
+    [Header("ボタン文言")]
+    [SerializeField] private string nextButtonLabel = "次へ";
+    [SerializeField] private string closeButtonLabel = "閉じる";
 
     private readonly Queue<string> pendingMessages = new();
     private bool isShowing;
@@ -58,6 +64,7 @@ public class NotificationPanelUI : MonoBehaviour
         if (isShowing)
         {
             pendingMessages.Enqueue(normalized);
+            UpdateButtonLabel();
             return;
         }
 
@@ -84,6 +91,10 @@ public class NotificationPanelUI : MonoBehaviour
         ShowMessage($"{headline.Trim()}\n{detail.Trim()}");
     }
 
+    /// <summary>
+    /// 従来のCloseButtonから呼ばれる共通処理。
+    /// 次の通知がある間は「次へ」、最後だけ「閉じる」として動作します。
+    /// </summary>
     public void CloseCurrent()
     {
         if (!isShowing)
@@ -122,10 +133,18 @@ public class NotificationPanelUI : MonoBehaviour
             messageText.text = message;
 
         SetPanelVisible(true);
+        UpdateButtonLabel();
 
         // 他UIより前面へ出したいので、同じ親の中では最後尾へ移動します。
         if (panelRoot != null)
             panelRoot.transform.SetAsLastSibling();
+    }
+
+    private void UpdateButtonLabel()
+    {
+        AutoFindReferences();
+        if (closeButtonText != null)
+            closeButtonText.text = pendingMessages.Count > 0 ? nextButtonLabel : closeButtonLabel;
     }
 
     private void SetPanelVisible(bool visible)
@@ -156,12 +175,15 @@ public class NotificationPanelUI : MonoBehaviour
             Button[] buttons = searchRoot.GetComponentsInChildren<Button>(true);
             foreach (Button button in buttons)
             {
-                if (button != null && (button.gameObject.name == "CloseButton" || button.gameObject.name == "OKButton"))
+                if (button != null && (button.gameObject.name == "CloseButton" || button.gameObject.name == "OKButton" || button.gameObject.name == "NextButton"))
                 {
                     closeButton = button;
                     break;
                 }
             }
         }
+
+        if (closeButtonText == null && closeButton != null)
+            closeButtonText = closeButton.GetComponentInChildren<TMP_Text>(true);
     }
 }
