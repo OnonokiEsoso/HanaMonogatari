@@ -82,9 +82,14 @@ public class BouquetSystem : MonoBehaviour
     [Header("作成済み花束")]
     [SerializeField] private List<BouquetData> bouquets = new();
 
+    [Header("通算記録")]
+    [Tooltip("このプレイ中に作成に成功した花束の通算個数。販売・解体されても減りません。")]
+    [Min(0)] [SerializeField] private int totalCreatedCount;
+
     public IReadOnlyList<BouquetData> Bouquets => bouquets;
     public int WrappingCount => wrappingCount;
     public bool CanCreateWithWrapping => wrappingCount >= WrappingCostPerBouquet;
+    public int TotalCreatedCount => totalCreatedCount;
 
     public event Action OnBouquetsChanged;
     public event Action OnWrappingChanged;
@@ -182,6 +187,7 @@ public class BouquetSystem : MonoBehaviour
         };
 
         bouquets.Add(bouquet);
+        totalCreatedCount++;
         OnWrappingChanged?.Invoke();
         OnBouquetsChanged?.Invoke();
 
