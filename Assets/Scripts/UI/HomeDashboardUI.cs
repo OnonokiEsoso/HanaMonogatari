@@ -25,7 +25,7 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private DevelopmentPanelUI developmentPanelUI;
     [Tooltip("ホームのチャレンジボタンからチャレンジ一覧を開くために設定します。")]
     [SerializeField] private ChallengePanelUI challengePanelUI;
-    [Tooltip("チャレンジの更新を監視し、ホームの『未確認！』表示を切り替えます。")]
+    [Tooltip("チャレンジの更新を監視し、ホームの『!!』表示を切り替えます。")]
     [SerializeField] private ChallengeSystem challengeSystem;
     [Tooltip("依頼の有無を監視し、開店時に依頼条件を判定するために設定します。")]
     [SerializeField] private RequestSystem requestSystem;
@@ -75,7 +75,7 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private Button developmentButton;
     [Tooltip("ホームに追加したチャレンジボタン。GameObject名がChallengeButtonなら未設定でも自動取得します。")]
     [SerializeField] private Button challengeButton;
-    [Tooltip("ChallengeButton内の『未確認！』テキスト。新しいデイリー/月間/通算段階がある時だけ表示します。")]
+    [Tooltip("ChallengeButton内の『!!』テキスト。新しいデイリー/月間/通算段階がある時だけ表示します。")]
     [SerializeField] private TMP_Text challengeAlertText;
     [SerializeField] private Button openShopButton;
 
@@ -422,6 +422,10 @@ public class HomeDashboardUI : MonoBehaviour
         if (challengeAlertText == null || challengeSystem == null || shopManager == null)
             return;
 
+        // 表示文字はHierarchy側の初期テキストに依存させず、常に「!!」へ統一する。
+        if (challengeAlertText.text != "!!")
+            challengeAlertText.text = "!!";
+
         int currentDayKey = shopManager.GameYear * 1000 + shopManager.DayOfYear;
         string currentSignature = BuildChallengeSignature();
 
@@ -460,7 +464,10 @@ public class HomeDashboardUI : MonoBehaviour
         lastViewedChallengeSignature = BuildChallengeSignature();
 
         if (challengeAlertText != null)
+        {
+            challengeAlertText.text = "!!";
             challengeAlertText.gameObject.SetActive(false);
+        }
     }
 
     private void HandleFurnitureClicked()
@@ -528,12 +535,15 @@ public class HomeDashboardUI : MonoBehaviour
                 if (text == null)
                     continue;
 
+                string value = text.text != null ? text.text.Trim() : string.Empty;
                 if (text.gameObject.name == "ChallengeAlertText" ||
                     text.gameObject.name == "UnconfirmedText" ||
                     text.gameObject.name == "AlertText" ||
-                    (!string.IsNullOrWhiteSpace(text.text) && text.text.Contains("未確認")))
+                    value == "!!" ||
+                    value.Contains("未確認"))
                 {
                     challengeAlertText = text;
+                    challengeAlertText.text = "!!";
                     break;
                 }
             }
