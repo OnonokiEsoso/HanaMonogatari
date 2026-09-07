@@ -6,6 +6,7 @@ using UnityEngine.UI;
 /// <summary>
 /// ホーム画面から開く「開発」パネルを管理します。
 /// 開発・作成では同じDevelopmentItemプレハブを使い、作成タブには解禁済み交配花も追加します。
+/// Hierarchy整理後もInspector参照を優先し、未設定時だけ標準名・旧名から補完します。
 /// </summary>
 public class DevelopmentPanelUI : MonoBehaviour
 {
@@ -47,6 +48,7 @@ public class DevelopmentPanelUI : MonoBehaviour
     [SerializeField] private DevelopmentItemUI[] productionItems;
 
     [Header("ボタン")]
+    [Tooltip("DevelopmentPanelのCloseButton。旧HierarchyのclauseButtonも未設定時のみ互換検索します。")]
     [SerializeField] private Button closeButton;
 
     private PanelTab currentTab = PanelTab.Development;
@@ -283,7 +285,8 @@ public class DevelopmentPanelUI : MonoBehaviour
 
     private Transform FindNamedContent(Transform root)
     {
-        return root?.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t != null && t.gameObject.name == "Content");
+        return root?.GetComponentsInChildren<Transform>(true)
+            .FirstOrDefault(t => t != null && (t.gameObject.name == "Content" || t.gameObject.name == "ListContent"));
     }
 
     private void AutoFindTabReferences()
@@ -294,7 +297,7 @@ public class DevelopmentPanelUI : MonoBehaviour
         if (developmentTabButton == null) developmentTabButton = buttons.FirstOrDefault(b => b.gameObject.name == "DevelopmentTabButton");
         if (productionTabButton == null) productionTabButton = buttons.FirstOrDefault(b => b.gameObject.name == "ProductionTabButton");
         if (hybridTabButton == null) hybridTabButton = buttons.FirstOrDefault(b => b.gameObject.name == "HybridTabButton");
-        if (closeButton == null) closeButton = buttons.FirstOrDefault(b => b.gameObject.name == "CloseButton");
+        if (closeButton == null) closeButton = buttons.FirstOrDefault(b => b.gameObject.name == "CloseButton" || b.gameObject.name == "clauseButton");
         if (developmentTab == null) developmentTab = objects.FirstOrDefault(o => o.name == "DevelopmentTab");
         if (productionTab == null) productionTab = objects.FirstOrDefault(o => o.name == "ProductionTab");
         if (hybridTab == null) hybridTab = objects.FirstOrDefault(o => o.name == "HybridTab");
