@@ -76,6 +76,9 @@ public class ShopManager : MonoBehaviour
     public int MonthlyMaintenanceCost => monthlyMaintenanceCost;
 
     public event Action OnStateChanged;
+    public event Action<int> OnSupplierPurchaseSpent;
+    public event Action<string> OnSupplierProductPurchased;
+    public event Action<int> OnSupplierFlowerPurchased;
 
     private void Awake()
     {
@@ -94,9 +97,13 @@ public class ShopManager : MonoBehaviour
     public void RegisterSupplierProductPurchase(string productKey)
     {
         if (string.IsNullOrWhiteSpace(productKey)) return;
+
         purchasedSupplierProductKeys ??= new List<string>();
-        if (purchasedSupplierProductKeys.Contains(productKey)) return;
-        purchasedSupplierProductKeys.Add(productKey);
+        if (!purchasedSupplierProductKeys.Contains(productKey))
+            purchasedSupplierProductKeys.Add(productKey);
+
+        // New!判定とは別に、チャレンジ等では同じ商品を別の月に買ったことも知りたいので毎回通知する。
+        OnSupplierProductPurchased?.Invoke(productKey);
         NotifyStateChanged();
     }
 
@@ -125,7 +132,7 @@ public class ShopManager : MonoBehaviour
 
     /// <summary>
     /// 仕入先への支払いと累計仕入額を記録します。
-    /// 花の仕入れ代は月間仕入れ額にも加算します。
+    /// 花・家具・仕入先商品など、この入口を通った購入額はチャレンジ用イベントにも通知します。
     /// </summary>
     public bool TryPurchaseFromSupplier(int totalPrice)
     {
@@ -136,6 +143,7 @@ public class ShopManager : MonoBehaviour
         cumulativePurchaseAmount += totalPrice;
         monthlyPurchaseCost += totalPrice;
 
+        OnSupplierPurchaseSpent?.Invoke(totalPrice);
         RefreshPendingSupplierLevel();
         NotifyStateChanged();
         return true;
@@ -154,10 +162,6 @@ public class ShopManager : MonoBehaviour
         recordedBusinessResultToday = true;
     }
 
-    /// <summary>
-    /// 月末の店舗維持費を支払います。
-    /// 所持金不足でも支払いは発生し、一時的にマイナス所持金になることがあります。
-    /// </summary>
     public int PayMonthlyMaintenance()
     {
         int cost = Mathf.Max(0, monthlyMaintenanceCost);
@@ -167,9 +171,6 @@ public class ShopManager : MonoBehaviour
         return cost;
     }
 
-    /// <summary>
-    /// 次の月を始める前に月間集計だけを0へ戻します。
-    /// </summary>
     public void ResetMonthlyStatistics()
     {
         monthlySales = 0;
@@ -179,13 +180,11 @@ public class ShopManager : MonoBehaviour
         monthlyShopRatingGain = 0;
     }
 
-    /// <summary>
-    /// 花を仕入れた本数を1本ずつ記録し、11本目からラッピングおまけ抽選を行います。
-    /// 11本目=1%、12本目=2%…と上昇し、当選した日は以後抽選しません。
-    /// </summary>
     public bool RegisterSupplierFlowerPurchase(int quantity)
     {
         if (quantity <= 0) return false;
+
+        OnSupplierFlowerPurchased?.Invoke(quantity);
 
         bool won = false;
         for (int i = 0; i < quantity; i++)
@@ -208,9 +207,6 @@ public class ShopManager : MonoBehaviour
         return won;
     }
 
-    /// <summary>
-    /// 閉店時、購入者数×1%でラッピング1個の差し入れ抽選を一度だけ行います。
-    /// </summary>
     public bool TryGiveClosingWrappingGift(int purchaserCount)
     {
         if (resolvedClosingGiftToday) return false;
@@ -254,10 +250,6 @@ public class ShopManager : MonoBehaviour
         NotifyStateChanged();
     }
 
-    /// <summary>
-    /// DebugManagerからゲーム開始時の状態を直接上書きします。
-    /// 通常ゲーム中からは使用しません。
-    /// </summary>
     public void ApplyDebugStartupState(
         bool overrideDate,
         int debugYear,
@@ -306,10 +298,6 @@ public class ShopManager : MonoBehaviour
         NotifyStateChanged();
     }
 
-    /// <summary>
-    /// 1日進めます。
-    /// 4月1日から始まり、各月10日。3月10日の翌日は翌年4月1日になります。
-    /// </summary>
     [ContextMenu("翌日へ進む")]
     public void AdvanceDay()
     {
@@ -370,10 +358,6 @@ public class ShopManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 翌日に仕入先Lvを適用し、到達した各Lvのラッピング報酬も同時に付与します。
-    /// Lv2:+2 / Lv3:+2 / Lv4:+3 / Lv5:+3 / Lv6:+4 / Lv7:+4 / Lv8:+5 / Lv9:+5 / Lv10:+10
-    /// </summary>
     private void ApplyPendingSupplierLevel()
     {
         pendingSupplierLevel = Mathf.Max(supplierLevel, CalculateEligibleSupplierLevel());
@@ -425,9 +409,6 @@ public class ShopManager : MonoBehaviour
         OnStateChanged?.Invoke();
     }
 
-    /// <summary>
-    /// 1季節=3か月。ゲーム開始の4月から春→夏→秋→冬と進みます。
-    /// </summary>
     private static Season GetSeason(int month)
     {
         return month switch
@@ -447,10 +428,6 @@ public class ShopManager : MonoBehaviour
         return monthIndexFromApril * DaysPerMonth + clampedDay;
     }
 
-    /// <summary>
-    /// 年間通算日を、4月始まり・各月10日の月日へ変換します。
-    /// 1=4月1日、10=4月10日、11=5月1日、120=3月10日。
-    /// </summary>
     private static (int month, int day) GetMonthAndDay(int day)
     {
         int clamped = Mathf.Clamp(day, 1, DaysPerYear) - 1;
