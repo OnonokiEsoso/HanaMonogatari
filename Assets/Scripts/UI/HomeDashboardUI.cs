@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -24,6 +25,8 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private DevelopmentPanelUI developmentPanelUI;
     [Tooltip("ホームのチャレンジボタンからチャレンジ一覧を開くために設定します。")]
     [SerializeField] private ChallengePanelUI challengePanelUI;
+    [Tooltip("チャレンジの更新を監視し、ホームの『未確認！』表示を切り替えます。")]
+    [SerializeField] private ChallengeSystem challengeSystem;
     [Tooltip("依頼の有無を監視し、開店時に依頼条件を判定するために設定します。")]
     [SerializeField] private RequestSystem requestSystem;
     [Tooltip("家具の設置状況と設置上限を監視するために設定します。")]
@@ -72,6 +75,8 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private Button developmentButton;
     [Tooltip("ホームに追加したチャレンジボタン。GameObject名がChallengeButtonなら未設定でも自動取得します。")]
     [SerializeField] private Button challengeButton;
+    [Tooltip("ChallengeButton内の『未確認！』テキスト。新しいデイリー/月間/通算段階がある時だけ表示します。")]
+    [SerializeField] private TMP_Text challengeAlertText;
     [SerializeField] private Button openShopButton;
 
     [Header("倍速ボタン")]
@@ -86,6 +91,8 @@ public class HomeDashboardUI : MonoBehaviour
     [Min(0f)] [SerializeField] private float openingAnnouncementDuration = 1.4f;
 
     private bool isOpening;
+    private int lastViewedChallengeDayKey = -1;
+    private string lastViewedChallengeSignature = string.Empty;
 
     public bool IsHomeVisible => homeUIRoot != null && homeUIRoot.activeSelf;
     public bool IsFastForwardEnabled => fastForwardEnabled;
@@ -118,6 +125,7 @@ public class HomeDashboardUI : MonoBehaviour
         RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
+        RefreshChallengeAlert();
     }
 
     private void OnEnable()
@@ -138,9 +146,13 @@ public class HomeDashboardUI : MonoBehaviour
             furnitureSystem.OnChanged += RefreshFurnitureAlert;
 
         ResolveChallengeReferences();
+        if (challengeSystem != null)
+            challengeSystem.OnChanged += RefreshChallengeAlert;
+
         RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
+        RefreshChallengeAlert();
     }
 
     private void OnDisable()
@@ -157,6 +169,9 @@ public class HomeDashboardUI : MonoBehaviour
 
         if (furnitureSystem != null)
             furnitureSystem.OnChanged -= RefreshFurnitureAlert;
+
+        if (challengeSystem != null)
+            challengeSystem.OnChanged -= RefreshChallengeAlert;
     }
 
     private void OnDestroy()
@@ -218,6 +233,7 @@ public class HomeDashboardUI : MonoBehaviour
         RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
+        RefreshChallengeAlert();
     }
 
     public void HideHome()
@@ -259,6 +275,7 @@ public class HomeDashboardUI : MonoBehaviour
 
         RefreshFastForwardButton();
         RefreshFurnitureAlert();
+        RefreshChallengeAlert();
     }
 
     private void HandleFastForwardClicked()
@@ -399,6 +416,53 @@ public class HomeDashboardUI : MonoBehaviour
         furnitureAlertText.gameObject.SetActive(hasOpenSlot && hasInstallableFurniture);
     }
 
+    private void RefreshChallengeAlert()
+    {
+        ResolveChallengeReferences();
+        if (challengeAlertText == null || challengeSystem == null || shopManager == null)
+            return;
+
+        int currentDayKey = shopManager.GameYear * 1000 + shopManager.DayOfYear;
+        string currentSignature = BuildChallengeSignature();
+
+        // パネルを開いている最中に通算チャレンジの次段階が出た場合は、
+        // その場で見えているので自動的に確認済みとして扱う。
+        if (challengePanelUI != null && challengePanelUI.IsVisible)
+        {
+            lastViewedChallengeDayKey = currentDayKey;
+            lastViewedChallengeSignature = currentSignature;
+            challengeAlertText.gameObject.SetActive(false);
+            return;
+        }
+
+        bool dayHasNotBeenViewed = lastViewedChallengeDayKey != currentDayKey;
+        bool challengeSetChanged = !string.Equals(lastViewedChallengeSignature, currentSignature, System.StringComparison.Ordinal);
+        challengeAlertText.gameObject.SetActive(dayHasNotBeenViewed || challengeSetChanged);
+    }
+
+    private string BuildChallengeSignature()
+    {
+        if (challengeSystem == null)
+            return string.Empty;
+
+        return string.Join("|", challengeSystem.GetVisibleChallenges()
+            .Where(c => c != null && !string.IsNullOrWhiteSpace(c.id))
+            .Select(c => c.id));
+    }
+
+    private void MarkChallengesViewed()
+    {
+        ResolveChallengeReferences();
+        if (shopManager == null)
+            return;
+
+        lastViewedChallengeDayKey = shopManager.GameYear * 1000 + shopManager.DayOfYear;
+        lastViewedChallengeSignature = BuildChallengeSignature();
+
+        if (challengeAlertText != null)
+            challengeAlertText.gameObject.SetActive(false);
+    }
+
     private void HandleFurnitureClicked()
     {
         if (furniturePanelUI == null)
@@ -432,12 +496,16 @@ public class HomeDashboardUI : MonoBehaviour
         }
 
         challengePanelUI.ShowPanel();
+        MarkChallengesViewed();
     }
 
     private void ResolveChallengeReferences()
     {
         if (challengePanelUI == null)
             challengePanelUI = FindFirstObjectByType<ChallengePanelUI>(FindObjectsInactive.Include);
+
+        if (challengeSystem == null)
+            challengeSystem = FindFirstObjectByType<ChallengeSystem>();
 
         if (challengeButton == null)
         {
@@ -447,6 +515,25 @@ public class HomeDashboardUI : MonoBehaviour
                 if (button != null && button.gameObject.name == "ChallengeButton")
                 {
                     challengeButton = button;
+                    break;
+                }
+            }
+        }
+
+        if (challengeAlertText == null && challengeButton != null)
+        {
+            TMP_Text[] texts = challengeButton.GetComponentsInChildren<TMP_Text>(true);
+            foreach (TMP_Text text in texts)
+            {
+                if (text == null)
+                    continue;
+
+                if (text.gameObject.name == "ChallengeAlertText" ||
+                    text.gameObject.name == "UnconfirmedText" ||
+                    text.gameObject.name == "AlertText" ||
+                    (!string.IsNullOrWhiteSpace(text.text) && text.text.Contains("未確認")))
+                {
+                    challengeAlertText = text;
                     break;
                 }
             }
