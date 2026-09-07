@@ -50,7 +50,12 @@ public class ChallengeItemUI : MonoBehaviour
             return;
 
         if (titleText != null)
-            titleText.text = challenge.title;
+        {
+            string scope = challengeSystem != null ? challengeSystem.GetScopeLabel(challenge) : string.Empty;
+            titleText.text = string.IsNullOrWhiteSpace(scope)
+                ? challenge.title
+                : $"【{scope}】{challenge.title}";
+        }
 
         if (descriptionText != null)
         {
