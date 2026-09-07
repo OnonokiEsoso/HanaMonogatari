@@ -22,6 +22,8 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private FurniturePanelUI furniturePanelUI;
     [Tooltip("ホームの開発ボタンから開発パネルを開くために設定します。")]
     [SerializeField] private DevelopmentPanelUI developmentPanelUI;
+    [Tooltip("ホームのチャレンジボタンからチャレンジ一覧を開くために設定します。")]
+    [SerializeField] private ChallengePanelUI challengePanelUI;
     [Tooltip("依頼の有無を監視し、開店時に依頼条件を判定するために設定します。")]
     [SerializeField] private RequestSystem requestSystem;
     [Tooltip("家具の設置状況と設置上限を監視するために設定します。")]
@@ -68,6 +70,8 @@ public class HomeDashboardUI : MonoBehaviour
     [FormerlySerializedAs("checkoutButton")]
     [Tooltip("旧レジ横ボタン。ver0.0.6からホームの『開発』ボタンとして使用します。")]
     [SerializeField] private Button developmentButton;
+    [Tooltip("ホームに追加したチャレンジボタン。GameObject名がChallengeButtonなら未設定でも自動取得します。")]
+    [SerializeField] private Button challengeButton;
     [SerializeField] private Button openShopButton;
 
     [Header("倍速ボタン")]
@@ -91,6 +95,8 @@ public class HomeDashboardUI : MonoBehaviour
         if (furnitureSystem == null)
             furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
 
+        ResolveChallengeReferences();
+
         if (openShopButton != null)
             openShopButton.onClick.AddListener(HandleOpenShopClicked);
 
@@ -102,6 +108,9 @@ public class HomeDashboardUI : MonoBehaviour
 
         if (developmentButton != null)
             developmentButton.onClick.AddListener(HandleDevelopmentClicked);
+
+        if (challengeButton != null)
+            challengeButton.onClick.AddListener(HandleChallengeClicked);
 
         if (fastForwardButton != null)
             fastForwardButton.onClick.AddListener(HandleFastForwardClicked);
@@ -128,6 +137,7 @@ public class HomeDashboardUI : MonoBehaviour
         if (furnitureSystem != null)
             furnitureSystem.OnChanged += RefreshFurnitureAlert;
 
+        ResolveChallengeReferences();
         RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
@@ -162,6 +172,9 @@ public class HomeDashboardUI : MonoBehaviour
 
         if (developmentButton != null)
             developmentButton.onClick.RemoveListener(HandleDevelopmentClicked);
+
+        if (challengeButton != null)
+            challengeButton.onClick.RemoveListener(HandleChallengeClicked);
 
         if (fastForwardButton != null)
             fastForwardButton.onClick.RemoveListener(HandleFastForwardClicked);
@@ -198,6 +211,9 @@ public class HomeDashboardUI : MonoBehaviour
         if (developmentPanelUI != null)
             developmentPanelUI.HidePanel();
 
+        if (challengePanelUI != null)
+            challengePanelUI.HidePanel();
+
         Refresh();
         RefreshFastForwardButton();
         RefreshRequestAlert();
@@ -211,6 +227,9 @@ public class HomeDashboardUI : MonoBehaviour
 
         if (developmentPanelUI != null)
             developmentPanelUI.HidePanel();
+
+        if (challengePanelUI != null)
+            challengePanelUI.HidePanel();
 
         if (homeUIRoot != null)
             homeUIRoot.SetActive(false);
@@ -288,6 +307,9 @@ public class HomeDashboardUI : MonoBehaviour
 
         if (developmentPanelUI != null)
             developmentPanelUI.HidePanel();
+
+        if (challengePanelUI != null)
+            challengePanelUI.HidePanel();
 
         if (requestSystem != null)
             requestSystem.ResolveAcceptedRequestAtOpening();
@@ -397,5 +419,37 @@ public class HomeDashboardUI : MonoBehaviour
         }
 
         developmentPanelUI.ShowPanel();
+    }
+
+    private void HandleChallengeClicked()
+    {
+        ResolveChallengeReferences();
+
+        if (challengePanelUI == null)
+        {
+            Debug.LogWarning("HomeDashboardUI: ChallengePanelUIが設定されていません。");
+            return;
+        }
+
+        challengePanelUI.ShowPanel();
+    }
+
+    private void ResolveChallengeReferences()
+    {
+        if (challengePanelUI == null)
+            challengePanelUI = FindFirstObjectByType<ChallengePanelUI>(FindObjectsInactive.Include);
+
+        if (challengeButton == null)
+        {
+            Button[] buttons = GetComponentsInChildren<Button>(true);
+            foreach (Button button in buttons)
+            {
+                if (button != null && button.gameObject.name == "ChallengeButton")
+                {
+                    challengeButton = button;
+                    break;
+                }
+            }
+        }
     }
 }
