@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// ホームのチャレンジボタンから開く一覧パネルです。
-/// ChallengeSystemの定義をChallengeItemUIプレハブとして縦に並べます。
+/// デイリー1件・月間2～3件・通算の各系列の現在段階を一覧表示します。
 /// </summary>
 public class ChallengePanelUI : MonoBehaviour
 {
@@ -85,7 +85,7 @@ public class ChallengePanelUI : MonoBehaviour
 
         ShopManager shopManager = FindFirstObjectByType<ShopManager>();
         monthTitleText.text = shopManager != null
-            ? $"{shopManager.CurrentMonth}月のチャレンジ"
+            ? $"チャレンジ　{shopManager.CurrentMonth}月 {shopManager.CurrentDay}/{ShopManager.DaysPerMonth}日"
             : "チャレンジ";
     }
 
@@ -101,7 +101,7 @@ public class ChallengePanelUI : MonoBehaviour
         if (challengeSystem == null || challengeListContent == null || challengeItemPrefab == null)
             return;
 
-        foreach (ChallengeDefinition challenge in challengeSystem.Challenges)
+        foreach (ChallengeDefinition challenge in challengeSystem.GetVisibleChallenges())
         {
             if (challenge == null)
                 continue;
@@ -118,11 +118,8 @@ public class ChallengePanelUI : MonoBehaviour
         if (!IsVisible)
             return;
 
-        foreach (ChallengeItemUI item in spawnedItems)
-            if (item != null)
-                item.Refresh();
-
-        RefreshTitle();
+        // 通算チャレンジは受取直後に次段階へ差し替わるので、単なるRefreshではなく一覧を作り直す。
+        RefreshAll();
     }
 
     private GameObject GetPanelRoot()
