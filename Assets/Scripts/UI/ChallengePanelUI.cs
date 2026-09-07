@@ -6,6 +6,7 @@ using UnityEngine.UI;
 /// <summary>
 /// ホームのチャレンジボタンから開く一覧パネルです。
 /// デイリー1件・月間2～3件・通算の各系列の現在段階を一覧表示します。
+/// Inspector参照を優先し、未設定時だけ標準名から補完します。
 /// </summary>
 public class ChallengePanelUI : MonoBehaviour
 {
@@ -13,12 +14,17 @@ public class ChallengePanelUI : MonoBehaviour
     [SerializeField] private ChallengeSystem challengeSystem;
 
     [Header("パネル")]
+    [Tooltip("ChallengePanel本体。未設定ならこのGameObjectを使用します。")]
     [SerializeField] private GameObject challengePanel;
+    [Tooltip("ChallengePanelを閉じるCloseButton。")]
     [SerializeField] private Button closeButton;
+    [Tooltip("ChallengePanel上部のTitleText。")]
     [SerializeField] private TMP_Text monthTitleText;
 
     [Header("一覧")]
+    [Tooltip("ChallengeScrollView / Viewport / Content を設定します。")]
     [SerializeField] private Transform challengeListContent;
+    [Tooltip("一覧へ複製するChallengeItem prefab。")]
     [SerializeField] private ChallengeItemUI challengeItemPrefab;
 
     private readonly List<ChallengeItemUI> spawnedItems = new();
@@ -91,12 +97,7 @@ public class ChallengePanelUI : MonoBehaviour
 
     private void RebuildList()
     {
-        foreach (ChallengeItemUI item in spawnedItems)
-        {
-            if (item != null)
-                Destroy(item.gameObject);
-        }
-        spawnedItems.Clear();
+        ClearSpawnedItems();
 
         if (challengeSystem == null || challengeListContent == null || challengeItemPrefab == null)
             return;
@@ -113,12 +114,23 @@ public class ChallengePanelUI : MonoBehaviour
         }
     }
 
+    private void ClearSpawnedItems()
+    {
+        foreach (ChallengeItemUI item in spawnedItems)
+        {
+            if (item != null)
+                Destroy(item.gameObject);
+        }
+
+        spawnedItems.Clear();
+    }
+
     private void HandleChallengeChanged()
     {
         if (!IsVisible)
             return;
 
-        // 通算チャレンジは受取直後に次段階へ差し替わるので、単なるRefreshではなく一覧を作り直す。
+        // 通算チャレンジは受取直後に次段階へ差し替わるので一覧を作り直す。
         RefreshAll();
     }
 
@@ -143,7 +155,7 @@ public class ChallengePanelUI : MonoBehaviour
         {
             foreach (Button button in buttons)
             {
-                if (button.gameObject.name == "CloseButton" || button.gameObject.name == "BackButton")
+                if (HasName(button, "CloseButton", "BackButton"))
                 {
                     closeButton = button;
                     break;
@@ -155,7 +167,7 @@ public class ChallengePanelUI : MonoBehaviour
         {
             foreach (TMP_Text text in texts)
             {
-                if (text.gameObject.name == "TitleText" || text.gameObject.name == "ChallengeTitleText")
+                if (HasName(text, "TitleText", "ChallengeTitleText"))
                 {
                     monthTitleText = text;
                     break;
@@ -165,14 +177,28 @@ public class ChallengePanelUI : MonoBehaviour
 
         if (challengeListContent == null)
         {
-            foreach (Transform t in transforms)
+            foreach (Transform item in transforms)
             {
-                if (t.gameObject.name == "Content" || t.gameObject.name == "ChallengeContent")
+                if (HasName(item, "Content", "ChallengeContent", "ListContent"))
                 {
-                    challengeListContent = t;
+                    challengeListContent = item;
                     break;
                 }
             }
         }
+    }
+
+    private static bool HasName(Component component, params string[] names)
+    {
+        if (component == null)
+            return false;
+
+        foreach (string candidate in names)
+        {
+            if (component.gameObject.name == candidate)
+                return true;
+        }
+
+        return false;
     }
 }
