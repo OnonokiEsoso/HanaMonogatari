@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 仕入れ画面全体を管理します。
-/// 今日の花・ラッピング・レジ横商品・未購入家具を生成し、購入処理を各システムへつなぎます。
+/// 今日の花・ラッピング・レジ横商品・仕入先Lvで解禁済みの未購入家具を生成し、購入処理を各システムへつなぎます。
 /// 花・レジ横商品・家具は同じItemContainer・同じSupplierItemUI Prefabに表示します。
 /// </summary>
 public class SupplierUI : MonoBehaviour
@@ -54,7 +54,7 @@ public class SupplierUI : MonoBehaviour
     private void OnEnable()
     {
         if (shopManager != null)
-            shopManager.OnStateChanged += RefreshHeader;
+            shopManager.OnStateChanged += RefreshAll;
 
         if (checkoutItemSystem != null)
             checkoutItemSystem.OnChanged += RefreshAll;
@@ -66,7 +66,7 @@ public class SupplierUI : MonoBehaviour
     private void OnDisable()
     {
         if (shopManager != null)
-            shopManager.OnStateChanged -= RefreshHeader;
+            shopManager.OnStateChanged -= RefreshAll;
 
         if (checkoutItemSystem != null)
             checkoutItemSystem.OnChanged -= RefreshAll;
@@ -183,12 +183,13 @@ public class SupplierUI : MonoBehaviour
             }
         }
 
-        // 家具は一度だけ購入できる恒久設備。未購入の家具を仕入れ一覧の末尾へ常時表示します。
+        // 家具は一度だけ購入できる恒久設備。現在の仕入先Lvで解禁済みの未購入家具だけを表示します。
         if (furnitureSystem != null)
         {
-            foreach (FurnitureData furniture in furnitureSystem.Definitions
+            foreach (FurnitureData furniture in furnitureSystem.GetUnlockedDefinitions()
                          .Where(f => f != null && !furnitureSystem.IsOwned(f.id))
-                         .OrderBy(f => f.purchasePrice)
+                         .OrderBy(FurnitureSystem.GetRequiredSupplierLevel)
+                         .ThenBy(f => f.purchasePrice)
                          .ThenBy(f => f.displayName))
             {
                 string productKey = FurnitureSystem.GetProductKey(furniture);
