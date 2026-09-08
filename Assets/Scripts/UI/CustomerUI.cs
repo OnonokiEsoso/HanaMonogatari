@@ -161,10 +161,7 @@ public class CustomerUI : MonoBehaviour
 
         CustomerSystem.VisitingCustomer customer = waitingCustomers.Dequeue();
         processedVisitors++;
-
-        if (seManager == null)
-            seManager = FindFirstObjectByType<SEManager>();
-        seManager?.PlayCustomerEnter();
+        PlayCustomerEnterSEIfNeeded();
 
         RefreshState();
 
@@ -226,9 +223,7 @@ public class CustomerUI : MonoBehaviour
         purchaseCount++;
         totalSales += salePrice;
 
-        if (seManager == null)
-            seManager = FindFirstObjectByType<SEManager>();
-        seManager?.PlayCustomerEnter();
+        PlayCustomerEnterSEIfNeeded();
         StartCoroutine(PlayPurchaseSEAfterDelay(NormalPurchaseSEDelay));
 
         if (resultText != null)
@@ -248,6 +243,16 @@ public class CustomerUI : MonoBehaviour
         isProcessingRequestPickup = false;
         isProcessingCustomer = false;
         RefreshState();
+    }
+
+    private void PlayCustomerEnterSEIfNeeded()
+    {
+        if (fastForwardMode && processedVisitors > 1)
+            return;
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+        seManager?.PlayCustomerEnter();
     }
 
     private IEnumerator PlayPurchaseSEAfterDelay(float delay)
