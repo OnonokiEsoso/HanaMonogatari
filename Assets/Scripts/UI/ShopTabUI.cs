@@ -68,6 +68,7 @@ public class ShopTabUI : MonoBehaviour
     [SerializeField] private bool startWithHome = true;
 
     private bool isBusinessOpen;
+    private bool isTopTabBarBlocked;
     private ShopTab currentTab;
 
     public bool IsBusinessOpen => isBusinessOpen;
@@ -178,7 +179,7 @@ public class ShopTabUI : MonoBehaviour
 
     /// <summary>
     /// CustomerUIから営業状態を受け取ります。
-    /// 開店時はDailyResultPanelを維持し、ホームを隠して編集系タブをロックします。
+    /// 開店時はDailyResultPanelを維持し、ホームを隠して上部タブバー全体をロックします。
     /// </summary>
     public void SetBusinessOpen(bool open)
     {
@@ -193,6 +194,16 @@ public class ShopTabUI : MonoBehaviour
                 salesVisualController.PrepareForBusiness();
         }
 
+        RefreshTabInteractable();
+    }
+
+    /// <summary>
+    /// チャレンジ・家具などホーム上のモーダルパネル表示中に、
+    /// 上部タブバーから別画面へ移動できないようにします。
+    /// </summary>
+    public void SetTopTabBarBlocked(bool blocked)
+    {
+        isTopTabBarBlocked = blocked;
         RefreshTabInteractable();
     }
 
@@ -248,20 +259,22 @@ public class ShopTabUI : MonoBehaviour
 
     private void RefreshTabInteractable()
     {
+        bool canUseTopTabs = !isBusinessOpen && !isTopTabBarBlocked;
+
         if (supplierTabButton != null)
-            supplierTabButton.interactable = !isBusinessOpen;
-
-        if (pricingTabButton != null)
-            pricingTabButton.interactable = !isBusinessOpen;
-
-        if (bouquetTabButton != null)
-            bouquetTabButton.interactable = !isBusinessOpen;
+            supplierTabButton.interactable = canUseTopTabs;
 
         if (inventoryTabButton != null)
-            inventoryTabButton.interactable = true;
+            inventoryTabButton.interactable = canUseTopTabs;
+
+        if (pricingTabButton != null)
+            pricingTabButton.interactable = canUseTopTabs;
+
+        if (bouquetTabButton != null)
+            bouquetTabButton.interactable = canUseTopTabs;
 
         if (customerTabButton != null)
-            customerTabButton.interactable = true;
+            customerTabButton.interactable = canUseTopTabs;
     }
 
     private void UpdateTabColors(ShopTab selectedTab)
