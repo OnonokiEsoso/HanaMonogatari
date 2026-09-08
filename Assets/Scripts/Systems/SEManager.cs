@@ -230,6 +230,13 @@ public class SEManager : MonoBehaviour
         string labelText = label != null ? label.text ?? string.Empty : string.Empty;
         string combined = objectName + " " + labelText;
 
+        if (button.GetComponentInParent<SupplierItemUI>() != null &&
+            labelText.Contains("購入", System.StringComparison.OrdinalIgnoreCase))
+        {
+            // 仕入れ商品の購入音はSupplierUI側で成否・おまけ有無を確認してから再生する。
+            return;
+        }
+
         if (ContainsAny(combined, "開店する", "OpenShop"))
         {
             PlayOpenShop();
