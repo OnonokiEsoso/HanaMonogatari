@@ -21,10 +21,12 @@ public class ChallengeItemUI : MonoBehaviour
 
     private ChallengeSystem challengeSystem;
     private ChallengeDefinition challenge;
+    private SEManager seManager;
 
     private void Awake()
     {
         AutoFindReferences();
+        seManager = FindFirstObjectByType<SEManager>();
     }
 
     private void OnDestroy()
@@ -84,7 +86,17 @@ public class ChallengeItemUI : MonoBehaviour
         if (challengeSystem == null || challenge == null)
             return;
 
+        bool wasClaimed = challengeSystem.IsClaimed(challenge);
         challengeSystem.TryClaim(challenge);
+        bool isClaimed = challengeSystem.IsClaimed(challenge);
+
+        if (!wasClaimed && isClaimed)
+        {
+            if (seManager == null)
+                seManager = FindFirstObjectByType<SEManager>();
+            seManager?.PlayRewardClaim();
+        }
+
         Refresh();
     }
 
