@@ -6,7 +6,8 @@ using UnityEngine;
 /// <summary>
 /// 家具の定義・購入済み状態・設置状態・効果を管理します。
 /// 購入した家具はホームの家具画面から設置/撤去でき、設置中の家具だけ効果を発揮します。
-/// 設置上限は店評価に応じて増加し、照明A/B/Cは同時に1つだけ設置できます。
+/// 家具の販売解禁は仕入先Lv、設置上限は店評価に応じて増加します。
+/// 照明A/B/Cは同時に1つだけ設置できます。
 /// 来客率補正はVisitorModifierSystemへ登録し、予算補正はCustomerSystemから参照します。
 /// </summary>
 public class FurnitureSystem : MonoBehaviour
@@ -97,10 +98,57 @@ public class FurnitureSystem : MonoBehaviour
         return furnitureDefinitions.Where(f => f != null && IsInstalled(f.id));
     }
 
+    /// <summary>
+    /// 現在の仕入先Lvで店頭に並ぶ家具だけを返します。
+    /// 購入済みかどうかは呼び出し側で判定します。
+    /// </summary>
+    public IEnumerable<FurnitureData> GetUnlockedDefinitions()
+    {
+        EnsureDefinitions();
+        int supplierLevel = shopManager != null ? shopManager.SupplierLevel : 1;
+        return furnitureDefinitions.Where(f => f != null && supplierLevel >= GetRequiredSupplierLevel(f.id));
+    }
+
+    public bool IsUnlocked(FurnitureId id)
+    {
+        int supplierLevel = shopManager != null ? shopManager.SupplierLevel : 1;
+        return supplierLevel >= GetRequiredSupplierLevel(id);
+    }
+
+    /// <summary>
+    /// 家具の仕入先Lv解禁表。
+    /// 安価で基本的な設備から始まり、便利/高額な家具を後半へ送ります。
+    /// </summary>
+    public static int GetRequiredSupplierLevel(FurnitureId id)
+    {
+        return id switch
+        {
+            FurnitureId.OpenCloseSign => 1,
+            FurnitureId.WelcomeMat => 1,
+            FurnitureId.DrinkingBird => 2,
+            FurnitureId.NewtonsCradle => 2,
+            FurnitureId.UmbrellaStand => 3,
+            FurnitureId.Sanitizer => 4,
+            FurnitureId.PendulumClock => 5,
+            FurnitureId.UmbrellaBagMachine => 6,
+            FurnitureId.LightA => 7,
+            FurnitureId.LightB => 8,
+            FurnitureId.LightC => 9,
+            FurnitureId.InsectKiller => 10,
+            _ => 1
+        };
+    }
+
     public bool TryPurchase(FurnitureData furniture)
     {
         if (furniture == null || shopManager == null)
             return false;
+
+        if (!IsUnlocked(furniture.id))
+        {
+            Debug.Log($"家具『{furniture.displayName}』は仕入先Lv.{GetRequiredSupplierLevel(furniture.id)}で入荷します。");
+            return false;
+        }
 
         if (IsOwned(furniture.id))
         {
