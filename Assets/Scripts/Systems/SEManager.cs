@@ -1,4 +1,8 @@
+using System.Collections;
+using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// ゲーム内の効果音(SE)を一括管理します。
@@ -11,6 +15,8 @@ public class SEManager : MonoBehaviour
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private BouquetSystem bouquetSystem;
+    [SerializeField] private ChallengeSystem challengeSystem;
+    [SerializeField] private DevelopmentSystem developmentSystem;
 
     [Header("UI")]
     [SerializeField] private AudioClip buttonClickSE;
@@ -51,6 +57,10 @@ public class SEManager : MonoBehaviour
     private AudioSource audioSource;
     private int lastSupplierLevel;
     private int lastBouquetCount;
+    private readonly HashSet<Button> boundButtons = new();
+    private readonly HashSet<ChallengeDefinition> completedChallenges = new();
+    private readonly HashSet<DevelopmentId> completedDevelopments = new();
+    private Coroutine buttonBindingCoroutine;
 
     private void Awake()
     {
@@ -59,23 +69,32 @@ public class SEManager : MonoBehaviour
         audioSource.loop = false;
         audioSource.volume = volume;
 
-        if (shopManager == null)
-            shopManager = FindFirstObjectByType<ShopManager>();
-
-        if (bouquetSystem == null)
-            bouquetSystem = FindFirstObjectByType<BouquetSystem>();
+        ResolveReferences();
 
         lastSupplierLevel = shopManager != null ? shopManager.SupplierLevel : 1;
         lastBouquetCount = bouquetSystem != null ? bouquetSystem.Bouquets.Count : 0;
+        CaptureCompletedChallenges(false);
+        CaptureCompletedDevelopments(false);
     }
 
     private void OnEnable()
     {
+        ResolveReferences();
+
         if (shopManager != null)
             shopManager.OnStateChanged += HandleShopStateChanged;
 
         if (bouquetSystem != null)
             bouquetSystem.OnBouquetsChanged += HandleBouquetsChanged;
+
+        if (challengeSystem != null)
+            challengeSystem.OnChanged += HandleChallengeChanged;
+
+        if (developmentSystem != null)
+            developmentSystem.OnChanged += HandleDevelopmentChanged;
+
+        if (buttonBindingCoroutine == null)
+            buttonBindingCoroutine = StartCoroutine(ButtonBindingRoutine());
     }
 
     private void OnDisable()
@@ -85,6 +104,18 @@ public class SEManager : MonoBehaviour
 
         if (bouquetSystem != null)
             bouquetSystem.OnBouquetsChanged -= HandleBouquetsChanged;
+
+        if (challengeSystem != null)
+            challengeSystem.OnChanged -= HandleChallengeChanged;
+
+        if (developmentSystem != null)
+            developmentSystem.OnChanged -= HandleDevelopmentChanged;
+
+        if (buttonBindingCoroutine != null)
+        {
+            StopCoroutine(buttonBindingCoroutine);
+            buttonBindingCoroutine = null;
+        }
     }
 
     /// <summary>
@@ -132,6 +163,97 @@ public class SEManager : MonoBehaviour
             audioSource.volume = volume;
     }
 
+    private void ResolveReferences()
+    {
+        if (shopManager == null)
+            shopManager = FindFirstObjectByType<ShopManager>();
+
+        if (bouquetSystem == null)
+            bouquetSystem = FindFirstObjectByType<BouquetSystem>();
+
+        if (challengeSystem == null)
+            challengeSystem = FindFirstObjectByType<ChallengeSystem>();
+
+        if (developmentSystem == null)
+            developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
+    }
+
+    private IEnumerator ButtonBindingRoutine()
+    {
+        while (true)
+        {
+            BindNewButtons();
+            yield return new WaitForSecondsRealtime(0.5f);
+        }
+    }
+
+    private void BindNewButtons()
+    {
+        Button[] buttons = FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (Button button in buttons)
+        {
+            if (button == null || boundButtons.Contains(button))
+                continue;
+
+            boundButtons.Add(button);
+            Button capturedButton = button;
+            capturedButton.onClick.AddListener(() => PlayButtonSound(capturedButton));
+        }
+
+        boundButtons.RemoveWhere(button => button == null);
+    }
+
+    private void PlayButtonSound(Button button)
+    {
+        if (button == null)
+            return;
+
+        string objectName = button.gameObject.name ?? string.Empty;
+        TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+        string labelText = label != null ? label.text ?? string.Empty : string.Empty;
+        string combined = objectName + " " + labelText;
+
+        if (ContainsAny(combined, "Back", "Close", "Cancel", "戻る", "閉じる", "キャンセル"))
+        {
+            PlayBack();
+            return;
+        }
+
+        if (ContainsAny(combined, "Tab", "タブ"))
+        {
+            PlayTabChange();
+            return;
+        }
+
+        if (ContainsAny(combined, "開店する", "OpenShop"))
+        {
+            PlayOpenShop();
+            return;
+        }
+
+        if (ContainsAny(combined, "閉店する", "CloseShop"))
+        {
+            PlayCloseShop();
+            return;
+        }
+
+        PlayButtonClick();
+    }
+
+    private static bool ContainsAny(string source, params string[] values)
+    {
+        if (string.IsNullOrEmpty(source))
+            return false;
+
+        foreach (string value in values)
+        {
+            if (!string.IsNullOrEmpty(value) && source.Contains(value, System.StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
     private void HandleShopStateChanged()
     {
         if (shopManager == null)
@@ -154,5 +276,67 @@ public class SEManager : MonoBehaviour
             PlayWrapping();
 
         lastBouquetCount = currentCount;
+    }
+
+    private void HandleChallengeChanged()
+    {
+        CaptureCompletedChallenges(true);
+    }
+
+    private void CaptureCompletedChallenges(bool playNewCompletion)
+    {
+        if (challengeSystem == null)
+            return;
+
+        HashSet<ChallengeDefinition> current = new();
+        bool foundNewCompletion = false;
+
+        foreach (ChallengeDefinition challenge in challengeSystem.GetVisibleChallenges())
+        {
+            if (challenge == null || !challengeSystem.IsCompleted(challenge))
+                continue;
+
+            current.Add(challenge);
+            if (!completedChallenges.Contains(challenge))
+                foundNewCompletion = true;
+        }
+
+        completedChallenges.Clear();
+        foreach (ChallengeDefinition challenge in current)
+            completedChallenges.Add(challenge);
+
+        if (playNewCompletion && foundNewCompletion)
+            PlayChallengeComplete();
+    }
+
+    private void HandleDevelopmentChanged()
+    {
+        CaptureCompletedDevelopments(true);
+    }
+
+    private void CaptureCompletedDevelopments(bool playNewCompletion)
+    {
+        if (developmentSystem == null)
+            return;
+
+        HashSet<DevelopmentId> current = new();
+        bool foundNewCompletion = false;
+
+        foreach (DevelopmentDefinition definition in developmentSystem.Definitions)
+        {
+            if (definition == null || !developmentSystem.IsCompleted(definition.id))
+                continue;
+
+            current.Add(definition.id);
+            if (!completedDevelopments.Contains(definition.id))
+                foundNewCompletion = true;
+        }
+
+        completedDevelopments.Clear();
+        foreach (DevelopmentId id in current)
+            completedDevelopments.Add(id);
+
+        if (playNewCompletion && foundNewCompletion)
+            PlayUnlock();
     }
 }
