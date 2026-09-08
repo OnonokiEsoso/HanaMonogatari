@@ -5,7 +5,7 @@ using UnityEngine;
 
 /// <summary>
 /// プレイヤーが作成した花束を管理します。
-/// 通常の花束は3種類以上、合計3～25本で作成します。
+/// 通常の花束は合計3～25本で作成します。
 /// 花束1個の作成にはラッピングを1個使用します。
 /// 解体時はラッピングが戻り、販売時は戻りません。
 /// 26本以上は将来の花束予約イベント専用とし、通常作成では扱いません。
@@ -129,12 +129,6 @@ public class BouquetSystem : MonoBehaviour
         }
 
         List<BouquetComponent> components = NormalizeComponents(requestedComponents);
-
-        if (components.Count < 3)
-        {
-            message = "花束には3種類以上の商品が必要です";
-            return false;
-        }
 
         int totalQuantity = components.Sum(c => c.quantity);
         if (totalQuantity < MinimumBouquetQuantity || totalQuantity > MaximumBouquetQuantity)
