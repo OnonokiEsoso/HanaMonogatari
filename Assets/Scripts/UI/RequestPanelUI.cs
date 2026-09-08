@@ -11,6 +11,7 @@ public class RequestPanelUI : MonoBehaviour
 {
     [Header("参照")]
     [SerializeField] private RequestSystem requestSystem;
+    [SerializeField] private ShopTabUI shopTabUI;
 
     [Header("パネル")]
     [SerializeField] private GameObject requestPanel;
@@ -29,6 +30,8 @@ public class RequestPanelUI : MonoBehaviour
 
     private void Awake()
     {
+        ResolveReferences();
+
         if (acceptButton != null)
             acceptButton.onClick.AddListener(HandleAcceptClicked);
 
@@ -45,6 +48,8 @@ public class RequestPanelUI : MonoBehaviour
 
     private void OnEnable()
     {
+        ResolveReferences();
+
         if (requestSystem != null)
             requestSystem.OnRequestChanged += HandleRequestChanged;
     }
@@ -57,23 +62,20 @@ public class RequestPanelUI : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (acceptButton != null)
-            acceptButton.onClick.RemoveListener(HandleAcceptClicked);
-
-        if (declineButton != null)
-            declineButton.onClick.RemoveListener(HandleDeclineClicked);
-
         if (closeButton != null)
             closeButton.onClick.RemoveListener(HidePanel);
     }
 
     public void ShowPanel()
     {
+        ResolveReferences();
+
         if (requestPanel != null)
             requestPanel.SetActive(true);
         else
             gameObject.SetActive(true);
 
+        shopTabUI?.SetTopTabBarBlocked(true);
         Refresh();
     }
 
@@ -83,6 +85,9 @@ public class RequestPanelUI : MonoBehaviour
             requestPanel.SetActive(false);
         else
             gameObject.SetActive(false);
+
+        ResolveReferences();
+        shopTabUI?.SetTopTabBarBlocked(false);
     }
 
     public void Refresh()
@@ -179,6 +184,15 @@ public class RequestPanelUI : MonoBehaviour
             return requestPanel.activeInHierarchy;
 
         return gameObject.activeInHierarchy;
+    }
+
+    private void ResolveReferences()
+    {
+        if (requestSystem == null)
+            requestSystem = FindFirstObjectByType<RequestSystem>();
+
+        if (shopTabUI == null)
+            shopTabUI = FindFirstObjectByType<ShopTabUI>();
     }
 
     private static string BuildDescriptionText(RequestData request)
