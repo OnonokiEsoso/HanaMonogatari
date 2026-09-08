@@ -238,7 +238,7 @@ public class SEManager : MonoBehaviour
 
         if (ContainsAny(combined, "閉店する", "CloseShop"))
         {
-            PlayCloseShop();
+            // 閉店SEは差し入れ抽選結果を確認してからDailyResultUI側で再生する。
             return;
         }
 
