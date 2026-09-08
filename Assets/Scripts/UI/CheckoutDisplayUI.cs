@@ -13,8 +13,15 @@ public class CheckoutDisplayUI : MonoBehaviour
     [SerializeField] private Image itemImage2;
     [SerializeField] private Image itemImage3;
 
+    private void Awake()
+    {
+        ResolveReferences();
+    }
+
     private void OnEnable()
     {
+        ResolveReferences();
+
         if (checkoutItemSystem != null)
         {
             checkoutItemSystem.OnChanged -= Refresh;
@@ -33,6 +40,8 @@ public class CheckoutDisplayUI : MonoBehaviour
     [ContextMenu("レジ横表示を更新")]
     public void Refresh()
     {
+        ResolveReferences();
+
         Image[] slots = { itemImage1, itemImage2, itemImage3 };
         IReadOnlyList<CheckoutItemSystem.CheckoutItemDefinition> installed = checkoutItemSystem != null
             ? checkoutItemSystem.GetInstalledDefinitions()
@@ -48,7 +57,14 @@ public class CheckoutDisplayUI : MonoBehaviour
                 sprite = checkoutItemSystem.LoadSprite(installed[i]);
 
             image.sprite = sprite;
+            image.preserveAspect = true;
             image.enabled = sprite != null;
         }
+    }
+
+    private void ResolveReferences()
+    {
+        if (checkoutItemSystem == null)
+            checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
     }
 }
