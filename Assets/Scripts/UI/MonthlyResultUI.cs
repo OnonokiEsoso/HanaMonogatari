@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -26,11 +27,16 @@ public class MonthlyResultUI : MonoBehaviour
     [SerializeField] private TMP_Text maintenanceCostText;
     [SerializeField] private TMP_Text moneyAfterPaymentText;
 
+    [Header("数値演出")]
+    [Tooltip("各数値が0から最終値まで到達する時間です。")]
+    [Min(0.1f)] [SerializeField] private float countAnimationDuration = 1.8f;
+
     [Header("操作")]
     [SerializeField] private Button nextMonthButton;
 
     private bool isShowing;
     private bool paymentCompleted;
+    private Coroutine countAnimationCoroutine;
 
     private void Awake()
     {
@@ -51,6 +57,12 @@ public class MonthlyResultUI : MonoBehaviour
     /// </summary>
     public void HideImmediate()
     {
+        if (countAnimationCoroutine != null)
+        {
+            StopCoroutine(countAnimationCoroutine);
+            countAnimationCoroutine = null;
+        }
+
         isShowing = false;
         paymentCompleted = false;
         gameObject.SetActive(false);
@@ -78,37 +90,115 @@ public class MonthlyResultUI : MonoBehaviour
         if (titleText != null)
             titleText.text = $"{shopManager.CurrentMonth}月の営業結果";
 
-        if (salesText != null)
-            salesText.text = $"売上：{shopManager.MonthlySales:N0}円";
-
-        if (purchaseCostText != null)
-            purchaseCostText.text = $"仕入れ：{shopManager.MonthlyPurchaseCost:N0}円";
-
-        if (profitText != null)
-            profitText.text = $"営業利益：{shopManager.MonthlyProfit:N0}円";
-
-        if (visitorsText != null)
-            visitorsText.text = $"来客数：{shopManager.MonthlyVisitors}人";
-
-        if (buyersText != null)
-            buyersText.text = $"購入者数：{shopManager.MonthlyBuyers}人";
-
-        if (shopRatingGainText != null)
-            shopRatingGainText.text = $"店評価：+{shopManager.MonthlyShopRatingGain}";
-
         if (maintenanceTitleText != null)
             maintenanceTitleText.text = "月末の支払い";
+
+        if (nextMonthButton != null)
+            nextMonthButton.interactable = false;
+
+        SetAnimatedValues(0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+        if (countAnimationCoroutine != null)
+            StopCoroutine(countAnimationCoroutine);
+
+        countAnimationCoroutine = StartCoroutine(AnimateResultValues(
+            shopManager.MonthlySales,
+            shopManager.MonthlyPurchaseCost,
+            shopManager.MonthlyProfit,
+            shopManager.MonthlyVisitors,
+            shopManager.MonthlyBuyers,
+            shopManager.MonthlyShopRatingGain,
+            maintenance,
+            moneyBefore,
+            moneyAfter));
+
+        Debug.Log($"月間集計を表示しました：{shopManager.CurrentMonth}月 / 売上{shopManager.MonthlySales:N0}円");
+    }
+
+    private IEnumerator AnimateResultValues(
+        int sales,
+        int purchaseCost,
+        int profit,
+        int visitors,
+        int buyers,
+        int shopRatingGain,
+        int maintenance,
+        int moneyBefore,
+        int moneyAfter)
+    {
+        float duration = Mathf.Max(0.1f, countAnimationDuration);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float progress = Mathf.Clamp01(elapsed / duration);
+
+            SetAnimatedValues(
+                Mathf.RoundToInt(sales * progress),
+                Mathf.RoundToInt(purchaseCost * progress),
+                Mathf.RoundToInt(profit * progress),
+                Mathf.RoundToInt(visitors * progress),
+                Mathf.RoundToInt(buyers * progress),
+                Mathf.RoundToInt(shopRatingGain * progress),
+                Mathf.RoundToInt(maintenance * progress),
+                Mathf.RoundToInt(moneyBefore * progress),
+                Mathf.RoundToInt(moneyAfter * progress));
+
+            yield return null;
+        }
+
+        SetAnimatedValues(
+            sales,
+            purchaseCost,
+            profit,
+            visitors,
+            buyers,
+            shopRatingGain,
+            maintenance,
+            moneyBefore,
+            moneyAfter);
+
+        countAnimationCoroutine = null;
+
+        if (nextMonthButton != null)
+            nextMonthButton.interactable = true;
+    }
+
+    private void SetAnimatedValues(
+        int sales,
+        int purchaseCost,
+        int profit,
+        int visitors,
+        int buyers,
+        int shopRatingGain,
+        int maintenance,
+        int moneyBefore,
+        int moneyAfter)
+    {
+        if (salesText != null)
+            salesText.text = $"売上：{sales:N0}円";
+
+        if (purchaseCostText != null)
+            purchaseCostText.text = $"仕入れ：{purchaseCost:N0}円";
+
+        if (profitText != null)
+            profitText.text = $"営業利益：{profit:N0}円";
+
+        if (visitorsText != null)
+            visitorsText.text = $"来客数：{visitors}人";
+
+        if (buyersText != null)
+            buyersText.text = $"購入者数：{buyers}人";
+
+        if (shopRatingGainText != null)
+            shopRatingGainText.text = $"店評価：+{shopRatingGain}";
 
         if (maintenanceCostText != null)
             maintenanceCostText.text = $"店舗維持費：-{maintenance:N0}円";
 
         if (moneyAfterPaymentText != null)
             moneyAfterPaymentText.text = $"所持金：{moneyBefore:N0}円 → {moneyAfter:N0}円";
-
-        if (nextMonthButton != null)
-            nextMonthButton.interactable = true;
-
-        Debug.Log($"月間集計を表示しました：{shopManager.CurrentMonth}月 / 売上{shopManager.MonthlySales:N0}円");
     }
 
     private void GoToNextMonth()
@@ -118,6 +208,12 @@ public class MonthlyResultUI : MonoBehaviour
         paymentCompleted = true;
         if (nextMonthButton != null)
             nextMonthButton.interactable = false;
+
+        if (countAnimationCoroutine != null)
+        {
+            StopCoroutine(countAnimationCoroutine);
+            countAnimationCoroutine = null;
+        }
 
         shopManager.PayMonthlyMaintenance();
         shopManager.ResetMonthlyStatistics();
