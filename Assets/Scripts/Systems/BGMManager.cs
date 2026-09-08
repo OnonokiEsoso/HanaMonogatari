@@ -31,7 +31,7 @@ public class BGMManager : MonoBehaviour
 
     [Header("再生設定")]
     [Range(0f, 1f)]
-    [SerializeField] private float volume = 0.5f;
+    [SerializeField] private float volume = 0.45f;
     [SerializeField] private BGMScene startScene = BGMScene.Home;
 
     private AudioSource audioSource;
