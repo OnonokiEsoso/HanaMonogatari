@@ -12,6 +12,7 @@ public class ChallengePanelUI : MonoBehaviour
 {
     [Header("参照")]
     [SerializeField] private ChallengeSystem challengeSystem;
+    [SerializeField] private ShopTabUI shopTabUI;
 
     [Header("パネル")]
     [Tooltip("ChallengePanel本体。未設定ならこのGameObjectを使用します。")]
@@ -68,6 +69,7 @@ public class ChallengePanelUI : MonoBehaviour
         if (root != null)
             root.SetActive(true);
 
+        shopTabUI?.SetTopTabBarBlocked(true);
         RefreshAll();
     }
 
@@ -76,6 +78,9 @@ public class ChallengePanelUI : MonoBehaviour
         GameObject root = GetPanelRoot();
         if (root != null)
             root.SetActive(false);
+
+        ResolveReferences();
+        shopTabUI?.SetTopTabBarBlocked(false);
     }
 
     public void RefreshAll()
@@ -160,6 +165,9 @@ public class ChallengePanelUI : MonoBehaviour
     {
         if (challengeSystem == null)
             challengeSystem = FindFirstObjectByType<ChallengeSystem>();
+
+        if (shopTabUI == null)
+            shopTabUI = FindFirstObjectByType<ShopTabUI>();
     }
 
     private void AutoFindReferences()
