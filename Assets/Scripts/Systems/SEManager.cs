@@ -17,7 +17,6 @@ public class SEManager : MonoBehaviour
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private BouquetSystem bouquetSystem;
-    [SerializeField] private ChallengeSystem challengeSystem;
     [SerializeField] private DevelopmentSystem developmentSystem;
 
     [Header("UI")]
@@ -41,7 +40,6 @@ public class SEManager : MonoBehaviour
     [SerializeField] private AudioClip wrappingSE;
 
     [Header("達成・成長")]
-    [SerializeField] private AudioClip challengeCompleteSE;
     [SerializeField] private AudioClip rewardClaimSE;
     [SerializeField] private AudioClip unlockSE;
 
@@ -60,7 +58,6 @@ public class SEManager : MonoBehaviour
     private bool lastDevelopmentFeatureUnlocked;
     private float rewardClaimSEPlayableAt;
     private readonly HashSet<Button> boundButtons = new();
-    private readonly HashSet<ChallengeDefinition> completedChallenges = new();
     private readonly HashSet<DevelopmentId> completedDevelopments = new();
     private Coroutine buttonBindingCoroutine;
 
@@ -79,7 +76,6 @@ public class SEManager : MonoBehaviour
 
         lastBouquetCount = bouquetSystem != null ? bouquetSystem.Bouquets.Count : 0;
         lastDevelopmentFeatureUnlocked = developmentSystem != null && developmentSystem.IsDevelopmentFeatureUnlocked;
-        CaptureCompletedChallenges(false);
         CaptureCompletedDevelopments(false);
     }
 
@@ -92,9 +88,6 @@ public class SEManager : MonoBehaviour
 
         if (bouquetSystem != null)
             bouquetSystem.OnBouquetsChanged += HandleBouquetsChanged;
-
-        if (challengeSystem != null)
-            challengeSystem.OnChanged += HandleChallengeChanged;
 
         if (developmentSystem != null)
             developmentSystem.OnChanged += HandleDevelopmentChanged;
@@ -110,9 +103,6 @@ public class SEManager : MonoBehaviour
 
         if (bouquetSystem != null)
             bouquetSystem.OnBouquetsChanged -= HandleBouquetsChanged;
-
-        if (challengeSystem != null)
-            challengeSystem.OnChanged -= HandleChallengeChanged;
 
         if (developmentSystem != null)
             developmentSystem.OnChanged -= HandleDevelopmentChanged;
@@ -152,8 +142,6 @@ public class SEManager : MonoBehaviour
     public void PlayBouquetComplete() => Play(bouquetCompleteSE);
     public void PlayWrapping() => Play(wrappingSE);
 
-    public void PlayChallengeComplete() => Play(challengeCompleteSE);
-
     public void PlayRewardClaim()
     {
         if (rewardClaimSE == null || Time.unscaledTime < rewardClaimSEPlayableAt)
@@ -187,9 +175,6 @@ public class SEManager : MonoBehaviour
 
         if (bouquetSystem == null)
             bouquetSystem = FindFirstObjectByType<BouquetSystem>();
-
-        if (challengeSystem == null)
-            challengeSystem = FindFirstObjectByType<ChallengeSystem>();
 
         if (developmentSystem == null)
             developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
@@ -299,37 +284,6 @@ public class SEManager : MonoBehaviour
             PlayWrapping();
 
         lastBouquetCount = currentCount;
-    }
-
-    private void HandleChallengeChanged()
-    {
-        CaptureCompletedChallenges(true);
-    }
-
-    private void CaptureCompletedChallenges(bool playNewCompletion)
-    {
-        if (challengeSystem == null)
-            return;
-
-        HashSet<ChallengeDefinition> current = new();
-        bool foundNewCompletion = false;
-
-        foreach (ChallengeDefinition challenge in challengeSystem.GetVisibleChallenges())
-        {
-            if (challenge == null || !challengeSystem.IsCompleted(challenge))
-                continue;
-
-            current.Add(challenge);
-            if (!completedChallenges.Contains(challenge))
-                foundNewCompletion = true;
-        }
-
-        completedChallenges.Clear();
-        foreach (ChallengeDefinition challenge in current)
-            completedChallenges.Add(challenge);
-
-        if (playNewCompletion && foundNewCompletion)
-            PlayChallengeComplete();
     }
 
     private void HandleDevelopmentChanged()
