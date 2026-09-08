@@ -24,6 +24,7 @@ public class DevelopmentPanelUI : MonoBehaviour
     [Header("参照")]
     [SerializeField] private DevelopmentSystem developmentSystem;
     [SerializeField] private HybridDevelopmentSystem hybridDevelopmentSystem;
+    [SerializeField] private ShopTabUI shopTabUI;
 
     [Header("表示")]
     [SerializeField] private GameObject panelRoot;
@@ -57,6 +58,7 @@ public class DevelopmentPanelUI : MonoBehaviour
     {
         if (panelRoot == null) panelRoot = gameObject;
         ResolveSystems();
+        ResolveShopTabUI();
         AutoFindTabReferences();
         AutoFindContents();
         EnsureDevelopmentItems();
@@ -74,6 +76,7 @@ public class DevelopmentPanelUI : MonoBehaviour
     private void OnEnable()
     {
         ResolveSystems();
+        ResolveShopTabUI();
         if (developmentSystem != null)
         {
             developmentSystem.OnChanged += Refresh;
@@ -119,7 +122,9 @@ public class DevelopmentPanelUI : MonoBehaviour
 
     public void ShowPanel()
     {
+        ResolveShopTabUI();
         if (panelRoot != null) panelRoot.SetActive(true);
+        shopTabUI?.SetTopTabBarBlocked(true);
         AutoFindContents();
         EnsureDevelopmentItems();
         EnsureProductionItems();
@@ -130,6 +135,8 @@ public class DevelopmentPanelUI : MonoBehaviour
     public void HidePanel()
     {
         if (panelRoot != null) panelRoot.SetActive(false);
+        ResolveShopTabUI();
+        shopTabUI?.SetTopTabBarBlocked(false);
     }
 
     public void ShowDevelopmentTab()
@@ -309,5 +316,11 @@ public class DevelopmentPanelUI : MonoBehaviour
         if (hybridDevelopmentSystem == null) hybridDevelopmentSystem = FindFirstObjectByType<HybridDevelopmentSystem>();
         if (hybridDevelopmentSystem == null && developmentSystem != null)
             hybridDevelopmentSystem = developmentSystem.gameObject.AddComponent<HybridDevelopmentSystem>();
+    }
+
+    private void ResolveShopTabUI()
+    {
+        if (shopTabUI == null)
+            shopTabUI = FindFirstObjectByType<ShopTabUI>();
     }
 }
