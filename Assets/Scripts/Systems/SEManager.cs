@@ -58,6 +58,7 @@ public class SEManager : MonoBehaviour
     private AudioSource audioSource;
     private int lastBouquetCount;
     private bool lastDevelopmentFeatureUnlocked;
+    private float rewardClaimSEPlayableAt;
     private readonly HashSet<Button> boundButtons = new();
     private readonly HashSet<ChallengeDefinition> completedChallenges = new();
     private readonly HashSet<DevelopmentId> completedDevelopments = new();
@@ -152,7 +153,16 @@ public class SEManager : MonoBehaviour
     public void PlayWrapping() => Play(wrappingSE);
 
     public void PlayChallengeComplete() => Play(challengeCompleteSE);
-    public void PlayRewardClaim() => Play(rewardClaimSE);
+
+    public void PlayRewardClaim()
+    {
+        if (rewardClaimSE == null || Time.unscaledTime < rewardClaimSEPlayableAt)
+            return;
+
+        rewardClaimSEPlayableAt = Time.unscaledTime + Mathf.Max(0.05f, rewardClaimSE.length);
+        Play(rewardClaimSE);
+    }
+
     public void PlayUnlock() => Play(unlockSE);
 
     public void PlayResultCount() => Play(resultCountSE);
