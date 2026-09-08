@@ -25,6 +25,7 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private DayTransitionCurtainUI dayTransitionCurtainUI;
     [SerializeField] private GameNotificationBridge gameNotificationBridge;
     [SerializeField] private BGMManager bgmManager;
+    [SerializeField] private SEManager seManager;
 
     [Header("旧結果表示（任意・未使用でもOK）")]
     [SerializeField] private GameObject resultPanel;
@@ -44,6 +45,9 @@ public class DailyResultUI : MonoBehaviour
 
         if (bgmManager == null)
             bgmManager = FindFirstObjectByType<BGMManager>();
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
 
         if (nextDayButton != null)
             nextDayButton.onClick.AddListener(GoToNextDay);
@@ -129,7 +133,14 @@ public class DailyResultUI : MonoBehaviour
             customerUI.TotalVisitors,
             customerUI.PurchaseCount);
 
-        shopManager.TryGiveClosingWrappingGift(customerUI.PurchaseCount);
+        bool gotClosingGift = shopManager.TryGiveClosingWrappingGift(customerUI.PurchaseCount);
+
+        if (!gotClosingGift)
+        {
+            if (seManager == null)
+                seManager = FindFirstObjectByType<SEManager>();
+            seManager?.PlayCloseShop();
+        }
 
         if (inventorySystem != null)
             inventorySystem.AdvanceFreshnessOneDay();
