@@ -12,6 +12,7 @@ public class MonthlyResultUI : MonoBehaviour
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private DailyResultUI dailyResultUI;
+    [SerializeField] private BGMManager bgmManager;
 
     [Header("集計表示")]
     [SerializeField] private TMP_Text titleText;
@@ -40,6 +41,9 @@ public class MonthlyResultUI : MonoBehaviour
 
     private void Awake()
     {
+        if (bgmManager == null)
+            bgmManager = FindFirstObjectByType<BGMManager>();
+
         if (nextMonthButton != null)
             nextMonthButton.onClick.AddListener(GoToNextMonth);
     }
@@ -78,6 +82,10 @@ public class MonthlyResultUI : MonoBehaviour
             Debug.LogWarning("MonthlyResultUI: ShopManagerが設定されていません。");
             return;
         }
+
+        if (bgmManager == null)
+            bgmManager = FindFirstObjectByType<BGMManager>();
+        bgmManager?.PlayMonthlyResult();
 
         isShowing = true;
         paymentCompleted = false;
