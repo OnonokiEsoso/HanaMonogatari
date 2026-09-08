@@ -13,6 +13,7 @@ public class MonthlyResultUI : MonoBehaviour
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private DailyResultUI dailyResultUI;
     [SerializeField] private BGMManager bgmManager;
+    [SerializeField] private SEManager seManager;
 
     [Header("集計表示")]
     [SerializeField] private TMP_Text titleText;
@@ -43,6 +44,9 @@ public class MonthlyResultUI : MonoBehaviour
     {
         if (bgmManager == null)
             bgmManager = FindFirstObjectByType<BGMManager>();
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
 
         if (nextMonthButton != null)
             nextMonthButton.onClick.AddListener(GoToNextMonth);
@@ -86,6 +90,10 @@ public class MonthlyResultUI : MonoBehaviour
         if (bgmManager == null)
             bgmManager = FindFirstObjectByType<BGMManager>();
         bgmManager?.PlayMonthlyResult();
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+        seManager?.PlayMonthlyResult();
 
         isShowing = true;
         paymentCompleted = false;
