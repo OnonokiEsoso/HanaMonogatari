@@ -23,12 +23,15 @@ public class BouquetIngredientItemUI : MonoBehaviour
     private int stock;
     private int selectedQuantity;
     private Action<BouquetIngredientItemUI> onChanged;
+    private SEManager seManager;
 
     public FlowerData Flower => flower;
     public int SelectedQuantity => selectedQuantity;
 
     private void Awake()
     {
+        seManager = FindFirstObjectByType<SEManager>();
+
         if (minusButton != null)
             minusButton.onClick.AddListener(Decrease);
 
@@ -74,6 +77,11 @@ public class BouquetIngredientItemUI : MonoBehaviour
     {
         if (selectedQuantity >= stock) return;
         selectedQuantity++;
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+        seManager?.PlayBouquetAdd();
+
         Refresh();
         onChanged?.Invoke(this);
     }
