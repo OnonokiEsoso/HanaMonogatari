@@ -54,7 +54,7 @@ public class RequestSystem : MonoBehaviour
     public bool HasOfferedRequest => currentRequest != null && currentRequest.state == RequestState.Offered;
     public bool HasAcceptedRequest => currentRequest != null && currentRequest.state == RequestState.Accepted;
     public bool HasActiveRequest => HasOfferedRequest || HasAcceptedRequest;
-    public bool HasPendingBouquetPickup => pendingBouquetRequest != null && pendingBouquetPickup != null;
+    public bool HasPendingBouquetPickup => HasValidPendingBouquetReservation();
     public bool IsMysterySaleActiveToday =>
         activeMysterySaleFlower != null && activeMysterySaleAbsoluteDay == GetCurrentAbsoluteDay();
 
@@ -79,6 +79,7 @@ public class RequestSystem : MonoBehaviour
         if (lastProcessedAbsoluteDay == today)
             return;
 
+        bool isInitialProcess = lastProcessedAbsoluteDay < 0;
         lastProcessedAbsoluteDay = today;
 
         if (activeMysterySaleAbsoluteDay != today)
@@ -91,9 +92,16 @@ public class RequestSystem : MonoBehaviour
         activeVisitorBonuses.RemoveAll(bonus =>
             bonus == null || bonus.percentBonus <= 0f || today > bonus.endAbsoluteDay);
 
-        if (pendingBouquetPickup != null || pendingBouquetRequest != null)
+        bool hasSerializedPendingData = pendingBouquetPickup != null || pendingBouquetRequest != null;
+        bool hasValidPendingReservation = HasValidPendingBouquetReservation();
+        if (hasSerializedPendingData)
         {
-            Debug.LogWarning("RequestSystem: 前日の依頼用花束予約が残っていたため解除しました。");
+            // Unityは[Serializable]な通常クラスを、実データが空でもInspector上で
+            // 空インスタンスとして復元することがあります。ゲーム開始時はそれを静かに掃除し、
+            // 実際のプレイ中に有効な予約が翌日へ残った場合だけ警告します。
+            if (!isInitialProcess && hasValidPendingReservation)
+                Debug.LogWarning("RequestSystem: 前日の依頼用花束予約が残っていたため解除しました。");
+
             pendingBouquetPickup = null;
             pendingBouquetRequest = null;
         }
@@ -197,7 +205,7 @@ public class RequestSystem : MonoBehaviour
         salePrice = 0;
         successMessage = string.Empty;
 
-        if (request == null || bouquet == null || shopManager == null)
+        if (!HasValidPendingBouquetReservation() || shopManager == null)
             return false;
 
         if (currentRequest != request || currentRequest.state != RequestState.Accepted)
@@ -811,6 +819,20 @@ public class RequestSystem : MonoBehaviour
             pendingBouquetRequest = null;
             pendingBouquetPickup = null;
         }
+    }
+
+    private bool HasValidPendingBouquetReservation()
+    {
+        if (pendingBouquetRequest == null || pendingBouquetPickup == null)
+            return false;
+
+        if (pendingBouquetRequest.state != RequestState.Accepted)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(pendingBouquetRequest.requestId))
+            return false;
+
+        return pendingBouquetPickup.TotalQuantity > 0;
     }
 
     private int GetCurrentAbsoluteDay()
