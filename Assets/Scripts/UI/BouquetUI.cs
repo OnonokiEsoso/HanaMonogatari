@@ -15,6 +15,7 @@ public class BouquetUI : MonoBehaviour
     [Header("参照")]
     [SerializeField] private InventorySystem inventorySystem;
     [SerializeField] private BouquetSystem bouquetSystem;
+    [SerializeField] private SEManager seManager;
 
     [Header("材料一覧")]
     [SerializeField] private Transform itemContainer;
@@ -39,6 +40,9 @@ public class BouquetUI : MonoBehaviour
 
     private void Awake()
     {
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+
         if (createButton != null)
             createButton.onClick.AddListener(CreateBouquet);
 
@@ -163,6 +167,7 @@ public class BouquetUI : MonoBehaviour
     {
         if (bouquetSystem == null)
         {
+            PlayErrorSE();
             if (resultText != null)
                 resultText.text = "BouquetSystemが設定されていません";
             return;
@@ -170,6 +175,7 @@ public class BouquetUI : MonoBehaviour
 
         if (!bouquetSystem.CanCreateWithWrapping)
         {
+            PlayErrorSE();
             if (resultText != null)
                 resultText.text = "ラッピングが足りません";
             return;
@@ -177,6 +183,7 @@ public class BouquetUI : MonoBehaviour
 
         if (!int.TryParse(salePriceInput != null ? salePriceInput.text : string.Empty, out int salePrice))
         {
+            PlayErrorSE();
             if (resultText != null)
                 resultText.text = "販売価格を数字で入力してください";
             return;
@@ -205,6 +212,9 @@ public class BouquetUI : MonoBehaviour
 
         if (success)
         {
+            ResolveSEManager();
+            seManager?.PlayBouquetComplete();
+
             if (bouquetNameInput != null)
                 bouquetNameInput.text = string.Empty;
 
@@ -212,6 +222,10 @@ public class BouquetUI : MonoBehaviour
                 salePriceInput.text = string.Empty;
 
             RefreshAll();
+        }
+        else
+        {
+            PlayErrorSE();
         }
     }
 
@@ -227,5 +241,17 @@ public class BouquetUI : MonoBehaviour
             resultText.text = string.Empty;
 
         RefreshSummary();
+    }
+
+    private void ResolveSEManager()
+    {
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+    }
+
+    private void PlayErrorSE()
+    {
+        ResolveSEManager();
+        seManager?.PlayError();
     }
 }
