@@ -28,9 +28,12 @@ public class PricingItemUI : MonoBehaviour
     private BouquetSystem bouquetSystem;
     private Action<FlowerData, int> onFlowerApply;
     private Action<BouquetSystem.BouquetData, int> onBouquetApply;
+    private SEManager seManager;
 
     private void Awake()
     {
+        seManager = FindFirstObjectByType<SEManager>();
+
         if (applyButton != null)
             applyButton.onClick.AddListener(ApplyPrice);
 
@@ -163,6 +166,8 @@ public class PricingItemUI : MonoBehaviour
 
         if (!int.TryParse(salePriceInput.text, out int price) || price <= 0)
         {
+            ResolveSEManager();
+            seManager?.PlayError();
             Debug.LogWarning("販売価格には1円以上の整数を入力してください。");
             return;
         }
@@ -171,6 +176,9 @@ public class PricingItemUI : MonoBehaviour
             onBouquetApply?.Invoke(bouquet, price);
         else if (flower != null)
             onFlowerApply?.Invoke(flower, price);
+
+        ResolveSEManager();
+        seManager?.PlayPriceChange();
     }
 
     private void UseRecommendedPrice()
@@ -188,5 +196,11 @@ public class PricingItemUI : MonoBehaviour
 
         salePriceInput.text = recommendedPrice.ToString();
         ApplyPrice();
+    }
+
+    private void ResolveSEManager()
+    {
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
     }
 }
