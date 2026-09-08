@@ -33,6 +33,7 @@ public class ShopTabUI : MonoBehaviour
     [SerializeField] private SalesVisualController salesVisualController;
     [Tooltip("DailyResultPanel内のホームUIを管理するHomeDashboardUIを設定します。")]
     [SerializeField] private HomeDashboardUI homeDashboardUI;
+    [SerializeField] private BGMManager bgmManager;
 
     [Header("タブボタン")]
     [SerializeField] private Button supplierTabButton;
@@ -73,6 +74,9 @@ public class ShopTabUI : MonoBehaviour
 
     private void Awake()
     {
+        if (bgmManager == null)
+            bgmManager = FindFirstObjectByType<BGMManager>();
+
         if (supplierTabButton != null)
             supplierTabButton.onClick.AddListener(ShowSupplierTab);
 
@@ -215,7 +219,31 @@ public class ShopTabUI : MonoBehaviour
         if (selectedTab != ShopTab.Business)
             homeDashboardUI?.HideHome();
 
+        UpdateBGM(selectedTab);
         UpdateTabColors(selectedTab);
+    }
+
+    private void UpdateBGM(ShopTab selectedTab)
+    {
+        if (bgmManager == null)
+            bgmManager = FindFirstObjectByType<BGMManager>();
+
+        if (bgmManager == null)
+            return;
+
+        if (selectedTab == ShopTab.Supplier)
+        {
+            bgmManager.PlaySupplier();
+            return;
+        }
+
+        if (selectedTab == ShopTab.Business && isBusinessOpen)
+        {
+            bgmManager.PlayBusiness();
+            return;
+        }
+
+        bgmManager.PlayHome();
     }
 
     private void RefreshTabInteractable()
