@@ -102,16 +102,33 @@ public class ChallengePanelUI : MonoBehaviour
         if (challengeSystem == null || challengeListContent == null || challengeItemPrefab == null)
             return;
 
+        List<ChallengeDefinition> visibleChallenges = new();
         foreach (ChallengeDefinition challenge in challengeSystem.GetVisibleChallenges())
         {
-            if (challenge == null)
-                continue;
-
-            ChallengeItemUI item = Instantiate(challengeItemPrefab, challengeListContent);
-            item.gameObject.SetActive(true);
-            item.Bind(challengeSystem, challenge);
-            spawnedItems.Add(item);
+            if (challenge != null)
+                visibleChallenges.Add(challenge);
         }
+
+        // クリア済みだけを先頭へ移動し、クリア済み同士・未クリア同士の元の順番は維持する。
+        foreach (ChallengeDefinition challenge in visibleChallenges)
+        {
+            if (challengeSystem.IsCompleted(challenge))
+                SpawnChallengeItem(challenge);
+        }
+
+        foreach (ChallengeDefinition challenge in visibleChallenges)
+        {
+            if (!challengeSystem.IsCompleted(challenge))
+                SpawnChallengeItem(challenge);
+        }
+    }
+
+    private void SpawnChallengeItem(ChallengeDefinition challenge)
+    {
+        ChallengeItemUI item = Instantiate(challengeItemPrefab, challengeListContent);
+        item.gameObject.SetActive(true);
+        item.Bind(challengeSystem, challenge);
+        spawnedItems.Add(item);
     }
 
     private void ClearSpawnedItems()
