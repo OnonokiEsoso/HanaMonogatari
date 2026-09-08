@@ -18,6 +18,7 @@ public class CustomerUI : MonoBehaviour
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private ShopTabUI shopTabUI;
     [SerializeField] private SalesVisualController salesVisualController;
+    [SerializeField] private SEManager seManager;
 
     [Header("表示（任意）")]
     [SerializeField] private TMP_Text visitorCountText;
@@ -31,6 +32,9 @@ public class CustomerUI : MonoBehaviour
     [Min(0f)] [SerializeField] private float nextCustomerDelay = 1.0f;
     [Tooltip("倍速営業で列を表示してから最初の会計を始めるまでの短い待ち時間。")]
     [Min(0f)] [SerializeField] private float fastForwardFirstCustomerDelay = 0.15f;
+
+    private const float NormalPurchaseSEDelay = 0.65f;
+    private const float FastPurchaseSEDelay = 0.05f;
 
     private readonly Queue<CustomerSystem.VisitingCustomer> waitingCustomers = new();
     private int totalVisitors;
@@ -56,6 +60,9 @@ public class CustomerUI : MonoBehaviour
 
     private void Start()
     {
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+
         SetShopOpen(false);
         RefreshState();
     }
@@ -154,6 +161,11 @@ public class CustomerUI : MonoBehaviour
 
         CustomerSystem.VisitingCustomer customer = waitingCustomers.Dequeue();
         processedVisitors++;
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+        seManager?.PlayCustomerEnter();
+
         RefreshState();
 
         CustomerPurchaseSystem.PurchaseResult result = null;
@@ -170,6 +182,7 @@ public class CustomerUI : MonoBehaviour
             {
                 purchaseCount++;
                 totalSales += result.salePrice;
+                StartCoroutine(PlayPurchaseSEAfterDelay(fastForwardMode ? FastPurchaseSEDelay : NormalPurchaseSEDelay));
             }
 
             if (resultText != null)
@@ -213,6 +226,11 @@ public class CustomerUI : MonoBehaviour
         purchaseCount++;
         totalSales += salePrice;
 
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+        seManager?.PlayCustomerEnter();
+        StartCoroutine(PlayPurchaseSEAfterDelay(NormalPurchaseSEDelay));
+
         if (resultText != null)
             resultText.text = $"{request.requesterName}：{bouquet.bouquetName}を依頼品として受け取りました";
 
@@ -230,6 +248,16 @@ public class CustomerUI : MonoBehaviour
         isProcessingRequestPickup = false;
         isProcessingCustomer = false;
         RefreshState();
+    }
+
+    private IEnumerator PlayPurchaseSEAfterDelay(float delay)
+    {
+        if (delay > 0f)
+            yield return new WaitForSeconds(delay);
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+        seManager?.PlayPurchase();
     }
 
     private CustomerPurchaseSystem.PurchaseResult TryAddMysteryRequestPurchase(
