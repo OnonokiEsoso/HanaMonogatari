@@ -62,6 +62,8 @@ public class CustomerSystem : MonoBehaviour
         }
     }
 
+    private const int MinimumDailyVisitors = 5;
+
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private InventorySystem inventorySystem;
@@ -72,6 +74,8 @@ public class CustomerSystem : MonoBehaviour
     [SerializeField] private List<CustomerData> customerProfiles = new();
 
     [Header("来客数")]
+    [Tooltip("通常営業では各種補正後の最終来客数を最低5人にします。Debugの固定来客数はこの下限を無視します。")]
+    [SerializeField] private int minimumDailyVisitors = MinimumDailyVisitors;
     [Tooltip("ゲーム開始から2日間だけ、倍率計算後に固定人数として加算します。")]
     [SerializeField] private int openingBonusVisitors = 5;
 
@@ -102,6 +106,7 @@ public class CustomerSystem : MonoBehaviour
         if (furnitureSystem == null)
             furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
 
+        minimumDailyVisitors = Mathf.Max(MinimumDailyVisitors, minimumDailyVisitors);
         EnsureDefaultProfiles();
         CaptureProfileBaselines();
         ApplyShopRatingProfileGrowth();
@@ -178,12 +183,15 @@ public class CustomerSystem : MonoBehaviour
             : 0;
 
         if (visitorModifierSystem != null)
-            return visitorModifierSystem.CalculateVisitorCount(baseVisitors, randomMultiplier, openingFlatBonus);
+        {
+            int visitors = visitorModifierSystem.CalculateVisitorCount(baseVisitors, randomMultiplier, openingFlatBonus);
+            return Mathf.Max(minimumDailyVisitors, visitors);
+        }
 
         Debug.LogWarning("CustomerSystem: VisitorModifierSystemが設定されていません。依頼・家具等の来客補正は反映されません。");
         float trendMultiplier = 1f + TrendSystem.GetVisitorBonusPercent(shopManager);
-        int visitors = Mathf.RoundToInt(baseVisitors * randomMultiplier * trendMultiplier) + openingFlatBonus;
-        return Mathf.Max(1, visitors);
+        int fallbackVisitors = Mathf.RoundToInt(baseVisitors * randomMultiplier * trendMultiplier) + openingFlatBonus;
+        return Mathf.Max(minimumDailyVisitors, fallbackVisitors);
     }
 
     public RegularPointResult AddRegularPoint(CustomerType customerType)
