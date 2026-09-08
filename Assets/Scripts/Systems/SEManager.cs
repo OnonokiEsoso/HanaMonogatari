@@ -57,6 +57,7 @@ public class SEManager : MonoBehaviour
     private AudioSource audioSource;
     private int lastSupplierLevel;
     private int lastBouquetCount;
+    private bool lastDevelopmentFeatureUnlocked;
     private readonly HashSet<Button> boundButtons = new();
     private readonly HashSet<ChallengeDefinition> completedChallenges = new();
     private readonly HashSet<DevelopmentId> completedDevelopments = new();
@@ -73,6 +74,7 @@ public class SEManager : MonoBehaviour
 
         lastSupplierLevel = shopManager != null ? shopManager.SupplierLevel : 1;
         lastBouquetCount = bouquetSystem != null ? bouquetSystem.Bouquets.Count : 0;
+        lastDevelopmentFeatureUnlocked = developmentSystem != null && developmentSystem.IsDevelopmentFeatureUnlocked;
         CaptureCompletedChallenges(false);
         CaptureCompletedDevelopments(false);
     }
@@ -213,18 +215,6 @@ public class SEManager : MonoBehaviour
         string labelText = label != null ? label.text ?? string.Empty : string.Empty;
         string combined = objectName + " " + labelText;
 
-        if (ContainsAny(combined, "Back", "Close", "Cancel", "戻る", "閉じる", "キャンセル"))
-        {
-            PlayBack();
-            return;
-        }
-
-        if (ContainsAny(combined, "Tab", "タブ"))
-        {
-            PlayTabChange();
-            return;
-        }
-
         if (ContainsAny(combined, "開店する", "OpenShop"))
         {
             PlayOpenShop();
@@ -234,6 +224,18 @@ public class SEManager : MonoBehaviour
         if (ContainsAny(combined, "閉店する", "CloseShop"))
         {
             PlayCloseShop();
+            return;
+        }
+
+        if (ContainsAny(combined, "Back", "Close", "Cancel", "戻る", "閉じる", "キャンセル"))
+        {
+            PlayBack();
+            return;
+        }
+
+        if (ContainsAny(combined, "Tab", "タブ"))
+        {
+            PlayTabChange();
             return;
         }
 
@@ -262,8 +264,15 @@ public class SEManager : MonoBehaviour
         int currentLevel = shopManager.SupplierLevel;
         if (currentLevel > lastSupplierLevel)
             PlayLevelUp();
-
         lastSupplierLevel = currentLevel;
+
+        if (developmentSystem != null)
+        {
+            bool featureUnlocked = developmentSystem.IsDevelopmentFeatureUnlocked;
+            if (featureUnlocked && !lastDevelopmentFeatureUnlocked)
+                PlayUnlock();
+            lastDevelopmentFeatureUnlocked = featureUnlocked;
+        }
     }
 
     private void HandleBouquetsChanged()
