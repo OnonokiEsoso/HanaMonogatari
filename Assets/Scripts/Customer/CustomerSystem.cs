@@ -62,7 +62,7 @@ public class CustomerSystem : MonoBehaviour
         }
     }
 
-    private const int MinimumDailyVisitors = 5;
+    private const int MinimumDailyVisitors = 1;
 
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
@@ -74,7 +74,7 @@ public class CustomerSystem : MonoBehaviour
     [SerializeField] private List<CustomerData> customerProfiles = new();
 
     [Header("来客数")]
-    [Tooltip("通常営業では各種補正後の最終来客数を最低5人にします。Debugの固定来客数はこの下限を無視します。")]
+    [Tooltip("通常営業では各種補正後の最終来客数を最低1人にします。Debugの固定来客数はこの下限を無視します。")]
     [SerializeField] private int minimumDailyVisitors = MinimumDailyVisitors;
     [Tooltip("ゲーム開始から2日間だけ、倍率計算後に固定人数として加算します。")]
     [SerializeField] private int openingBonusVisitors = 5;
@@ -175,8 +175,15 @@ public class CustomerSystem : MonoBehaviour
         if (debugVisitorCountOverrideEnabled)
             return debugFixedVisitorCount;
 
-        int rating = shopManager != null ? shopManager.ShopRating : 0;
-        int baseVisitors = 2 + Mathf.FloorToInt(rating / 300f);
+        int shopLevel = GetVisitorShopLevel();
+        int supplierLevel = shopManager != null ? Mathf.Clamp(shopManager.SupplierLevel, 1, 10) : 1;
+        int flowerCount = GetTotalFlowerStock();
+
+        int baseVisitors = 1
+            + GetShopLevelVisitorBonus(shopLevel)
+            + GetSupplierLevelVisitorBonus(supplierLevel)
+            + GetFlowerStockVisitorBonus(flowerCount);
+
         float randomMultiplier = UnityEngine.Random.Range(0.8f, 1.2f);
         int openingFlatBonus = shopManager != null && shopManager.GameYear == 1 && shopManager.DayOfYear <= 2
             ? openingBonusVisitors
@@ -192,6 +199,68 @@ public class CustomerSystem : MonoBehaviour
         float trendMultiplier = 1f + TrendSystem.GetVisitorBonusPercent(shopManager);
         int fallbackVisitors = Mathf.RoundToInt(baseVisitors * randomMultiplier * trendMultiplier) + openingFlatBonus;
         return Mathf.Max(minimumDailyVisitors, fallbackVisitors);
+    }
+
+    private int GetVisitorShopLevel()
+    {
+        int rating = shopManager != null ? Mathf.Clamp(shopManager.ShopRating, 0, 10000) : 0;
+        return Mathf.Clamp(1 + Mathf.FloorToInt(rating / 1000f), 1, 10);
+    }
+
+    private static int GetShopLevelVisitorBonus(int shopLevel)
+    {
+        return Mathf.Clamp(shopLevel, 1, 10) switch
+        {
+            1 => 0,
+            2 => 1,
+            3 => 2,
+            4 => 3,
+            5 => 4,
+            6 => 5,
+            7 => 6,
+            8 => 7,
+            9 => 8,
+            10 => 10,
+            _ => 0
+        };
+    }
+
+    private static int GetSupplierLevelVisitorBonus(int supplierLevel)
+    {
+        int level = Mathf.Clamp(supplierLevel, 1, 10);
+        if (level >= 9) return 4;
+        if (level >= 7) return 3;
+        if (level >= 5) return 2;
+        if (level >= 3) return 1;
+        return 0;
+    }
+
+    private int GetTotalFlowerStock()
+    {
+        if (inventorySystem == null)
+            return 0;
+
+        int total = 0;
+        foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
+        {
+            if (batch == null || batch.flower == null || batch.quantity <= 0)
+                continue;
+
+            total += batch.quantity;
+        }
+
+        return total;
+    }
+
+    private static int GetFlowerStockVisitorBonus(int flowerCount)
+    {
+        int count = Mathf.Max(0, flowerCount);
+        if (count >= 150) return 4;
+        if (count >= 100) return 3;
+        if (count >= 60) return 2;
+        if (count >= 30) return 1;
+        if (count < 10) return -1;
+        return 0;
     }
 
     public RegularPointResult AddRegularPoint(CustomerType customerType)
