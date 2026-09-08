@@ -12,6 +12,8 @@ using UnityEngine.UI;
 [RequireComponent(typeof(AudioSource))]
 public class SEManager : MonoBehaviour
 {
+    private const string VolumePrefsKey = "SEVolume";
+
     [Header("参照")]
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private BouquetSystem bouquetSystem;
@@ -61,11 +63,15 @@ public class SEManager : MonoBehaviour
     private readonly HashSet<DevelopmentId> completedDevelopments = new();
     private Coroutine buttonBindingCoroutine;
 
+    public float Volume => volume;
+
     private void Awake()
     {
         audioSource = GetComponent<AudioSource>();
         audioSource.playOnAwake = false;
         audioSource.loop = false;
+
+        volume = Mathf.Clamp01(PlayerPrefs.GetFloat(VolumePrefsKey, volume));
         audioSource.volume = volume;
 
         ResolveReferences();
@@ -159,6 +165,9 @@ public class SEManager : MonoBehaviour
 
         if (audioSource != null)
             audioSource.volume = volume;
+
+        PlayerPrefs.SetFloat(VolumePrefsKey, volume);
+        PlayerPrefs.Save();
     }
 
     private void ResolveReferences()
