@@ -24,6 +24,7 @@ public class DailyResultUI : MonoBehaviour
     [SerializeField] private RequestSystem requestSystem;
     [SerializeField] private DayTransitionCurtainUI dayTransitionCurtainUI;
     [SerializeField] private GameNotificationBridge gameNotificationBridge;
+    [SerializeField] private BGMManager bgmManager;
 
     [Header("旧結果表示（任意・未使用でもOK）")]
     [SerializeField] private GameObject resultPanel;
@@ -40,6 +41,9 @@ public class DailyResultUI : MonoBehaviour
     {
         if (gameNotificationBridge == null)
             gameNotificationBridge = FindFirstObjectByType<GameNotificationBridge>();
+
+        if (bgmManager == null)
+            bgmManager = FindFirstObjectByType<BGMManager>();
 
         if (nextDayButton != null)
             nextDayButton.onClick.AddListener(GoToNextDay);
@@ -81,6 +85,10 @@ public class DailyResultUI : MonoBehaviour
     public void ShowResult()
     {
         if (customerUI == null || shopManager == null) return;
+
+        if (bgmManager == null)
+            bgmManager = FindFirstObjectByType<BGMManager>();
+        bgmManager?.PlayDailyResult();
 
         if (dateText != null)
             dateText.text = $"{shopManager.DateDisplayText}の営業結果";
