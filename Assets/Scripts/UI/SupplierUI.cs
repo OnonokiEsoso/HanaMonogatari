@@ -188,7 +188,7 @@ public class SupplierUI : MonoBehaviour
         {
             foreach (FurnitureData furniture in furnitureSystem.GetUnlockedDefinitions()
                          .Where(f => f != null && !furnitureSystem.IsOwned(f.id))
-                         .OrderBy(FurnitureSystem.GetRequiredSupplierLevel)
+                         .OrderBy(f => FurnitureSystem.GetRequiredSupplierLevel(f.id))
                          .ThenBy(f => f.purchasePrice)
                          .ThenBy(f => f.displayName))
             {
