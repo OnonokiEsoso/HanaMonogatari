@@ -18,6 +18,7 @@ public class SupplierUI : MonoBehaviour
     [SerializeField] private BouquetSystem bouquetSystem;
     [SerializeField] private CheckoutItemSystem checkoutItemSystem;
     [SerializeField] private FurnitureSystem furnitureSystem;
+    [SerializeField] private SEManager seManager;
     [Tooltip("仕入先キャラクターの吹き出し表示を担当するControllerを設定します。")]
     [SerializeField] private SupplierCommentController supplierCommentController;
 
@@ -46,6 +47,9 @@ public class SupplierUI : MonoBehaviour
     {
         if (furnitureSystem == null)
             furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
 
         if (wrappingBuyButton != null)
             wrappingBuyButton.onClick.AddListener(TryBuyWrapping);
@@ -85,6 +89,9 @@ public class SupplierUI : MonoBehaviour
     {
         if (furnitureSystem == null)
             furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
 
         if (shopManager != null)
             shopManager.SyncSupplierSystem();
@@ -226,6 +233,7 @@ public class SupplierUI : MonoBehaviour
 
         if (!shopManager.TryPurchaseFromSupplier(totalPrice))
         {
+            PlayErrorSE();
             Debug.Log($"所持金が足りないため、{arrival.flower.flowerName}を{quantity}個まとめて購入できませんでした。必要額：{totalPrice:N0}円");
             return;
         }
@@ -234,6 +242,7 @@ public class SupplierUI : MonoBehaviour
         inventorySystem.AddFlower(arrival.flower, quantity);
         shopManager.RegisterSupplierProductPurchase(GetFlowerProductKey(arrival.flower));
         bool gotWrappingBonus = shopManager.RegisterSupplierFlowerPurchase(quantity);
+        PlaySupplierPurchaseSE();
 
         Debug.Log($"{arrival.flower.flowerName}（{arrival.flower.color}）を{quantity}個仕入れました。合計{totalPrice:N0}円");
         if (gotWrappingBonus)
@@ -252,6 +261,7 @@ public class SupplierUI : MonoBehaviour
 
         if (!checkoutItemSystem.TryBuyTodayOffer())
         {
+            PlayErrorSE();
             Debug.Log($"{item.displayName}のBOXを購入できませんでした。必要額：{item.boxPurchasePrice:N0}円");
             return;
         }
@@ -259,6 +269,7 @@ public class SupplierUI : MonoBehaviour
         if (shopManager != null)
             shopManager.RegisterSupplierProductPurchase(GetCheckoutProductKey(item));
 
+        PlaySupplierPurchaseSE();
         Debug.Log($"{item.displayName} ×{item.boxQuantity}を{item.boxPurchasePrice:N0}円で仕入れました。");
         RefreshHeader();
         RebuildItemList();
@@ -270,7 +281,12 @@ public class SupplierUI : MonoBehaviour
             return;
 
         if (!furnitureSystem.TryPurchase(furniture))
+        {
+            PlayErrorSE();
             return;
+        }
+
+        PlaySupplierPurchaseSE();
 
         if (supplierCommentController != null)
             supplierCommentController.ShowDefaultMessage(shopManager);
@@ -306,6 +322,7 @@ public class SupplierUI : MonoBehaviour
         int price = supplierSystem.WrappingUnitPrice;
         if (!shopManager.TrySpendMoney(price))
         {
+            PlayErrorSE();
             Debug.Log($"ラッピングを購入する所持金が足りません。必要額：{price:N0}円");
             return;
         }
@@ -313,13 +330,29 @@ public class SupplierUI : MonoBehaviour
         if (!supplierSystem.TryPurchaseWrapping(1))
         {
             shopManager.AddMoney(price);
+            PlayErrorSE();
             return;
         }
 
         bouquetSystem.AddWrapping(1);
+        PlaySupplierPurchaseSE();
         Debug.Log($"ラッピングを1個購入しました。{price:N0}円");
         RefreshHeader();
         RefreshWrappingOffer();
+    }
+
+    private void PlaySupplierPurchaseSE()
+    {
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+        seManager?.PlaySupplierPurchase();
+    }
+
+    private void PlayErrorSE()
+    {
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+        seManager?.PlayError();
     }
 
     private void RefreshWrappingOffer()
