@@ -41,7 +41,6 @@ public class SEManager : MonoBehaviour
     [Header("達成・成長")]
     [SerializeField] private AudioClip challengeCompleteSE;
     [SerializeField] private AudioClip rewardClaimSE;
-    [SerializeField] private AudioClip levelUpSE;
     [SerializeField] private AudioClip unlockSE;
 
     [Header("リザルト")]
@@ -55,7 +54,6 @@ public class SEManager : MonoBehaviour
     [SerializeField] private float volume = 0.7f;
 
     private AudioSource audioSource;
-    private int lastSupplierLevel;
     private int lastBouquetCount;
     private bool lastDevelopmentFeatureUnlocked;
     private readonly HashSet<Button> boundButtons = new();
@@ -72,7 +70,6 @@ public class SEManager : MonoBehaviour
 
         ResolveReferences();
 
-        lastSupplierLevel = shopManager != null ? shopManager.SupplierLevel : 1;
         lastBouquetCount = bouquetSystem != null ? bouquetSystem.Bouquets.Count : 0;
         lastDevelopmentFeatureUnlocked = developmentSystem != null && developmentSystem.IsDevelopmentFeatureUnlocked;
         CaptureCompletedChallenges(false);
@@ -150,7 +147,6 @@ public class SEManager : MonoBehaviour
 
     public void PlayChallengeComplete() => Play(challengeCompleteSE);
     public void PlayRewardClaim() => Play(rewardClaimSE);
-    public void PlayLevelUp() => Play(levelUpSE);
     public void PlayUnlock() => Play(unlockSE);
 
     public void PlayResultCount() => Play(resultCountSE);
@@ -258,14 +254,6 @@ public class SEManager : MonoBehaviour
 
     private void HandleShopStateChanged()
     {
-        if (shopManager == null)
-            return;
-
-        int currentLevel = shopManager.SupplierLevel;
-        if (currentLevel > lastSupplierLevel)
-            PlayLevelUp();
-        lastSupplierLevel = currentLevel;
-
         if (developmentSystem != null)
         {
             bool featureUnlocked = developmentSystem.IsDevelopmentFeatureUnlocked;
