@@ -134,6 +134,11 @@ public class DevelopmentPanelUI : MonoBehaviour
 
     public void HidePanel()
     {
+        HybridTabUI hybridTabUI = hybridTab != null
+            ? hybridTab.GetComponentInChildren<HybridTabUI>(true)
+            : GetComponentInChildren<HybridTabUI>(true);
+        hybridTabUI?.HideFlowerSelection();
+
         if (panelRoot != null) panelRoot.SetActive(false);
         ResolveShopTabUI();
         shopTabUI?.SetTopTabBarBlocked(false);
