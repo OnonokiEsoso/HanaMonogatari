@@ -14,6 +14,7 @@ public class FurniturePanelUI : MonoBehaviour
 {
     [Header("参照")]
     [SerializeField] private FurnitureSystem furnitureSystem;
+    [SerializeField] private ShopTabUI shopTabUI;
 
     [Header("パネル")]
     [Tooltip("家具パネル全体の親オブジェクト。未設定ならこのGameObjectを使用します。")]
@@ -40,8 +41,7 @@ public class FurniturePanelUI : MonoBehaviour
 
     private void Awake()
     {
-        if (furnitureSystem == null)
-            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+        ResolveReferences();
 
         if (closeButton != null)
             closeButton.onClick.AddListener(HidePanel);
@@ -49,8 +49,7 @@ public class FurniturePanelUI : MonoBehaviour
 
     private void OnEnable()
     {
-        if (furnitureSystem == null)
-            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+        ResolveReferences();
 
         if (furnitureSystem != null)
             furnitureSystem.OnChanged += HandleFurnitureChanged;
@@ -70,13 +69,13 @@ public class FurniturePanelUI : MonoBehaviour
 
     public void ShowPanel()
     {
-        if (furnitureSystem == null)
-            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+        ResolveReferences();
 
         GameObject root = GetPanelRoot();
         if (root != null)
             root.SetActive(true);
 
+        shopTabUI?.SetTopTabBarBlocked(true);
         RefreshAll();
     }
 
@@ -85,6 +84,9 @@ public class FurniturePanelUI : MonoBehaviour
         GameObject root = GetPanelRoot();
         if (root != null)
             root.SetActive(false);
+
+        ResolveReferences();
+        shopTabUI?.SetTopTabBarBlocked(false);
     }
 
     public void TogglePanel()
@@ -179,5 +181,14 @@ public class FurniturePanelUI : MonoBehaviour
     private GameObject GetPanelRoot()
     {
         return furniturePanel != null ? furniturePanel : gameObject;
+    }
+
+    private void ResolveReferences()
+    {
+        if (furnitureSystem == null)
+            furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
+
+        if (shopTabUI == null)
+            shopTabUI = FindFirstObjectByType<ShopTabUI>();
     }
 }
