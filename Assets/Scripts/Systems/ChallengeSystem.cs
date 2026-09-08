@@ -165,7 +165,6 @@ public class ChallengeSystem : MonoBehaviour
         IEnumerable<ChallengeDefinition> monthly = challenges
             .Where(c => c != null && c.scope == ChallengeScope.Monthly && selectedMonthlyChallengeIds.Contains(c.id));
 
-        // 通算は各系列につき「まだ受取済みではない最も低い段階」だけを表示する。
         IEnumerable<ChallengeDefinition> lifetime = challenges
             .Where(c => c != null && c.scope == ChallengeScope.Lifetime)
             .GroupBy(c => string.IsNullOrWhiteSpace(c.chainId) ? c.id : c.chainId)
@@ -308,14 +307,14 @@ public class ChallengeSystem : MonoBehaviour
 
     private static int GetChallengeShopRatingBonus(ChallengeDefinition challenge)
     {
-        if (challenge == null)
+        if (challenge == null || challenge.rewardType == ChallengeRewardType.ShopRating)
             return 0;
 
         return challenge.scope switch
         {
-            ChallengeScope.Daily => 50,
-            ChallengeScope.Monthly => 150,
-            ChallengeScope.Lifetime => 100 * Mathf.Max(1, challenge.chainStage),
+            ChallengeScope.Daily => 10,
+            ChallengeScope.Monthly => 50,
+            ChallengeScope.Lifetime => 25 * Mathf.Max(1, challenge.chainStage),
             _ => 0
         };
     }
@@ -493,21 +492,18 @@ public class ChallengeSystem : MonoBehaviour
 
     private void EnsureDefaultChallenges()
     {
-        // 旧ver0.0.7初期版の3件だけがInspectorに残っている場合も、新構成へ置き換える。
         if (challenges != null && challenges.Any(c => c != null && c.id == "daily_spend_500") &&
             challenges.Any(c => c != null && c.id == "lifetime_furniture_1"))
             return;
 
         challenges = new List<ChallengeDefinition>
         {
-            // ---------- デイリー：毎日この中から1件 ----------
             C("daily_spend_500", ChallengeScope.Daily, "", 0, "今日の仕入れ", "今日、仕入れで500円使おう。", ChallengeType.SupplierSpend, 500, ChallengeRewardType.ShopRating, 50),
             C("daily_buy_flowers_5", ChallengeScope.Daily, "", 0, "今日の仕入れ本数", "今日、花を5本仕入れよう。", ChallengeType.FlowerPurchaseQuantity, 5, ChallengeRewardType.ShopRating, 40),
             C("daily_buy_types_2", ChallengeScope.Daily, "", 0, "いろいろ仕入れよう", "今日、2種類の花を仕入れよう。", ChallengeType.DistinctFlowerPurchases, 2, ChallengeRewardType.ShopRating, 45),
             C("daily_spend_1000", ChallengeScope.Daily, "", 0, "ちょっと大きな仕入れ", "今日、仕入れで1,000円使おう。", ChallengeType.SupplierSpend, 1000, ChallengeRewardType.ShopRating, 70),
             C("daily_buy_flowers_8", ChallengeScope.Daily, "", 0, "品揃えを増やそう", "今日、花を8本仕入れよう。", ChallengeType.FlowerPurchaseQuantity, 8, ChallengeRewardType.ShopRating, 60),
 
-            // ---------- 月間：毎月この中から2～3件 ----------
             C("monthly_types_10", ChallengeScope.Monthly, "", 0, "今月はいろんな花を", "今月、10種類の花を仕入れよう。", ChallengeType.DistinctFlowerPurchases, 10, ChallengeRewardType.Money, 3000),
             C("monthly_sales_20000", ChallengeScope.Monthly, "", 0, "月商20,000円", "今月の売上を20,000円以上にしよう。", ChallengeType.MonthlySales, 20000, ChallengeRewardType.Money, 3000),
             C("monthly_buyers_25", ChallengeScope.Monthly, "", 0, "25人に届けよう", "今月25人のお客さんに商品を買ってもらおう。", ChallengeType.MonthlyBuyers, 25, ChallengeRewardType.ShopRating, 120),
@@ -515,41 +511,35 @@ public class ChallengeSystem : MonoBehaviour
             C("monthly_flowers_30", ChallengeScope.Monthly, "", 0, "仕入れ強化月間", "今月、花を合計30本仕入れよう。", ChallengeType.FlowerPurchaseQuantity, 30, ChallengeRewardType.Money, 2500),
             C("monthly_spend_10000", ChallengeScope.Monthly, "", 0, "今月の仕入れ投資", "今月、仕入れで10,000円使おう。", ChallengeType.SupplierSpend, 10000, ChallengeRewardType.ShopRating, 150),
 
-            // ---------- 通算：家具系列 ----------
             C("lifetime_furniture_1", ChallengeScope.Lifetime, "furniture", 1, "はじめての家具", "家具を1個買おう。", ChallengeType.OwnFurniture, 1, ChallengeRewardType.Money, 1500),
             C("lifetime_furniture_2", ChallengeScope.Lifetime, "furniture", 2, "家具が増えてきた", "家具を2個買おう。", ChallengeType.OwnFurniture, 2, ChallengeRewardType.Money, 2500),
             C("lifetime_furniture_4", ChallengeScope.Lifetime, "furniture", 3, "居心地のいい店", "家具を4個買おう。", ChallengeType.OwnFurniture, 4, ChallengeRewardType.ShopRating, 150),
             C("lifetime_furniture_7", ChallengeScope.Lifetime, "furniture", 4, "こだわりの店内", "家具を7個買おう。", ChallengeType.OwnFurniture, 7, ChallengeRewardType.ShopRating, 300),
             C("lifetime_furniture_10", ChallengeScope.Lifetime, "furniture", 5, "家具コレクター", "家具を10個買おう。", ChallengeType.OwnFurniture, 10, ChallengeRewardType.Money, 10000),
 
-            // ---------- 通算：花束系列 ----------
             C("lifetime_bouquet_1", ChallengeScope.Lifetime, "bouquet", 1, "はじめての花束", "花束を1個作ろう。", ChallengeType.TotalBouquetsCreated, 1, ChallengeRewardType.Wrapping, 2),
             C("lifetime_bouquet_3", ChallengeScope.Lifetime, "bouquet", 2, "花束づくりに慣れよう", "花束を3個作ろう。", ChallengeType.TotalBouquetsCreated, 3, ChallengeRewardType.Money, 2000),
             C("lifetime_bouquet_10", ChallengeScope.Lifetime, "bouquet", 3, "花束職人", "花束を10個作ろう。", ChallengeType.TotalBouquetsCreated, 10, ChallengeRewardType.ShopRating, 200),
             C("lifetime_bouquet_25", ChallengeScope.Lifetime, "bouquet", 4, "ブーケの名店", "花束を25個作ろう。", ChallengeType.TotalBouquetsCreated, 25, ChallengeRewardType.Money, 8000),
 
-            // ---------- 通算：来客系列 ----------
             C("lifetime_visitors_50", ChallengeScope.Lifetime, "visitors", 1, "50人のお客さん", "累計50人に来店してもらおう。", ChallengeType.TotalVisitors, 50, ChallengeRewardType.ShopRating, 100),
             C("lifetime_visitors_100", ChallengeScope.Lifetime, "visitors", 2, "100人突破", "累計100人に来店してもらおう。", ChallengeType.TotalVisitors, 100, ChallengeRewardType.ShopRating, 150),
             C("lifetime_visitors_250", ChallengeScope.Lifetime, "visitors", 3, "町で評判のお店", "累計250人に来店してもらおう。", ChallengeType.TotalVisitors, 250, ChallengeRewardType.Money, 5000),
             C("lifetime_visitors_500", ChallengeScope.Lifetime, "visitors", 4, "500人突破", "累計500人に来店してもらおう。", ChallengeType.TotalVisitors, 500, ChallengeRewardType.ShopRating, 400),
             C("lifetime_visitors_1000", ChallengeScope.Lifetime, "visitors", 5, "千客万来", "累計1,000人に来店してもらおう。", ChallengeType.TotalVisitors, 1000, ChallengeRewardType.Money, 15000),
 
-            // ---------- 通算：店評価系列 ----------
             C("lifetime_rating_500", ChallengeScope.Lifetime, "rating", 1, "評判の芽", "店評価500に到達しよう。", ChallengeType.ShopRating, 500, ChallengeRewardType.Money, 2000),
             C("lifetime_rating_2000", ChallengeScope.Lifetime, "rating", 2, "開発への一歩", "店評価2,000に到達しよう。", ChallengeType.ShopRating, 2000, ChallengeRewardType.Money, 5000),
             C("lifetime_rating_5000", ChallengeScope.Lifetime, "rating", 3, "人気店", "店評価5,000に到達しよう。", ChallengeType.ShopRating, 5000, ChallengeRewardType.Wrapping, 5),
             C("lifetime_rating_7500", ChallengeScope.Lifetime, "rating", 4, "有名店", "店評価7,500に到達しよう。", ChallengeType.ShopRating, 7500, ChallengeRewardType.Money, 10000),
             C("lifetime_rating_10000", ChallengeScope.Lifetime, "rating", 5, "一番人気のお花屋さん", "店評価10,000に到達しよう。", ChallengeType.ShopRating, 10000, ChallengeRewardType.Money, 20000),
 
-            // ---------- 通算：仕入先系列 ----------
             C("lifetime_supplier_2", ChallengeScope.Lifetime, "supplier", 1, "仕入先Lv.2", "仕入先Lv.2にしよう。", ChallengeType.SupplierLevel, 2, ChallengeRewardType.Wrapping, 1),
             C("lifetime_supplier_4", ChallengeScope.Lifetime, "supplier", 2, "仕入先Lv.4", "仕入先Lv.4にしよう。", ChallengeType.SupplierLevel, 4, ChallengeRewardType.Money, 3000),
             C("lifetime_supplier_6", ChallengeScope.Lifetime, "supplier", 3, "仕入先Lv.6", "仕入先Lv.6にしよう。", ChallengeType.SupplierLevel, 6, ChallengeRewardType.ShopRating, 200),
             C("lifetime_supplier_8", ChallengeScope.Lifetime, "supplier", 4, "仕入先Lv.8", "仕入先Lv.8にしよう。", ChallengeType.SupplierLevel, 8, ChallengeRewardType.Money, 10000),
             C("lifetime_supplier_10", ChallengeScope.Lifetime, "supplier", 5, "最高の仕入先", "仕入先Lv.10にしよう。", ChallengeType.SupplierLevel, 10, ChallengeRewardType.ShopRating, 500),
 
-            // ---------- 通算：交配系列 ----------
             C("lifetime_hybrid_1", ChallengeScope.Lifetime, "hybrid", 1, "はじめての新種", "交配で新種を1種類開発しよう。", ChallengeType.HybridUnlockedCount, 1, ChallengeRewardType.Money, 5000),
             C("lifetime_hybrid_3", ChallengeScope.Lifetime, "hybrid", 2, "交配研究者", "交配で新種を3種類開発しよう。", ChallengeType.HybridUnlockedCount, 3, ChallengeRewardType.ShopRating, 200),
             C("lifetime_hybrid_5", ChallengeScope.Lifetime, "hybrid", 3, "新種が増えてきた", "交配で新種を5種類開発しよう。", ChallengeType.HybridUnlockedCount, 5, ChallengeRewardType.Money, 10000),
