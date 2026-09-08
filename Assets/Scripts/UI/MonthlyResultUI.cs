@@ -32,6 +32,8 @@ public class MonthlyResultUI : MonoBehaviour
     [Header("数値演出")]
     [Tooltip("各数値が0から最終値まで到達する時間です。")]
     [Min(0.1f)] [SerializeField] private float countAnimationDuration = 1.8f;
+    [Tooltip("カウントアップ中のSEを鳴らす間隔です。")]
+    [Min(0.03f)] [SerializeField] private float countSEInterval = 0.09f;
 
     [Header("操作")]
     [SerializeField] private Button nextMonthButton;
@@ -144,10 +146,13 @@ public class MonthlyResultUI : MonoBehaviour
     {
         float duration = Mathf.Max(0.1f, countAnimationDuration);
         float elapsed = 0f;
+        float countSEElapsed = 0f;
 
         while (elapsed < duration)
         {
-            elapsed += Time.unscaledDeltaTime;
+            float delta = Time.unscaledDeltaTime;
+            elapsed += delta;
+            countSEElapsed += delta;
             float progress = Mathf.Clamp01(elapsed / duration);
 
             SetAnimatedValues(
@@ -160,6 +165,14 @@ public class MonthlyResultUI : MonoBehaviour
                 Mathf.RoundToInt(maintenance * progress),
                 Mathf.RoundToInt(moneyBefore * progress),
                 Mathf.RoundToInt(moneyAfter * progress));
+
+            if (countSEElapsed >= Mathf.Max(0.03f, countSEInterval))
+            {
+                countSEElapsed = 0f;
+                if (seManager == null)
+                    seManager = FindFirstObjectByType<SEManager>();
+                seManager?.PlayResultCount();
+            }
 
             yield return null;
         }
@@ -174,6 +187,10 @@ public class MonthlyResultUI : MonoBehaviour
             maintenance,
             moneyBefore,
             moneyAfter);
+
+        if (seManager == null)
+            seManager = FindFirstObjectByType<SEManager>();
+        seManager?.PlayResultComplete();
 
         countAnimationCoroutine = null;
 
