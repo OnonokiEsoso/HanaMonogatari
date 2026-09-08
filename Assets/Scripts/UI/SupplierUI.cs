@@ -242,7 +242,9 @@ public class SupplierUI : MonoBehaviour
         inventorySystem.AddFlower(arrival.flower, quantity);
         shopManager.RegisterSupplierProductPurchase(GetFlowerProductKey(arrival.flower));
         bool gotWrappingBonus = shopManager.RegisterSupplierFlowerPurchase(quantity);
-        PlaySupplierPurchaseSE();
+
+        if (!gotWrappingBonus)
+            PlaySupplierPurchaseSE();
 
         Debug.Log($"{arrival.flower.flowerName}（{arrival.flower.color}）を{quantity}個仕入れました。合計{totalPrice:N0}円");
         if (gotWrappingBonus)
