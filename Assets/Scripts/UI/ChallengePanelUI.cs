@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -23,12 +24,15 @@ public class ChallengePanelUI : MonoBehaviour
     [SerializeField] private TMP_Text monthTitleText;
 
     [Header("一覧")]
+    [Tooltip("ChallengeScrollView の ScrollRect。未設定時は子階層から自動取得します。")]
+    [SerializeField] private ScrollRect challengeScrollRect;
     [Tooltip("ChallengeScrollView / Viewport / Content を設定します。")]
     [SerializeField] private Transform challengeListContent;
     [Tooltip("一覧へ複製するChallengeItem prefab。")]
     [SerializeField] private ChallengeItemUI challengeItemPrefab;
 
     private readonly List<ChallengeItemUI> spawnedItems = new();
+    private Coroutine resetScrollCoroutine;
 
     public bool IsVisible => GetPanelRoot() != null && GetPanelRoot().activeSelf;
 
@@ -52,6 +56,12 @@ public class ChallengePanelUI : MonoBehaviour
     {
         if (challengeSystem != null)
             challengeSystem.OnChanged -= HandleChallengeChanged;
+
+        if (resetScrollCoroutine != null)
+        {
+            StopCoroutine(resetScrollCoroutine);
+            resetScrollCoroutine = null;
+        }
     }
 
     private void OnDestroy()
@@ -71,6 +81,10 @@ public class ChallengePanelUI : MonoBehaviour
 
         shopTabUI?.SetTopTabBarBlocked(true);
         RefreshAll();
+
+        if (resetScrollCoroutine != null)
+            StopCoroutine(resetScrollCoroutine);
+        resetScrollCoroutine = StartCoroutine(ResetScrollToTopNextFrame());
     }
 
     public void HidePanel()
@@ -87,6 +101,20 @@ public class ChallengePanelUI : MonoBehaviour
     {
         RefreshTitle();
         RebuildList();
+    }
+
+    private IEnumerator ResetScrollToTopNextFrame()
+    {
+        yield return null;
+
+        Canvas.ForceUpdateCanvases();
+        if (challengeScrollRect != null)
+        {
+            challengeScrollRect.StopMovement();
+            challengeScrollRect.verticalNormalizedPosition = 1f;
+        }
+
+        resetScrollCoroutine = null;
     }
 
     private void RefreshTitle()
@@ -175,6 +203,9 @@ public class ChallengePanelUI : MonoBehaviour
         Transform[] transforms = GetComponentsInChildren<Transform>(true);
         Button[] buttons = GetComponentsInChildren<Button>(true);
         TMP_Text[] texts = GetComponentsInChildren<TMP_Text>(true);
+
+        if (challengeScrollRect == null)
+            challengeScrollRect = GetComponentInChildren<ScrollRect>(true);
 
         if (closeButton == null)
         {
