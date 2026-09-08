@@ -25,7 +25,6 @@ public class BGMManager : MonoBehaviour
     [SerializeField] private AudioClip homeBGM;
     [SerializeField] private AudioClip supplierBGM;
     [SerializeField] private AudioClip businessBGM;
-    [SerializeField] private AudioClip dailyResultBGM;
     [SerializeField] private AudioClip monthlyResultBGM;
 
     [Header("再生設定")]
@@ -79,7 +78,7 @@ public class BGMManager : MonoBehaviour
     public void PlayHome() => Play(BGMScene.Home);
     public void PlaySupplier() => Play(BGMScene.Supplier);
     public void PlayBusiness() => Play(BGMScene.Business);
-    public void PlayDailyResult() => Play(BGMScene.DailyResult);
+    public void PlayDailyResult() => Play(BGMScene.Business);
     public void PlayMonthlyResult() => Play(BGMScene.MonthlyResult);
 
     public void Stop()
@@ -106,7 +105,7 @@ public class BGMManager : MonoBehaviour
             BGMScene.Home => homeBGM,
             BGMScene.Supplier => supplierBGM,
             BGMScene.Business => businessBGM,
-            BGMScene.DailyResult => dailyResultBGM,
+            BGMScene.DailyResult => businessBGM,
             BGMScene.MonthlyResult => monthlyResultBGM,
             _ => null
         };
