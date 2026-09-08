@@ -9,6 +9,8 @@ using UnityEngine;
 [RequireComponent(typeof(AudioSource))]
 public class BGMManager : MonoBehaviour
 {
+    private const string VolumePrefsKey = "BGMVolume";
+
     public enum BGMScene
     {
         None,
@@ -36,12 +38,15 @@ public class BGMManager : MonoBehaviour
     private BGMScene currentScene = BGMScene.None;
 
     public BGMScene CurrentScene => currentScene;
+    public float Volume => volume;
 
     private void Awake()
     {
         audioSource = GetComponent<AudioSource>();
         audioSource.playOnAwake = false;
         audioSource.loop = true;
+
+        volume = Mathf.Clamp01(PlayerPrefs.GetFloat(VolumePrefsKey, volume));
         audioSource.volume = volume;
     }
 
@@ -95,6 +100,9 @@ public class BGMManager : MonoBehaviour
 
         if (audioSource != null)
             audioSource.volume = volume;
+
+        PlayerPrefs.SetFloat(VolumePrefsKey, volume);
+        PlayerPrefs.Save();
     }
 
     private AudioClip GetClip(BGMScene scene)
