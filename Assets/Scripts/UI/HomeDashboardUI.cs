@@ -305,6 +305,7 @@ public class HomeDashboardUI : MonoBehaviour
         if (customerUI.IsShopOpen || customerUI.HasFinishedToday || isOpening)
             return;
 
+        openingAnnouncementDuration = 0f;
         StartCoroutine(OpenShopRoutine());
     }
 
