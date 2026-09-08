@@ -138,10 +138,10 @@ public class BouquetUI : MonoBehaviour
         int recommendedPrice = BouquetSystem.CalculateRecommendedPrice(materialCost, total);
 
         if (totalQuantityText != null)
-            totalQuantityText.text = $"合計：{total}/{BouquetSystem.MaximumBouquetQuantity}本";
+            totalQuantityText.text = $"合計：{total}/{BouquetSystem.MaximumBouquetQuantity}本（3本以上）";
 
         if (distinctCountText != null)
-            distinctCountText.text = $"種類：{distinct}/3以上";
+            distinctCountText.text = $"種類：{distinct}";
 
         if (currentRecommendedPriceText != null)
             currentRecommendedPriceText.text = $"現在の適正価格：{recommendedPrice:N0}円";
@@ -158,8 +158,7 @@ public class BouquetUI : MonoBehaviour
                 bouquetSystem != null &&
                 bouquetSystem.CanCreateWithWrapping &&
                 total >= BouquetSystem.MinimumBouquetQuantity &&
-                total <= BouquetSystem.MaximumBouquetQuantity &&
-                distinct >= 3;
+                total <= BouquetSystem.MaximumBouquetQuantity;
         }
     }
 
