@@ -23,6 +23,10 @@ public class PricingItemUI : MonoBehaviour
     [SerializeField] private Button copyButton;
     [SerializeField] private Button pasteButton;
 
+    [Header("決定ボタン表示")]
+    [Tooltip("入力値がまだ反映されていない時の決定ボタン色です。")]
+    [SerializeField] private Color pendingApplyColor = new Color(0.44f, 0.68f, 0.86f, 1f);
+
     private static int? copiedSalePrice;
     private static event Action ClipboardChanged;
 
@@ -34,6 +38,8 @@ public class PricingItemUI : MonoBehaviour
     private Action<FlowerData, int> onFlowerApply;
     private Action<BouquetSystem.BouquetData, int> onBouquetApply;
     private SEManager seManager;
+    private ColorBlock defaultApplyButtonColors;
+    private string appliedPriceText = string.Empty;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetClipboard()
@@ -47,7 +53,10 @@ public class PricingItemUI : MonoBehaviour
         seManager = FindFirstObjectByType<SEManager>();
 
         if (applyButton != null)
+        {
+            defaultApplyButtonColors = applyButton.colors;
             applyButton.onClick.AddListener(ApplyPrice);
+        }
 
         if (recommendedButton != null)
             recommendedButton.onClick.AddListener(UseRecommendedPrice);
@@ -58,8 +67,12 @@ public class PricingItemUI : MonoBehaviour
         if (pasteButton != null)
             pasteButton.onClick.AddListener(PastePrice);
 
+        if (salePriceInput != null)
+            salePriceInput.onValueChanged.AddListener(HandleSalePriceInputChanged);
+
         ClipboardChanged += RefreshPasteButton;
         RefreshPasteButton();
+        RefreshApplyButtonColor();
     }
 
     private void OnDestroy()
@@ -75,6 +88,9 @@ public class PricingItemUI : MonoBehaviour
 
         if (pasteButton != null)
             pasteButton.onClick.RemoveListener(PastePrice);
+
+        if (salePriceInput != null)
+            salePriceInput.onValueChanged.RemoveListener(HandleSalePriceInputChanged);
 
         ClipboardChanged -= RefreshPasteButton;
     }
@@ -139,14 +155,18 @@ public class PricingItemUI : MonoBehaviour
                     placeholderText.text = $"おすすめ {recommendedPrice:N0}円";
 
                 salePriceInput.text = bouquet.salePrice.ToString();
+                appliedPriceText = salePriceInput.text;
             }
 
+            RefreshApplyButtonColor();
             return;
         }
 
         if (flower == null || pricingSystem == null)
         {
             RefreshFlowerImage(null);
+            appliedPriceText = string.Empty;
+            RefreshApplyButtonColor();
             return;
         }
 
@@ -177,7 +197,10 @@ public class PricingItemUI : MonoBehaviour
             salePriceInput.text = pricingSystem.HasCustomPrice(flower)
                 ? currentPrice.ToString()
                 : string.Empty;
+            appliedPriceText = salePriceInput.text;
         }
+
+        RefreshApplyButtonColor();
     }
 
     private void RefreshFlowerImage(FlowerData targetFlower)
@@ -207,6 +230,9 @@ public class PricingItemUI : MonoBehaviour
             onBouquetApply?.Invoke(bouquet, price);
         else if (flower != null)
             onFlowerApply?.Invoke(flower, price);
+
+        appliedPriceText = price.ToString();
+        RefreshApplyButtonColor();
 
         ResolveSEManager();
         seManager?.PlayPriceChange();
@@ -256,6 +282,31 @@ public class PricingItemUI : MonoBehaviour
     {
         if (pasteButton != null)
             pasteButton.interactable = copiedSalePrice.HasValue;
+    }
+
+    private void HandleSalePriceInputChanged(string value)
+    {
+        RefreshApplyButtonColor();
+    }
+
+    private void RefreshApplyButtonColor()
+    {
+        if (applyButton == null)
+            return;
+
+        bool hasPendingChange = salePriceInput != null && salePriceInput.text != appliedPriceText;
+        if (!hasPendingChange)
+        {
+            applyButton.colors = defaultApplyButtonColors;
+            return;
+        }
+
+        ColorBlock colors = defaultApplyButtonColors;
+        colors.normalColor = pendingApplyColor;
+        colors.highlightedColor = Color.Lerp(pendingApplyColor, Color.white, 0.12f);
+        colors.pressedColor = Color.Lerp(pendingApplyColor, Color.black, 0.12f);
+        colors.selectedColor = pendingApplyColor;
+        applyButton.colors = colors;
     }
 
     private void ResolveSEManager()
