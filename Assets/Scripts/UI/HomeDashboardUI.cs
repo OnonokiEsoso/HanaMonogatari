@@ -30,6 +30,10 @@ public class HomeDashboardUI : MonoBehaviour
     [SerializeField] private RequestSystem requestSystem;
     [Tooltip("家具の設置状況と設置上限を監視するために設定します。")]
     [SerializeField] private FurnitureSystem furnitureSystem;
+    [Tooltip("開発・制作の開始可否と進行状態を監視します。未設定なら自動取得します。")]
+    [SerializeField] private DevelopmentSystem developmentSystem;
+    [Tooltip("交配・交配花制作の開始可否と進行状態を監視します。未設定なら自動取得します。")]
+    [SerializeField] private HybridDevelopmentSystem hybridDevelopmentSystem;
 
     [Header("ホーム表示")]
     [Tooltip("HomeUIRoot。ホーム専用UI全体の親を設定します。")]
@@ -72,6 +76,8 @@ public class HomeDashboardUI : MonoBehaviour
     [FormerlySerializedAs("checkoutButton")]
     [Tooltip("旧レジ横ボタン。ver0.0.6からホームの『開発』ボタンとして使用します。")]
     [SerializeField] private Button developmentButton;
+    [Tooltip("DevelopmentButton内の『!!』テキスト。作業枠が空いていて、今すぐ開発・制作・交配のどれかを開始できる時だけ表示します。")]
+    [SerializeField] private TMP_Text developmentAlertText;
     [Tooltip("ホームに追加したチャレンジボタン。GameObject名がChallengeButtonなら未設定でも自動取得します。")]
     [SerializeField] private Button challengeButton;
     [Tooltip("ChallengeButton内の『!!』テキスト。達成済み・未受取のチャレンジがある時だけ表示します。")]
@@ -99,6 +105,7 @@ public class HomeDashboardUI : MonoBehaviour
         if (furnitureSystem == null)
             furnitureSystem = FindFirstObjectByType<FurnitureSystem>();
 
+        ResolveDevelopmentReferences();
         ResolveChallengeReferences();
 
         if (openShopButton != null)
@@ -122,6 +129,7 @@ public class HomeDashboardUI : MonoBehaviour
         RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
+        RefreshDevelopmentAlert();
         RefreshChallengeAlert();
     }
 
@@ -142,6 +150,12 @@ public class HomeDashboardUI : MonoBehaviour
         if (furnitureSystem != null)
             furnitureSystem.OnChanged += RefreshFurnitureAlert;
 
+        ResolveDevelopmentReferences();
+        if (developmentSystem != null)
+            developmentSystem.OnChanged += RefreshDevelopmentAlert;
+        if (hybridDevelopmentSystem != null)
+            hybridDevelopmentSystem.OnChanged += RefreshDevelopmentAlert;
+
         ResolveChallengeReferences();
         if (challengeSystem != null)
             challengeSystem.OnChanged += RefreshChallengeAlert;
@@ -149,6 +163,7 @@ public class HomeDashboardUI : MonoBehaviour
         RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
+        RefreshDevelopmentAlert();
         RefreshChallengeAlert();
     }
 
@@ -166,6 +181,11 @@ public class HomeDashboardUI : MonoBehaviour
 
         if (furnitureSystem != null)
             furnitureSystem.OnChanged -= RefreshFurnitureAlert;
+
+        if (developmentSystem != null)
+            developmentSystem.OnChanged -= RefreshDevelopmentAlert;
+        if (hybridDevelopmentSystem != null)
+            hybridDevelopmentSystem.OnChanged -= RefreshDevelopmentAlert;
 
         if (challengeSystem != null)
             challengeSystem.OnChanged -= RefreshChallengeAlert;
@@ -230,6 +250,7 @@ public class HomeDashboardUI : MonoBehaviour
         RefreshFastForwardButton();
         RefreshRequestAlert();
         RefreshFurnitureAlert();
+        RefreshDevelopmentAlert();
         RefreshChallengeAlert();
     }
 
@@ -272,6 +293,7 @@ public class HomeDashboardUI : MonoBehaviour
 
         RefreshFastForwardButton();
         RefreshFurnitureAlert();
+        RefreshDevelopmentAlert();
         RefreshChallengeAlert();
     }
 
@@ -414,6 +436,77 @@ public class HomeDashboardUI : MonoBehaviour
         furnitureAlertText.gameObject.SetActive(hasOpenSlot && hasInstallableFurniture);
     }
 
+    private void RefreshDevelopmentAlert()
+    {
+        ResolveDevelopmentReferences();
+        if (developmentAlertText == null)
+            return;
+
+        if (developmentAlertText.text != "!!")
+            developmentAlertText.text = "!!";
+
+        bool canStartSomething = false;
+
+        if (developmentSystem != null && !developmentSystem.HasAnyActiveWork)
+        {
+            canStartSomething = developmentSystem.HasAnyImmediatelyStartableDevelopment();
+
+            if (!canStartSomething)
+            {
+                foreach (DevelopmentDefinition definition in developmentSystem.Definitions)
+                {
+                    if (definition != null && developmentSystem.CanStartProduction(definition.id))
+                    {
+                        canStartSomething = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!canStartSomething && hybridDevelopmentSystem != null)
+            {
+                foreach (HybridRecipeDefinition recipe in hybridDevelopmentSystem.GetUnlockedRecipes())
+                {
+                    if (recipe != null && hybridDevelopmentSystem.CanStartHybridProduction(recipe.hybridName, out _))
+                    {
+                        canStartSomething = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!canStartSomething && hybridDevelopmentSystem != null && developmentSystem.IsNewSpeciesDevelopmentUnlocked)
+            {
+                InventorySystem inventorySystem = FindFirstObjectByType<InventorySystem>();
+                if (inventorySystem != null)
+                {
+                    var batches = inventorySystem.Batches;
+                    for (int i = 0; i < batches.Count && !canStartSomething; i++)
+                    {
+                        FlowerData flowerA = batches[i]?.flower;
+                        if (flowerA == null || batches[i].quantity <= 0)
+                            continue;
+
+                        for (int j = i + 1; j < batches.Count; j++)
+                        {
+                            FlowerData flowerB = batches[j]?.flower;
+                            if (flowerB == null || batches[j].quantity <= 0)
+                                continue;
+
+                            if (hybridDevelopmentSystem.CanStartHybrid(flowerA, flowerB, out _))
+                            {
+                                canStartSomething = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        developmentAlertText.gameObject.SetActive(canStartSomething);
+    }
+
     private void RefreshChallengeAlert()
     {
         ResolveChallengeReferences();
@@ -462,6 +555,7 @@ public class HomeDashboardUI : MonoBehaviour
         }
 
         developmentPanelUI.ShowPanel();
+        RefreshDevelopmentAlert();
     }
 
     private void HandleChallengeClicked()
@@ -476,6 +570,35 @@ public class HomeDashboardUI : MonoBehaviour
 
         challengePanelUI.ShowPanel();
         RefreshChallengeAlert();
+    }
+
+    private void ResolveDevelopmentReferences()
+    {
+        if (developmentSystem == null)
+            developmentSystem = FindFirstObjectByType<DevelopmentSystem>();
+
+        if (hybridDevelopmentSystem == null)
+            hybridDevelopmentSystem = FindFirstObjectByType<HybridDevelopmentSystem>();
+
+        if (developmentAlertText == null && developmentButton != null)
+        {
+            TMP_Text[] texts = developmentButton.GetComponentsInChildren<TMP_Text>(true);
+            foreach (TMP_Text text in texts)
+            {
+                if (text == null)
+                    continue;
+
+                string value = text.text != null ? text.text.Trim() : string.Empty;
+                if (text.gameObject.name == "DevelopmentAlertText" ||
+                    text.gameObject.name == "AlertText" ||
+                    value == "!!")
+                {
+                    developmentAlertText = text;
+                    developmentAlertText.text = "!!";
+                    break;
+                }
+            }
+        }
     }
 
     private void ResolveChallengeReferences()
