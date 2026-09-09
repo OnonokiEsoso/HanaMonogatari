@@ -120,6 +120,19 @@ public class DevelopmentSystem : MonoBehaviour
         OnChanged?.Invoke();
     }
 
+    public int GetRequiredFlowerQuantity(DevelopmentDefinition definition)
+    {
+        if (definition == null || !definition.requiresFlower)
+            return 0;
+
+        return definition.id switch
+        {
+            DevelopmentId.Karasan => 2,
+            DevelopmentId.SodatsuCho => 4,
+            _ => 1
+        };
+    }
+
     public bool CanStartDevelopment(DevelopmentId id, FlowerData materialFlower = null)
     {
         DevelopmentDefinition definition = GetDefinition(id);
@@ -157,7 +170,7 @@ public class DevelopmentSystem : MonoBehaviour
         ConsumeCheckoutMaterial(definition.requiredCheckoutItemId2, definition.requiredCheckoutItemQuantity2);
 
         if (definition.requiresFlower && materialFlower != null)
-            inventorySystem.TryRemoveFlower(materialFlower, 1);
+            inventorySystem.TryRemoveFlower(materialFlower, GetRequiredFlowerQuantity(definition));
 
         activeJob.jobType = DevelopmentJobType.Development;
         activeJob.targetId = id;
@@ -217,9 +230,12 @@ public class DevelopmentSystem : MonoBehaviour
 
             if (definition.requiresFlower)
             {
-                bool hasSuitableFlower = inventorySystem != null && inventorySystem.Batches.Any(batch =>
-                    batch?.flower != null && batch.quantity > 0 &&
-                    batch.flower.arrivalDifficulty >= definition.minimumFlowerArrivalDifficulty);
+                int requiredQuantity = GetRequiredFlowerQuantity(definition);
+                bool hasSuitableFlower = inventorySystem != null && inventorySystem.Batches
+                    .Where(batch => batch?.flower != null && batch.quantity > 0 &&
+                                    batch.flower.arrivalDifficulty >= definition.minimumFlowerArrivalDifficulty)
+                    .GroupBy(batch => batch.flower)
+                    .Any(group => group.Sum(batch => batch.quantity) >= requiredQuantity);
 
                 if (!hasSuitableFlower)
                     continue;
@@ -316,7 +332,12 @@ public class DevelopmentSystem : MonoBehaviour
         {
             DevelopmentProgressState state = GetOrCreateProgressState(definition.id);
             state.completed = true;
-            lastCompletionMessage = $"『{definition.displayName}』の開発が完了しました！ 作成できるようになりました。";
+
+            if (checkoutItemSystem == null)
+                checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
+            checkoutItemSystem?.AddStock(definition.producedCheckoutItemId, 1, false);
+
+            lastCompletionMessage = $"『{definition.displayName}』の開発が完了しました！ オリジナル品を1個獲得し、作成できるようになりました。";
         }
         else
         {
@@ -370,7 +391,8 @@ public class DevelopmentSystem : MonoBehaviour
         if (!definition.requiresFlower)
             return true;
 
-        if (flower == null || inventorySystem == null || inventorySystem.GetTotalQuantity(flower) <= 0)
+        int requiredQuantity = GetRequiredFlowerQuantity(definition);
+        if (flower == null || inventorySystem == null || inventorySystem.GetTotalQuantity(flower) < requiredQuantity)
             return false;
 
         return flower.arrivalDifficulty >= Mathf.Max(1, definition.minimumFlowerArrivalDifficulty);
@@ -418,8 +440,6 @@ public class DevelopmentSystem : MonoBehaviour
                 developmentCost = 5000,
                 developmentDays = 2,
                 requiredShopRating = DevelopmentUnlockShopRating,
-                requiredCheckoutItemId = NutritionItemId,
-                requiredCheckoutItemQuantity = 1,
                 requiresFlower = true,
                 minimumFlowerArrivalDifficulty = 1,
                 producedCheckoutItemId = KarasanItemId,
@@ -435,8 +455,6 @@ public class DevelopmentSystem : MonoBehaviour
                 developmentDays = 2,
                 requiredShopRating = DevelopmentUnlockShopRating,
                 prerequisiteDevelopments = new[] { DevelopmentId.Karasan },
-                requiredCheckoutItemId = FertilizerItemId,
-                requiredCheckoutItemQuantity = 1,
                 requiresFlower = true,
                 minimumFlowerArrivalDifficulty = 1,
                 producedCheckoutItemId = SodatsuChoItemId,
@@ -490,8 +508,7 @@ public class DevelopmentSystem : MonoBehaviour
                 requiredCheckoutItemQuantity = 1,
                 requiredCheckoutItemId2 = SodatsuChoItemId,
                 requiredCheckoutItemQuantity2 = 1,
-                requiresFlower = true,
-                minimumFlowerArrivalDifficulty = 8,
+                requiresFlower = false,
                 producedCheckoutItemId = KarasanTsuiItemId,
                 productionQuantity = 5,
                 productionCost = 8000,
