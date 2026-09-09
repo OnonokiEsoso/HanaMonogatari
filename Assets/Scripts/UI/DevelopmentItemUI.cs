@@ -247,12 +247,16 @@ public class DevelopmentItemUI : MonoBehaviour
     private FlowerData FindSuitableMaterialFlower(DevelopmentDefinition definition)
     {
         if (definition == null || !definition.requiresFlower || inventorySystem == null) return null;
+        int requiredQuantity = developmentSystem != null ? developmentSystem.GetRequiredFlowerQuantity(definition) : 1;
+
         return inventorySystem.Batches
             .Where(b => b != null && b.flower != null && b.quantity > 0)
             .Where(b => b.flower.arrivalDifficulty >= Mathf.Max(1, definition.minimumFlowerArrivalDifficulty))
-            .OrderBy(b => b.remainingFreshnessDays)
-            .ThenBy(b => b.flower.arrivalDifficulty)
-            .Select(b => b.flower)
+            .GroupBy(b => b.flower)
+            .Where(g => g.Sum(x => x.quantity) >= requiredQuantity)
+            .OrderBy(g => g.Min(x => x.remainingFreshnessDays))
+            .ThenBy(g => g.Key.arrivalDifficulty)
+            .Select(g => g.Key)
             .FirstOrDefault();
     }
 
@@ -266,7 +270,10 @@ public class DevelopmentItemUI : MonoBehaviour
         if (definition.requiresFlower)
         {
             if (hasAny) text += "\n";
-            text += definition.minimumFlowerArrivalDifficulty <= 1 ? "任意の花 ×1" : $"入荷難易度{definition.minimumFlowerArrivalDifficulty}以上の花 ×1";
+            int quantity = developmentSystem != null ? developmentSystem.GetRequiredFlowerQuantity(definition) : 1;
+            text += definition.minimumFlowerArrivalDifficulty <= 1
+                ? $"任意の花 ×{quantity}"
+                : $"入荷難易度{definition.minimumFlowerArrivalDifficulty}以上の花 ×{quantity}";
             FlowerData selected = FindSuitableMaterialFlower(definition);
             if (selected != null) text += $"\n（使用予定：{selected.flowerName} / {selected.GetColorDisplayText()}）";
             hasAny = true;
@@ -305,7 +312,12 @@ public class DevelopmentItemUI : MonoBehaviour
         if (!HasCheckoutMaterial(definition.requiredCheckoutItemId, definition.requiredCheckoutItemQuantity) ||
             !HasCheckoutMaterial(definition.requiredCheckoutItemId2, definition.requiredCheckoutItemQuantity2)) return "材料不足";
         if (definition.requiresFlower && materialFlower == null)
-            return definition.minimumFlowerArrivalDifficulty <= 1 ? "使用できる花がありません" : $"入荷難易度{definition.minimumFlowerArrivalDifficulty}以上の花がありません";
+        {
+            int quantity = developmentSystem != null ? developmentSystem.GetRequiredFlowerQuantity(definition) : 1;
+            return definition.minimumFlowerArrivalDifficulty <= 1
+                ? $"同じ花を{quantity}個用意してください"
+                : $"入荷難易度{definition.minimumFlowerArrivalDifficulty}以上の同じ花が{quantity}個必要です";
+        }
         return "条件不足";
     }
 
