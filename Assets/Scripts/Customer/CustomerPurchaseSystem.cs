@@ -85,7 +85,7 @@ public class CustomerPurchaseSystem : MonoBehaviour
     private const int CompromiseCandidateChecks = 1;
     private const int CompromiseFlowerShoppingRounds = 1;
     private const int CompromiseMaxSatisfactionScore = 5;
-    private const int SatisfactionRatingMultiplier = 3;
+    private const int SatisfactionRatingMultiplier = 2;
 
     public PurchaseResult TryPurchase(CustomerSystem.VisitingCustomer customer)
     {
