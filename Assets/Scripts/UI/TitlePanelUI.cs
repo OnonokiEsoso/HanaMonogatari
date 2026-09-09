@@ -8,10 +8,15 @@ using UnityEngine.UI;
 /// <summary>
 /// タイトル画面を管理します。
 /// 「はじめから」は現在のシーンを再読み込みして完全な初期状態からゲームを開始します。
-/// セーブ機能は未実装のため、「つづきから」は現時点では無効化します。
+/// 「つづきから」は主要進行だけを保存する簡易セーブを使用します。
 /// </summary>
 public class TitlePanelUI : MonoBehaviour
 {
+    private const string ContinueWarningMessage =
+        "『つづきから』では主要な進行だけを復元します。\n" +
+        "在庫・花束・家具・開発・交配・依頼・チャレンジなど、細かい部分は失われます。\n\n" +
+        "それでも続きから始めますか？";
+
     [Header("タイトル")]
     [SerializeField] private GameObject titlePanel;
     [SerializeField] private TMP_Text versionText;
@@ -28,6 +33,18 @@ public class TitlePanelUI : MonoBehaviour
     [Header("ゲーム画面")]
     [SerializeField] private HomeDashboardUI homeDashboardUI;
     [SerializeField] private ShopTabUI shopTabUI;
+    [SerializeField] private ShopManager shopManager;
+    [SerializeField] private SimpleSaveSystem simpleSaveSystem;
+
+    [Header("続きから確認")]
+    [Tooltip("ContinueWarningPanel。未設定時は同名GameObjectを自動検索します。")]
+    [SerializeField] private GameObject continueWarningPanel;
+    [Tooltip("ContinueWarningPanel内のWarningText。")]
+    [SerializeField] private TMP_Text continueWarningText;
+    [Tooltip("続きから実行ボタン。ContinueConfirmButtonを推奨します。")]
+    [SerializeField] private Button continueConfirmButton;
+    [Tooltip("続きからをやめるボタン。ContinueCancelButtonを推奨します。")]
+    [SerializeField] private Button continueCancelButton;
 
     [Header("設定")]
     [Tooltip("既存のSettingsPanelUIをそのままタイトルから開きます。")]
@@ -51,6 +68,7 @@ public class TitlePanelUI : MonoBehaviour
     private void Awake()
     {
         AutoFindReferences();
+        EnsureSimpleSaveSystem();
 
         if (newGameButton != null)
             newGameButton.onClick.AddListener(HandleNewGameClicked);
@@ -62,14 +80,18 @@ public class TitlePanelUI : MonoBehaviour
             creditsButton.onClick.AddListener(HandleCreditsClicked);
         if (quitButton != null)
             quitButton.onClick.AddListener(HandleQuitClicked);
+        if (continueConfirmButton != null)
+            continueConfirmButton.onClick.AddListener(HandleContinueConfirmed);
+        if (continueCancelButton != null)
+            continueCancelButton.onClick.AddListener(HideContinueWarning);
         if (creditsCloseButton != null)
             creditsCloseButton.onClick.AddListener(HideCredits);
 
         RefreshVersionText();
+        RefreshContinueButton();
 
-        // セーブシステムをまだ持っていないため、見た目だけ押せる状態にはしない。
-        if (continueButton != null)
-            continueButton.interactable = false;
+        if (continueWarningPanel != null)
+            continueWarningPanel.SetActive(false);
 
         if (creditsPanel != null)
             creditsPanel.SetActive(false);
@@ -85,6 +107,7 @@ public class TitlePanelUI : MonoBehaviour
         {
             enterGameAfterSceneReload = false;
             EnterGame();
+            simpleSaveSystem?.SaveNow();
         }
         else
         {
@@ -104,6 +127,10 @@ public class TitlePanelUI : MonoBehaviour
             creditsButton.onClick.RemoveListener(HandleCreditsClicked);
         if (quitButton != null)
             quitButton.onClick.RemoveListener(HandleQuitClicked);
+        if (continueConfirmButton != null)
+            continueConfirmButton.onClick.RemoveListener(HandleContinueConfirmed);
+        if (continueCancelButton != null)
+            continueCancelButton.onClick.RemoveListener(HideContinueWarning);
         if (creditsCloseButton != null)
             creditsCloseButton.onClick.RemoveListener(HideCredits);
     }
@@ -111,15 +138,20 @@ public class TitlePanelUI : MonoBehaviour
     public void ShowTitle()
     {
         ResolveGameplayReferences();
+        EnsureSimpleSaveSystem();
         homeDashboardUI?.HideHome();
 
         if (titlePanel != null)
             titlePanel.SetActive(true);
 
+        if (continueWarningPanel != null)
+            continueWarningPanel.SetActive(false);
+
         if (creditsPanel != null)
             creditsPanel.SetActive(false);
 
         RefreshVersionText();
+        RefreshContinueButton();
     }
 
     private void EnterGame()
@@ -128,6 +160,8 @@ public class TitlePanelUI : MonoBehaviour
 
         if (titlePanel != null)
             titlePanel.SetActive(false);
+        if (continueWarningPanel != null)
+            continueWarningPanel.SetActive(false);
         if (creditsPanel != null)
             creditsPanel.SetActive(false);
 
@@ -144,10 +178,13 @@ public class TitlePanelUI : MonoBehaviour
             return;
 
         sceneReloadRequested = true;
+        SimpleSaveSystem.DeleteSave();
         enterGameAfterSceneReload = true;
 
         if (newGameButton != null)
             newGameButton.interactable = false;
+        if (continueButton != null)
+            continueButton.interactable = false;
 
         Scene activeScene = SceneManager.GetActiveScene();
         if (activeScene.buildIndex >= 0)
@@ -168,12 +205,46 @@ public class TitlePanelUI : MonoBehaviour
         enterGameAfterSceneReload = false;
         if (newGameButton != null)
             newGameButton.interactable = true;
+        RefreshContinueButton();
     }
 
     private void HandleContinueClicked()
     {
-        // セーブ/ロード実装後に接続する入口だけ用意しています。
-        Debug.Log("TitlePanelUI: つづきからはセーブシステム実装後に使用できます。");
+        if (!SimpleSaveSystem.HasSaveData)
+        {
+            RefreshContinueButton();
+            return;
+        }
+
+        if (continueWarningPanel == null)
+        {
+            Debug.LogWarning("TitlePanelUI: ContinueWarningPanelが見つかりません。続きから確認パネルを設定してください。");
+            return;
+        }
+
+        if (continueWarningText != null)
+            continueWarningText.text = ContinueWarningMessage;
+
+        continueWarningPanel.SetActive(true);
+    }
+
+    private void HandleContinueConfirmed()
+    {
+        EnsureSimpleSaveSystem();
+        if (simpleSaveSystem == null || !simpleSaveSystem.TryLoad())
+        {
+            Debug.LogWarning("TitlePanelUI: 簡易セーブを読み込めませんでした。");
+            RefreshContinueButton();
+            return;
+        }
+
+        EnterGame();
+    }
+
+    private void HideContinueWarning()
+    {
+        if (continueWarningPanel != null)
+            continueWarningPanel.SetActive(false);
     }
 
     private void HandleSettingsClicked()
@@ -209,11 +280,19 @@ public class TitlePanelUI : MonoBehaviour
 
     private void HandleQuitClicked()
     {
+        simpleSaveSystem?.SaveNow();
+
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else
         Application.Quit();
 #endif
+    }
+
+    private void RefreshContinueButton()
+    {
+        if (continueButton != null)
+            continueButton.interactable = SimpleSaveSystem.HasSaveData;
     }
 
     private void RefreshVersionText()
@@ -234,6 +313,18 @@ public class TitlePanelUI : MonoBehaviour
             homeDashboardUI = FindFirstObjectByType<HomeDashboardUI>(FindObjectsInactive.Include);
         if (shopTabUI == null)
             shopTabUI = FindFirstObjectByType<ShopTabUI>(FindObjectsInactive.Include);
+        if (shopManager == null)
+            shopManager = FindFirstObjectByType<ShopManager>();
+    }
+
+    private void EnsureSimpleSaveSystem()
+    {
+        ResolveGameplayReferences();
+        if (simpleSaveSystem == null)
+            simpleSaveSystem = FindFirstObjectByType<SimpleSaveSystem>();
+
+        if (simpleSaveSystem == null && shopManager != null)
+            simpleSaveSystem = shopManager.gameObject.AddComponent<SimpleSaveSystem>();
     }
 
     private void AutoFindReferences()
@@ -243,6 +334,7 @@ public class TitlePanelUI : MonoBehaviour
 
         Button[] buttons = titlePanel.GetComponentsInChildren<Button>(true);
         TMP_Text[] texts = titlePanel.GetComponentsInChildren<TMP_Text>(true);
+        Transform[] transforms = titlePanel.GetComponentsInChildren<Transform>(true);
 
         if (newGameButton == null)
             newGameButton = buttons.FirstOrDefault(x => x.gameObject.name == "NewGameButton");
@@ -256,6 +348,22 @@ public class TitlePanelUI : MonoBehaviour
             quitButton = buttons.FirstOrDefault(x => x.gameObject.name == "QuitButton");
         if (versionText == null)
             versionText = texts.FirstOrDefault(x => x.gameObject.name == "VersionText");
+
+        if (continueWarningPanel == null)
+            continueWarningPanel = transforms.FirstOrDefault(x => x.gameObject.name == "ContinueWarningPanel")?.gameObject;
+
+        if (continueWarningPanel != null)
+        {
+            Button[] warningButtons = continueWarningPanel.GetComponentsInChildren<Button>(true);
+            TMP_Text[] warningTexts = continueWarningPanel.GetComponentsInChildren<TMP_Text>(true);
+
+            if (continueWarningText == null)
+                continueWarningText = warningTexts.FirstOrDefault(x => x.gameObject.name == "WarningText");
+            if (continueConfirmButton == null)
+                continueConfirmButton = warningButtons.FirstOrDefault(x => x.gameObject.name == "ContinueConfirmButton" || x.gameObject.name == "ConfirmButton");
+            if (continueCancelButton == null)
+                continueCancelButton = warningButtons.FirstOrDefault(x => x.gameObject.name == "ContinueCancelButton" || x.gameObject.name == "CancelButton");
+        }
 
         ResolveGameplayReferences();
 
