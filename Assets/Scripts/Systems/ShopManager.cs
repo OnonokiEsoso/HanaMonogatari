@@ -331,15 +331,15 @@ public class ShopManager : MonoBehaviour
     {
         int newLevel = 1;
 
-        if (cumulativePurchaseAmount >= 10000) newLevel = 2;
-        if (cumulativePurchaseAmount >= 30000) newLevel = 3;
-        if (cumulativePurchaseAmount >= 70000) newLevel = 4;
-        if (cumulativePurchaseAmount >= 150000) newLevel = 5;
-        if (cumulativePurchaseAmount >= 300000) newLevel = 6;
-        if (cumulativePurchaseAmount >= 600000) newLevel = 7;
-        if (cumulativePurchaseAmount >= 1200000) newLevel = 8;
-        if (cumulativePurchaseAmount >= 2500000) newLevel = 9;
-        if (cumulativePurchaseAmount >= 5000000) newLevel = 10;
+        if (shopRating >= 300 && cumulativePurchaseAmount >= 5000) newLevel = 2;
+        if (shopRating >= 700 && cumulativePurchaseAmount >= 15000) newLevel = 3;
+        if (shopRating >= 1200 && cumulativePurchaseAmount >= 30000) newLevel = 4;
+        if (shopRating >= 2000 && cumulativePurchaseAmount >= 60000) newLevel = 5;
+        if (shopRating >= 3000 && cumulativePurchaseAmount >= 100000) newLevel = 6;
+        if (shopRating >= 4200 && cumulativePurchaseAmount >= 160000) newLevel = 7;
+        if (shopRating >= 5500 && cumulativePurchaseAmount >= 250000) newLevel = 8;
+        if (shopRating >= 7000 && cumulativePurchaseAmount >= 350000) newLevel = 9;
+        if (shopRating >= 8500 && cumulativePurchaseAmount >= 500000) newLevel = 10;
 
         return newLevel;
     }
