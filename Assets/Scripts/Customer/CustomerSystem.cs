@@ -74,7 +74,7 @@ public class CustomerSystem : MonoBehaviour
     [SerializeField] private List<CustomerData> customerProfiles = new();
 
     [Header("来客数")]
-    [Tooltip("通常営業では各種補正後の最終来客数を最低1人にします。Debugの固定来客数はこの下限を無視します。")]
+    [Tooltip("通常営業の基本下限です。実際の最低保証は『仕入先Lv + 店評価÷1000の整数部分』と比較し、大きい方を使います。Debugの固定来客数はこの下限を無視します。")]
     [SerializeField] private int minimumDailyVisitors = MinimumDailyVisitors;
     [Tooltip("ゲーム開始から2日間だけ、倍率計算後に固定人数として加算します。")]
     [SerializeField] private int openingBonusVisitors = 5;
@@ -178,6 +178,7 @@ public class CustomerSystem : MonoBehaviour
         int shopLevel = GetVisitorShopLevel();
         int supplierLevel = shopManager != null ? Mathf.Clamp(shopManager.SupplierLevel, 1, 10) : 1;
         int flowerCount = GetTotalFlowerStock();
+        int guaranteedMinimumVisitors = GetGuaranteedMinimumVisitorCount(supplierLevel);
 
         int baseVisitors = 1
             + GetShopLevelVisitorBonus(shopLevel)
@@ -192,13 +193,20 @@ public class CustomerSystem : MonoBehaviour
         if (visitorModifierSystem != null)
         {
             int visitors = visitorModifierSystem.CalculateVisitorCount(baseVisitors, randomMultiplier, openingFlatBonus);
-            return Mathf.Max(minimumDailyVisitors, visitors);
+            return Mathf.Max(minimumDailyVisitors, guaranteedMinimumVisitors, visitors);
         }
 
         Debug.LogWarning("CustomerSystem: VisitorModifierSystemが設定されていません。依頼・家具等の来客補正は反映されません。");
         float trendMultiplier = 1f + TrendSystem.GetVisitorBonusPercent(shopManager);
         int fallbackVisitors = Mathf.RoundToInt(baseVisitors * randomMultiplier * trendMultiplier) + openingFlatBonus;
-        return Mathf.Max(minimumDailyVisitors, fallbackVisitors);
+        return Mathf.Max(minimumDailyVisitors, guaranteedMinimumVisitors, fallbackVisitors);
+    }
+
+    private int GetGuaranteedMinimumVisitorCount(int supplierLevel)
+    {
+        int rating = shopManager != null ? Mathf.Clamp(shopManager.ShopRating, 0, 10000) : 0;
+        int ratingThousands = Mathf.FloorToInt(rating / 1000f);
+        return Mathf.Max(MinimumDailyVisitors, Mathf.Clamp(supplierLevel, 1, 10) + ratingThousands);
     }
 
     private int GetVisitorShopLevel()
