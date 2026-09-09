@@ -40,6 +40,7 @@ public class TitlePanelUI : MonoBehaviour
     [SerializeField] private ShopTabUI shopTabUI;
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private SimpleSaveSystem simpleSaveSystem;
+    [SerializeField] private FirstDayHelpSystem firstDayHelpSystem;
     [Tooltip("ゲーム開始直後の案内を表示する共通プレイヤー通知パネル。未設定なら自動取得します。")]
     [SerializeField] private NotificationPanelUI notificationPanelUI;
 
@@ -78,6 +79,7 @@ public class TitlePanelUI : MonoBehaviour
     {
         AutoFindReferences();
         EnsureSimpleSaveSystem();
+        EnsureFirstDayHelpSystem();
 
         if (newGameButton != null)
             newGameButton.onClick.AddListener(HandleNewGameClicked);
@@ -172,6 +174,7 @@ public class TitlePanelUI : MonoBehaviour
     private void EnterGame()
     {
         ResolveGameplayReferences();
+        EnsureFirstDayHelpSystem();
 
         if (titlePanel != null)
             titlePanel.SetActive(false);
@@ -185,6 +188,8 @@ public class TitlePanelUI : MonoBehaviour
             shopTabUI.ShowBusinessHome();
         else
             homeDashboardUI?.ShowHome();
+
+        firstDayHelpSystem?.BeginTracking();
     }
 
     private void ShowFirstStartGuide()
@@ -208,6 +213,7 @@ public class TitlePanelUI : MonoBehaviour
 
         sceneReloadRequested = true;
         SimpleSaveSystem.DeleteSave();
+        FirstDayHelpSystem.ResetTutorialState();
         enterGameAfterSceneReload = true;
         showFirstStartGuideAfterSceneReload = true;
 
@@ -358,6 +364,16 @@ public class TitlePanelUI : MonoBehaviour
 
         if (simpleSaveSystem == null && shopManager != null)
             simpleSaveSystem = shopManager.gameObject.AddComponent<SimpleSaveSystem>();
+    }
+
+    private void EnsureFirstDayHelpSystem()
+    {
+        ResolveGameplayReferences();
+        if (firstDayHelpSystem == null)
+            firstDayHelpSystem = FindFirstObjectByType<FirstDayHelpSystem>();
+
+        if (firstDayHelpSystem == null && shopManager != null)
+            firstDayHelpSystem = shopManager.gameObject.AddComponent<FirstDayHelpSystem>();
     }
 
     private void AutoFindReferences()
