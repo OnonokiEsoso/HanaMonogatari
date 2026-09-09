@@ -72,6 +72,7 @@ public class ShopTabUI : MonoBehaviour
     private ShopTab currentTab;
 
     public bool IsBusinessOpen => isBusinessOpen;
+    public int CurrentTabIndex => (int)currentTab;
 
     private void Awake()
     {
@@ -103,7 +104,7 @@ public class ShopTabUI : MonoBehaviour
             yield break;
         }
 
-        // DailyResultUI / SalesVisualController など他UIのStart初期化が終わってから
+        // DailyResultUI / SalesVisualController など他UIの起動時表示が終わってから
         // ホームを最終表示することで、起動時に後から非表示へ戻される競合を防ぎます。
         yield return null;
         ShowBusinessHome();
