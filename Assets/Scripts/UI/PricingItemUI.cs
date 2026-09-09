@@ -20,6 +20,11 @@ public class PricingItemUI : MonoBehaviour
     [SerializeField] private TMP_InputField salePriceInput;
     [SerializeField] private Button applyButton;
     [SerializeField] private Button recommendedButton;
+    [SerializeField] private Button copyButton;
+    [SerializeField] private Button pasteButton;
+
+    private static int? copiedSalePrice;
+    private static event Action ClipboardChanged;
 
     private FlowerData flower;
     private BouquetSystem.BouquetData bouquet;
@@ -30,6 +35,13 @@ public class PricingItemUI : MonoBehaviour
     private Action<BouquetSystem.BouquetData, int> onBouquetApply;
     private SEManager seManager;
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetClipboard()
+    {
+        copiedSalePrice = null;
+        ClipboardChanged = null;
+    }
+
     private void Awake()
     {
         seManager = FindFirstObjectByType<SEManager>();
@@ -39,6 +51,15 @@ public class PricingItemUI : MonoBehaviour
 
         if (recommendedButton != null)
             recommendedButton.onClick.AddListener(UseRecommendedPrice);
+
+        if (copyButton != null)
+            copyButton.onClick.AddListener(CopyPrice);
+
+        if (pasteButton != null)
+            pasteButton.onClick.AddListener(PastePrice);
+
+        ClipboardChanged += RefreshPasteButton;
+        RefreshPasteButton();
     }
 
     private void OnDestroy()
@@ -48,6 +69,14 @@ public class PricingItemUI : MonoBehaviour
 
         if (recommendedButton != null)
             recommendedButton.onClick.RemoveListener(UseRecommendedPrice);
+
+        if (copyButton != null)
+            copyButton.onClick.RemoveListener(CopyPrice);
+
+        if (pasteButton != null)
+            pasteButton.onClick.RemoveListener(PastePrice);
+
+        ClipboardChanged -= RefreshPasteButton;
     }
 
     public void Bind(
@@ -83,6 +112,8 @@ public class PricingItemUI : MonoBehaviour
 
     public void Refresh()
     {
+        RefreshPasteButton();
+
         if (bouquet != null && bouquetSystem != null)
         {
             RefreshFlowerImage(null);
@@ -196,6 +227,35 @@ public class PricingItemUI : MonoBehaviour
 
         salePriceInput.text = recommendedPrice.ToString();
         ApplyPrice();
+    }
+
+    private void CopyPrice()
+    {
+        if (salePriceInput == null || !int.TryParse(salePriceInput.text, out int price) || price <= 0)
+        {
+            ResolveSEManager();
+            seManager?.PlayError();
+            Debug.LogWarning("コピーする販売価格には1円以上の整数を設定してください。");
+            return;
+        }
+
+        copiedSalePrice = price;
+        ClipboardChanged?.Invoke();
+    }
+
+    private void PastePrice()
+    {
+        if (salePriceInput == null || !copiedSalePrice.HasValue)
+            return;
+
+        salePriceInput.text = copiedSalePrice.Value.ToString();
+        ApplyPrice();
+    }
+
+    private void RefreshPasteButton()
+    {
+        if (pasteButton != null)
+            pasteButton.interactable = copiedSalePrice.HasValue;
     }
 
     private void ResolveSEManager()
