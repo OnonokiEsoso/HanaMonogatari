@@ -10,7 +10,7 @@ using UnityEngine;
 public class HybridDevelopmentSystem : MonoBehaviour
 {
     public const int DefaultResearchCost = 30000;
-    public const int DefaultSuccessDays = 15;
+    public const int DefaultSuccessDays = 2;
     public const int FailureDays = 1;
 
     [Header("参照")]
