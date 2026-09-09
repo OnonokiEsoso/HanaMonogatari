@@ -415,7 +415,7 @@ public class DevelopmentSystem : MonoBehaviour
             {
                 id = DevelopmentId.Karasan,
                 displayName = "枯ラサン",
-                developmentCost = 20000,
+                developmentCost = 5000,
                 developmentDays = 2,
                 requiredShopRating = DevelopmentUnlockShopRating,
                 requiredCheckoutItemId = NutritionItemId,
@@ -431,7 +431,7 @@ public class DevelopmentSystem : MonoBehaviour
             {
                 id = DevelopmentId.SodatsuCho,
                 displayName = "そだーつ長",
-                developmentCost = 40000,
+                developmentCost = 10000,
                 developmentDays = 2,
                 requiredShopRating = DevelopmentUnlockShopRating,
                 prerequisiteDevelopments = new[] { DevelopmentId.Karasan },
@@ -448,7 +448,7 @@ public class DevelopmentSystem : MonoBehaviour
             {
                 id = DevelopmentId.SodatsuTsubu,
                 displayName = "そだーつ粒",
-                developmentCost = 60000,
+                developmentCost = 15000,
                 developmentDays = 2,
                 requiredShopRating = DevelopmentUnlockShopRating,
                 prerequisiteDevelopments = new[] { DevelopmentId.SodatsuCho },
@@ -465,7 +465,7 @@ public class DevelopmentSystem : MonoBehaviour
             {
                 id = DevelopmentId.SodatsuEki,
                 displayName = "そだーつ液",
-                developmentCost = 70000,
+                developmentCost = 20000,
                 developmentDays = 2,
                 requiredShopRating = DevelopmentUnlockShopRating,
                 prerequisiteDevelopments = new[] { DevelopmentId.SodatsuCho },
@@ -482,7 +482,7 @@ public class DevelopmentSystem : MonoBehaviour
             {
                 id = DevelopmentId.KarasanTsui,
                 displayName = "枯ラサンつい",
-                developmentCost = 150000,
+                developmentCost = 25000,
                 developmentDays = 3,
                 requiredShopRating = DevelopmentUnlockShopRating,
                 prerequisiteDevelopments = new[] { DevelopmentId.SodatsuCho },
