@@ -23,6 +23,12 @@ public class FurnitureInventoryItemUI : MonoBehaviour
     [SerializeField] private Button installButton;
     [SerializeField] private TMP_Text installButtonText;
 
+    [Header("設置・撤去ボタンの色")]
+    [Tooltip("未設置の家具を設置する時の、やさしい赤色です。")]
+    [SerializeField] private Color installButtonColor = new Color(0.92f, 0.68f, 0.68f, 1f);
+    [Tooltip("設置中の家具を撤去する時の青色です。")]
+    [SerializeField] private Color uninstallButtonColor = new Color(0.55f, 0.72f, 0.90f, 1f);
+
     private FurnitureSystem furnitureSystem;
     private FurnitureData furniture;
 
@@ -90,10 +96,27 @@ public class FurnitureInventoryItemUI : MonoBehaviour
             installButtonText.text = installed ? "撤去" : "設置";
 
         if (installButton != null)
+        {
             installButton.interactable = installed || canInstall;
+            ApplyInstallButtonColor(installed);
+        }
 
         if (expandedContainer != null)
             expandedContainer.SetActive(false);
+    }
+
+    private void ApplyInstallButtonColor(bool installed)
+    {
+        if (installButton == null)
+            return;
+
+        Color baseColor = installed ? uninstallButtonColor : installButtonColor;
+        ColorBlock colors = installButton.colors;
+        colors.normalColor = baseColor;
+        colors.highlightedColor = Color.Lerp(baseColor, Color.white, 0.15f);
+        colors.selectedColor = colors.highlightedColor;
+        colors.pressedColor = Color.Lerp(baseColor, Color.black, 0.12f);
+        installButton.colors = colors;
     }
 
     private void ToggleInstalled()
