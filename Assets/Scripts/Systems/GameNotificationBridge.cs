@@ -8,7 +8,7 @@ using UnityEngine;
 /// 営業中や日送り処理の途中ではポップアップを割り込ませず、通知候補を一旦保留します。
 /// 翌日の画面へ切り替わったあと DailyResultUI から FlushPendingNotifications を呼び、
 /// その日の開始時に未通知項目をまとめて順番に表示します。
-/// ゲームクリア時は通しプレイ記録も1項目ずつ通知パネルへ流します。
+/// ゲームクリア時は通しプレイ記録を数ページにまとめて通知パネルへ流します。
 /// </summary>
 public class GameNotificationBridge : MonoBehaviour
 {
@@ -221,7 +221,7 @@ public class GameNotificationBridge : MonoBehaviour
     /// <summary>
     /// 翌日の画面が表示されたタイミングで呼びます。
     /// 保留していた通知を NotificationPanelUI へ渡し、ボタンを押すたびに次の通知を表示します。
-    /// ゲームクリア済みなら、通常通知の後ろにプレイ記録を1項目ずつ追加します。
+    /// ゲームクリア済みなら、通常通知の後ろにまとめたプレイ記録を追加します。
     /// パネルがまだ見つからない場合は通知を捨てず、そのまま次回まで保持します。
     /// </summary>
     public void FlushPendingNotifications()
@@ -267,19 +267,42 @@ public class GameNotificationBridge : MonoBehaviour
         int rating = shopManager != null ? shopManager.ShopRating : 0;
         int supplierLevel = shopManager != null ? shopManager.SupplierLevel : 0;
 
-        QueueNotification("クリア日", $"{clearDateText}\n通算{Mathf.Max(1, clearAbsoluteDay):N0}日目");
-        QueueNotification("実プレイ時間", FormatPlayTime(clearPlayTimeSeconds));
-        QueueNotification("所持金", $"{money:N0}円");
-        QueueNotification("店評価", $"{rating:N0} / 10,000");
-        QueueNotification("仕入先Lv", $"Lv.{supplierLevel}");
-        QueueNotification("累計売上", $"{cumulativeSales:N0}円");
-        QueueNotification("累計来客", $"{cumulativeVisitors:N0}人");
-        QueueNotification("家具数", furnitureTotalCount > 0 ? $"{furnitureCount} / {furnitureTotalCount}個" : $"{furnitureCount}個");
-        QueueNotification("開発完了数", developmentTotalCount > 0 ? $"{developmentCompletedCount} / {developmentTotalCount}" : developmentCompletedCount.ToString());
-        QueueNotification("交配成功数", hybridTotalCount > 0 ? $"{hybridSuccessCount} / {hybridTotalCount}" : hybridSuccessCount.ToString());
-        QueueNotification("交配失敗数", $"{hybridFailureCount:N0}回");
-        QueueNotification("交配花作成数", $"{hybridProductionCount:N0}回");
-        QueueNotification("花束作成数", $"{bouquetCount:N0}個");
+        string furnitureText = furnitureTotalCount > 0
+            ? $"{furnitureCount} / {furnitureTotalCount}個"
+            : $"{furnitureCount}個";
+        string developmentText = developmentTotalCount > 0
+            ? $"{developmentCompletedCount} / {developmentTotalCount}"
+            : developmentCompletedCount.ToString();
+        string hybridSuccessText = hybridTotalCount > 0
+            ? $"{hybridSuccessCount} / {hybridTotalCount}"
+            : hybridSuccessCount.ToString();
+
+        QueueNotification(
+            "クリア記録 1/3",
+            $"クリア日：{clearDateText}\n" +
+            $"通算：{Mathf.Max(1, clearAbsoluteDay):N0}日目\n" +
+            $"実プレイ時間：{FormatPlayTime(clearPlayTimeSeconds)}");
+
+        QueueNotification(
+            "クリア記録 2/3",
+            $"所持金：{money:N0}円\n" +
+            $"店評価：{rating:N0} / 10,000\n" +
+            $"仕入先Lv：Lv.{supplierLevel}\n" +
+            $"累計売上：{cumulativeSales:N0}円\n" +
+            $"累計来客：{cumulativeVisitors:N0}人");
+
+        QueueNotification(
+            "クリア記録 3/3",
+            $"家具：{furnitureText}\n" +
+            $"開発完了：{developmentText}\n" +
+            $"交配成功：{hybridSuccessText}\n" +
+            $"交配失敗：{hybridFailureCount:N0}回\n" +
+            $"交配花作成：{hybridProductionCount:N0}回\n" +
+            $"花束作成：{bouquetCount:N0}個");
+
+        QueueNotification(
+            "ここまで遊んでくれてありがとうございます！",
+            "よければ、このクリア記録やプレイした感想をレビューに書いて教えてください。\nあなたの記録を見られたら、とても嬉しいです！");
 
         clearSummaryQueued = true;
         clearSummaryPending = false;
