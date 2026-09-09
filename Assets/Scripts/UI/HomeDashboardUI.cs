@@ -327,6 +327,30 @@ public class HomeDashboardUI : MonoBehaviour
         if (customerUI.IsShopOpen || customerUI.HasFinishedToday || isOpening)
             return;
 
+        InventorySystem inventorySystem = FindFirstObjectByType<InventorySystem>();
+        bool hasFlowerStock = false;
+        if (inventorySystem != null)
+        {
+            foreach (InventorySystem.InventoryBatch batch in inventorySystem.Batches)
+            {
+                if (batch != null && batch.flower != null && batch.quantity > 0)
+                {
+                    hasFlowerStock = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasFlowerStock)
+        {
+            NotificationPanelUI notificationPanel = FindFirstObjectByType<NotificationPanelUI>(FindObjectsInactive.Include);
+            if (notificationPanel != null)
+                notificationPanel.ShowMessage("花がないから開店できないよ！", "仕入先で花を買ってね。");
+            else
+                Debug.LogWarning("HomeDashboardUI: 花在庫なし通知を表示するNotificationPanelUIが見つかりません。");
+            return;
+        }
+
         openingAnnouncementDuration = 0f;
         StartCoroutine(OpenShopRoutine());
     }
