@@ -17,6 +17,11 @@ public class TitlePanelUI : MonoBehaviour
         "在庫・花束・家具・開発・交配・依頼・チャレンジなど、細かい部分は失われます。\n\n" +
         "それでも続きから始めますか？";
 
+    private const string FirstStartGuideHeadline = "まずは花を仕入れよう！";
+    private const string FirstStartGuideDetail =
+        "最初は花の在庫がないよ。\n" +
+        "『仕入先』へ行って、販売する花を買ってみよう。";
+
     [Header("タイトル")]
     [SerializeField] private GameObject titlePanel;
     [SerializeField] private TMP_Text versionText;
@@ -35,6 +40,8 @@ public class TitlePanelUI : MonoBehaviour
     [SerializeField] private ShopTabUI shopTabUI;
     [SerializeField] private ShopManager shopManager;
     [SerializeField] private SimpleSaveSystem simpleSaveSystem;
+    [Tooltip("ゲーム開始直後の案内を表示する共通プレイヤー通知パネル。未設定なら自動取得します。")]
+    [SerializeField] private NotificationPanelUI notificationPanelUI;
 
     [Header("続きから確認")]
     [Tooltip("ContinueWarningPanel。未設定時は同名GameObjectを自動検索します。")]
@@ -57,12 +64,14 @@ public class TitlePanelUI : MonoBehaviour
     [SerializeField] private Button creditsCloseButton;
 
     private static bool enterGameAfterSceneReload;
+    private static bool showFirstStartGuideAfterSceneReload;
     private bool sceneReloadRequested;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStaticState()
     {
         enterGameAfterSceneReload = false;
+        showFirstStartGuideAfterSceneReload = false;
     }
 
     private void Awake()
@@ -108,6 +117,12 @@ public class TitlePanelUI : MonoBehaviour
             enterGameAfterSceneReload = false;
             EnterGame();
             simpleSaveSystem?.SaveNow();
+
+            if (showFirstStartGuideAfterSceneReload)
+            {
+                showFirstStartGuideAfterSceneReload = false;
+                ShowFirstStartGuide();
+            }
         }
         else
         {
@@ -172,6 +187,20 @@ public class TitlePanelUI : MonoBehaviour
             homeDashboardUI?.ShowHome();
     }
 
+    private void ShowFirstStartGuide()
+    {
+        if (notificationPanelUI == null)
+            notificationPanelUI = FindFirstObjectByType<NotificationPanelUI>(FindObjectsInactive.Include);
+
+        if (notificationPanelUI != null)
+        {
+            notificationPanelUI.ShowMessage(FirstStartGuideHeadline, FirstStartGuideDetail);
+            return;
+        }
+
+        Debug.LogWarning("TitlePanelUI: NotificationPanelUIが見つからないため、ゲーム開始時の仕入れ案内を表示できませんでした。");
+    }
+
     private void HandleNewGameClicked()
     {
         if (sceneReloadRequested)
@@ -180,6 +209,7 @@ public class TitlePanelUI : MonoBehaviour
         sceneReloadRequested = true;
         SimpleSaveSystem.DeleteSave();
         enterGameAfterSceneReload = true;
+        showFirstStartGuideAfterSceneReload = true;
 
         if (newGameButton != null)
             newGameButton.interactable = false;
@@ -203,6 +233,7 @@ public class TitlePanelUI : MonoBehaviour
         Debug.LogError("TitlePanelUI: 現在のシーンを再読み込みできませんでした。");
         sceneReloadRequested = false;
         enterGameAfterSceneReload = false;
+        showFirstStartGuideAfterSceneReload = false;
         if (newGameButton != null)
             newGameButton.interactable = true;
         RefreshContinueButton();
@@ -315,6 +346,8 @@ public class TitlePanelUI : MonoBehaviour
             shopTabUI = FindFirstObjectByType<ShopTabUI>(FindObjectsInactive.Include);
         if (shopManager == null)
             shopManager = FindFirstObjectByType<ShopManager>();
+        if (notificationPanelUI == null)
+            notificationPanelUI = FindFirstObjectByType<NotificationPanelUI>(FindObjectsInactive.Include);
     }
 
     private void EnsureSimpleSaveSystem()
