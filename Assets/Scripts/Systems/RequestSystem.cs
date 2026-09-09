@@ -96,9 +96,6 @@ public class RequestSystem : MonoBehaviour
         bool hasValidPendingReservation = HasValidPendingBouquetReservation();
         if (hasSerializedPendingData)
         {
-            // Unityは[Serializable]な通常クラスを、実データが空でもInspector上で
-            // 空インスタンスとして復元することがあります。ゲーム開始時はそれを静かに掃除し、
-            // 実際のプレイ中に有効な予約が翌日へ残った場合だけ警告します。
             if (!isInitialProcess && hasValidPendingReservation)
                 Debug.LogWarning("RequestSystem: 前日の依頼用花束予約が残っていたため解除しました。");
 
@@ -260,7 +257,10 @@ public class RequestSystem : MonoBehaviour
         RequestData completed = currentRequest;
 
         if (completed.rewardShopRating > 0 && shopManager != null)
-            shopManager.AddShopRating(completed.rewardShopRating);
+        {
+            int adjustedReward = Mathf.Max(60, completed.rewardShopRating * 2);
+            shopManager.AddShopRating(adjustedReward);
+        }
 
         if (completed.rewardVisitorBonusPercent > 0f && completed.rewardVisitorBonusDays > 0)
             ActivateVisitorBonus(
