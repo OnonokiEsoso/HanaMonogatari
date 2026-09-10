@@ -24,6 +24,7 @@ public class HybridTabUI : MonoBehaviour
     [SerializeField] private DevelopmentSystem developmentSystem;
     [SerializeField] private InventorySystem inventorySystem;
     [SerializeField] private CheckoutItemSystem checkoutItemSystem;
+    [SerializeField] private ShopManager shopManager;
 
     [Header("親花A")]
     [SerializeField] private Image flowerAImage;
@@ -115,12 +116,15 @@ public class HybridTabUI : MonoBehaviour
         if (inventorySystem != null)
             inventorySystem.OnInventoryChanged += HandleInventoryChanged;
 
+        if (shopManager != null)
+            shopManager.OnStateChanged += Refresh;
+
         Refresh();
     }
 
     private void OnDisable()
     {
-        // 次にこのタブへ戻った時は「交配中です」と表示する。
+        // 次にこのタブへ戻った時は「交配中です」に切り替える。
         showStartedMessage = false;
 
         if (hybridDevelopmentSystem != null)
@@ -131,6 +135,9 @@ public class HybridTabUI : MonoBehaviour
 
         if (inventorySystem != null)
             inventorySystem.OnInventoryChanged -= HandleInventoryChanged;
+
+        if (shopManager != null)
+            shopManager.OnStateChanged -= Refresh;
     }
 
     private void OnDestroy()
@@ -168,11 +175,16 @@ public class HybridTabUI : MonoBehaviour
                                   checkoutItemSystem.GetStockQuantity(DevelopmentSystem.KarasanTsuiItemId) >= 1;
             requirementText.text = hasKarasanTsui
                 ? "枯ラサンつい -1"
-                : "枯ラサンついが必要";
+                : "枯ラサンつい不足";
         }
 
         if (costText != null)
-            costText.text = $"研究費：{HybridDevelopmentSystem.DefaultResearchCost:N0}円";
+        {
+            bool hasResearchMoney = shopManager != null && shopManager.Money >= HybridDevelopmentSystem.DefaultResearchCost;
+            costText.text = hasResearchMoney
+                ? $"研究費：{HybridDevelopmentSystem.DefaultResearchCost}円"
+                : $"{HybridDevelopmentSystem.DefaultResearchCost}円必要です";
+        }
 
         if (daysText != null)
             daysText.text = "期間未定";
@@ -415,6 +427,8 @@ public class HybridTabUI : MonoBehaviour
             checkoutItemSystem = FindFirstObjectByType<CheckoutItemSystem>();
         if (hybridDevelopmentSystem == null)
             hybridDevelopmentSystem = FindFirstObjectByType<HybridDevelopmentSystem>();
+        if (shopManager == null)
+            shopManager = FindFirstObjectByType<ShopManager>();
 
         if (hybridDevelopmentSystem == null && developmentSystem != null)
             hybridDevelopmentSystem = developmentSystem.gameObject.AddComponent<HybridDevelopmentSystem>();
