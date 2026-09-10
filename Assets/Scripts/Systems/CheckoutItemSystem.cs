@@ -47,7 +47,7 @@ public class CheckoutItemSystem : MonoBehaviour
         [Range(0f, 1f)] public float offSeasonPurchaseChance = 0.03f;
         public string resourceSpriteName;
 
-        [Tooltip("仕入先の日替わりレジ横商品候補に入るか。自社開発品はOFF。")]
+        [Tooltip("仕入先の日替わりレジ横商品候補に入るか。自社開発品や休止中商品はOFF。")]
         public bool supplierOfferEnabled = true;
 
         public bool IsSeasonal => targetMonth >= 1 && targetMonth <= 12;
@@ -95,8 +95,8 @@ public class CheckoutItemSystem : MonoBehaviour
     [SerializeField] private ShopManager shopManager;
 
     [Header("入荷")]
-    [Tooltip("花・ラッピングとは別枠で、1日0～1種類のレジ横商品が出る確率。仮初期値35%。")]
-    [Range(0f, 1f)] [SerializeField] private float dailyOfferChance = 0.35f;
+    [Tooltip("花・ラッピングとは別枠で、1日0～1種類のレジ横商品が出る確率。季節商品休止に合わせて25%へ調整。")]
+    [Range(0f, 1f)] [SerializeField] private float dailyOfferChance = 0.25f;
 
     [Header("状態")]
     [SerializeField] private List<CheckoutItemStock> stocks = new();
@@ -343,10 +343,11 @@ public class CheckoutItemSystem : MonoBehaviour
             DebugForcedOffer.Fertilizer => "fertilizer",
             DebugForcedOffer.MiniFlowerBase => "mini_flower_base",
             DebugForcedOffer.Iinioi => "iinioi",
-            DebugForcedOffer.MiniKadomatsu => "mini_kadomatsu",
-            DebugForcedOffer.TsukimiDango => "tsukimi_dango",
-            DebugForcedOffer.MiniPumpkin => "mini_pumpkin",
-            DebugForcedOffer.MiniTree => "mini_tree",
+            // 季節商品4種は現在休止中。定義・enumは残すが、通常/デバッグとも入荷させない。
+            DebugForcedOffer.MiniKadomatsu => null,
+            DebugForcedOffer.TsukimiDango => null,
+            DebugForcedOffer.MiniPumpkin => null,
+            DebugForcedOffer.MiniTree => null,
             _ => null
         };
     }
@@ -410,10 +411,11 @@ public class CheckoutItemSystem : MonoBehaviour
             purchaseCondition = PurchaseCondition.FlowerOrBouquet, resourceSpriteName = "checkout_iinioi"
         });
 
-        AddSeasonal("mini_kadomatsu", "ミニ門松", 1, "checkout_mini_kadomatsu");
-        AddSeasonal("tsukimi_dango", "お月見団子フィギュア", 9, "checkout_tsukimi_dango");
-        AddSeasonal("mini_pumpkin", "ミニカボチャ", 10, "checkout_mini_pumpkin");
-        AddSeasonal("mini_tree", "ミニツリー", 12, "checkout_mini_tree");
+        // 季節商品は将来再利用できるよう定義だけ残し、現在は仕入先に出現させない。
+        AddSeasonal("mini_kadomatsu", "ミニ門松", 1, "checkout_mini_kadomatsu", false);
+        AddSeasonal("tsukimi_dango", "お月見団子フィギュア", 9, "checkout_tsukimi_dango", false);
+        AddSeasonal("mini_pumpkin", "ミニカボチャ", 10, "checkout_mini_pumpkin", false);
+        AddSeasonal("mini_tree", "ミニツリー", 12, "checkout_mini_tree", false);
 
         AddSelfProduct("karasan", "枯ラサン", 900, 0.08f, "checkout_karasan");
         AddSelfProduct("sodatsu_cho", "そだーつ長", 1300, 0.08f, "checkout_sodatsu_cho");
@@ -439,7 +441,7 @@ public class CheckoutItemSystem : MonoBehaviour
         });
     }
 
-    private void AddSeasonal(string id, string name, int month, string spriteName)
+    private void AddSeasonal(string id, string name, int month, string spriteName, bool supplierOfferEnabled)
     {
         catalog.Add(new CheckoutItemDefinition
         {
@@ -454,7 +456,8 @@ public class CheckoutItemSystem : MonoBehaviour
             targetMonth = month,
             offSeasonSalePrice = 100,
             offSeasonPurchaseChance = 0.03f,
-            resourceSpriteName = spriteName
+            resourceSpriteName = spriteName,
+            supplierOfferEnabled = supplierOfferEnabled
         });
     }
 }
